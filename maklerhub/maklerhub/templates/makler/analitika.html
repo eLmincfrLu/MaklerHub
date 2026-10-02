@@ -1,0 +1,66 @@
+{% extends 'makler/base.html' %}
+{% set page_css = 'analitika.css' %}
+{% block title %}Analitika{% endblock %}
+{% block main %}
+  <div class="head reveal" style="animation-delay:.05s">
+    <div><h1>Analitika</h1><p>Fəaliyyətinizin son {{ days }} gündəki mənzərəsi.</p></div>
+    <div class="rangebox"><select id="rangeSel">
+      <option value="30"{% if days == 30 %} selected{% endif %}>Son 30 gün</option>
+      <option value="7"{% if days == 7 %} selected{% endif %}>Son 7 gün</option>
+      <option value="90"{% if days == 90 %} selected{% endif %}>Son 90 gün</option>
+    </select></div>
+  </div>
+
+  <div class="kpis reveal" style="animation-delay:.14s">
+    {%- for k in kpis %}
+    <div class="kpi"><div class="l">{{ k.l }}</div><div class="row"><div class="n">{{ k.n }}</div>{% if k.t.text != '—' %}<div class="trend {{ k.t.cls }}">{{ k.t.text }}</div>{% endif %}</div></div>
+    {%- endfor %}
+  </div>
+
+  <div class="grid2">
+    <div class="panel reveal" style="animation-delay:.22s">
+      <h2>Uyğunlaşdırılan elanlar — son 14 gün</h2>
+      <div class="bars" id="bars">
+        {%- for b in bars %}
+        <div class="bar" data-h="{{ b.h }}" data-val="{{ b.val }}"></div>
+        {%- endfor %}
+      </div>
+      <div class="barlabels">{% for l in labels %}<span>{{ l }}</span>{% endfor %}</div>
+    </div>
+
+    <div class="panel reveal" style="animation-delay:.3s">
+      <h2>Mənbə üzrə bölgü</h2>
+      <div class="donut-wrap">
+        <div class="donut">
+          <svg width="170" height="170">
+            <circle cx="85" cy="85" r="68" stroke="var(--line)" stroke-width="16" fill="none"/>
+            {%- for s in segs %}
+            {%- if s.pct > 0 %}
+            <circle class="seg" cx="85" cy="85" r="68" stroke="{{ s.color }}" stroke-width="16" fill="none"
+              stroke-dasharray="427" stroke-dashoffset="427" data-final="{{ s.final }}"{% if s.rot is not none %} data-rot="{{ s.rot }}"{% endif %} stroke-linecap="round"/>
+            {%- endif %}
+            {%- endfor %}
+          </svg>
+          <div class="donut-mid"><div class="n">{{ total }}</div><div class="l">cəmi elan</div></div>
+        </div>
+        <div class="legend">
+          {%- for s in segs %}
+          <div><span class="sw" style="background:{{ s.color }}"></span>{{ s.name }}<span class="lv">{{ s.pct }}%</span></div>
+          {%- endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel reveal" style="animation-delay:.4s">
+    <h2>Ən aktiv axtarış profilləri</h2>
+    <div class="ranklist">
+      {%- for r in rank %}
+      <div class="rank" data-href="{{ url_for('makler.elanlar', profile=r.id) }}"><div class="rn">{{ loop.index }}</div><div class="rinfo"><div class="rname">{{ r.name }}</div><div class="rtrack"><div class="rfill" data-w="{{ r.w }}"></div></div></div><div class="rval">{{ r.count }}</div></div>
+      {%- else %}
+      <div class="mh-empty" style="padding:10px 0;text-align:left">Aktiv axtarış profili yoxdur.</div>
+      {%- endfor %}
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/analitika.js') }}"></script>{% endblock %}

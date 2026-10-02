@@ -1,0 +1,99 @@
+{% extends 'makler/base.html' %}
+{% set page_css = 'axtarislar.css' %}
+{% block title %}Axtarışlar{% endblock %}
+{% block main %}
+  <div class="head reveal" style="animation-delay:.05s">
+    <div>
+      <h1>Axtarış Profilləri</h1>
+      <p>Hər müştəri üçün kriteriya saxlayın — sistem uyğun elanı özü tapsın.</p>
+    </div>
+    <button class="btn reveal" style="animation-delay:.15s" data-new>+ Yeni profil yarat</button>
+  </div>
+
+  <div class="toolbar reveal" style="animation-delay:.22s">
+    <div class="filters">
+      <div class="fchip active" data-f="all">Hamısı ({{ counts.all }})</div>
+      <div class="fchip" data-f="active">Aktiv ({{ counts.active }})</div>
+      <div class="fchip" data-f="paused">Dayandırılıb ({{ counts.paused }})</div>
+    </div>
+    <div class="search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#9C9484" stroke-width="1.8"/><path d="M20 20l-4-4" stroke="#9C9484" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <input type="text" placeholder="Müştəri axtar..." id="q">
+    </div>
+  </div>
+
+  <div class="grid">
+    {%- for c in cards %}
+    <div class="pcard" style="animation-delay:{{ '%.2f'|format([0.3 + loop.index0 * 0.08, 1.2]|min) }}s" data-status="{{ c.p.status }}" data-q="{{ (c.p.client_name ~ ' ' ~ c.tags|join(' '))|lower }}" data-json='{{ c.json|tojson }}'>
+      <div class="ptop">
+        <div class="pclient"><div class="pav">{{ c.initials }}</div><div><div class="pname">{{ c.p.client_name }}</div><div class="pstatus">{% if c.p.status == 'active' %}<span class="dot"></span>Aktiv{% else %}<span class="dot off"></span>Dayandırılıb{% endif %}</div></div></div>
+        <div class="pmenu">⋯</div>
+      </div>
+      <div class="tags">
+        {% for t in c.tags %}<span class="tag">{{ t }}</span>{% endfor %}
+      </div>
+      <div class="pfoot">
+        <div class="pcount"><div class="n">{{ c.count }}</div><div class="l">uyğun elan</div></div>
+        <div class="plast">{{ c.last }}</div>
+      </div>
+    </div>
+    {%- endfor %}
+
+    <div class="pcard newp" style="animation-delay:{{ '%.2f'|format([0.3 + cards|length * 0.08, 1.3]|min) }}s" data-new>
+      <div class="plus">+</div>
+      <span>Yeni axtarış profili yarat</span>
+    </div>
+  </div>
+{% endblock %}
+
+{% block modals %}
+<div class="mh-overlay" id="profileModal">
+  <form class="mh-modal" id="profileForm" autocomplete="off">
+    <button class="mh-x" type="button" data-close aria-label="Bağla">✕</button>
+    <h2 data-title>Yeni axtarış profili</h2>
+    <div class="mh-desc">Kriteriyaları daxil edin — sistem Bina.az, Tap.az və Lalafo-da uyğun elanları avtomatik tapıb sizə göstərəcək.</div>
+    <div class="mh-err"></div>
+    <input type="hidden" name="id">
+
+    <div class="mh-field" data-client-field>
+      <label>Müştəri</label>
+      <select name="client_id">
+        {% for cl in clients %}<option value="{{ cl.id }}">{{ cl.name }} · #{{ '%03d'|format(cl.number) }}</option>{% endfor %}
+        <option value="new"{% if not clients %} selected{% endif %}>+ Yeni müştəri</option>
+      </select>
+    </div>
+    <div class="mh-two" data-new-client>
+      <div class="mh-field"><label>Yeni müştərinin adı</label><input name="new_name" type="text" placeholder="Ad Soyad" maxlength="80"></div>
+      <div class="mh-field"><label>Telefon</label><input name="new_phone" type="tel" placeholder="+994 __ ___ __ __" maxlength="25"></div>
+    </div>
+
+    <div class="mh-field">
+      <label>Əməliyyat növü</label>
+      <div class="mh-seg">
+        <label><input type="radio" name="deal_type" value="sale" checked><span>Satış</span></label>
+        <label><input type="radio" name="deal_type" value="rent"><span>Kirayə</span></label>
+      </div>
+    </div>
+    <div class="mh-two">
+      <div class="mh-field"><label>Rayon</label>
+        <select name="district">{% for d in districts %}<option>{{ d }}</option>{% endfor %}</select></div>
+      <div class="mh-field"><label>Əmlak tipi</label>
+        <select name="property_type">{% for t in property_types %}<option value="{{ t }}">{{ t or 'Fərq etməz' }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="mh-three">
+      <div class="mh-field"><label>Otaq sayı</label>
+        <select name="rooms"><option value="">Fərq etməz</option>{% for r in ['1','2','3','4','5','2+','3+','4+','5+'] %}<option value="{{ r }}">{{ r }}</option>{% endfor %}</select></div>
+      <div class="mh-field"><label data-price-label>Min. qiymət (AZN)</label><input name="price_min" type="number" min="1" step="1" placeholder="200000" required></div>
+      <div class="mh-field"><label data-price-label2>Maks. qiymət (AZN)</label><input name="price_max" type="number" min="1" step="1" placeholder="250000" required></div>
+    </div>
+    <div class="mh-hint">Kirayə üçün aylıq qiyməti daxil edin. Büdcədən 10%-ə qədər baha elanlar da "△" işarəsi ilə göstəriləcək.</div>
+
+    <div class="mh-actions">
+      <button class="mh-btn ghost" type="button" data-close>Ləğv et</button>
+      <button class="mh-btn" type="submit">Profili yadda saxla</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}<script>window.MH_ELANLAR_URL="{{ url_for('makler.elanlar') }}";</script>
+<script src="{{ url_for('static', filename='js/pages/axtarislar.js') }}"></script>{% endblock %}

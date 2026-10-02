@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>MaklerHub — {% block title %}{% endblock %}</title>
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.png') }}">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/' ~ page_css) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app-dark.css') }}">
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <a class="brand" href="{{ url_for('admin.panel') }}"><img src="{{ url_for('static', filename='img/logo.png') }}" alt=""><div><span>MaklerHub</span><span class="tag">ADMİN</span></div></a>
+    <nav class="snav">
+      {%- for ep, label in nav %}
+      <a href="{{ url_for(ep) }}"{% if active == ep %} class="active"{% endif %}>{{ label }}</a>
+      {%- endfor %}
+    </nav>
+    <div class="side-foot">
+      <div class="adminrow"><div class="aav">{{ current_user.first_name[:1]|az_upper }}</div><div><div class="aname">{{ current_user.first_name }}</div><div class="arole">Super istifadəçi</div></div></div>
+      <a class="logout" href="{{ url_for('auth.cixis') }}">Çıxış et</a>
+    </div>
+  </aside>
+{% block shell %}{% endblock %}
+</div>
+{% block modals %}{% endblock %}
+<div class="mh-toast" id="mhToast" role="status"></div>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

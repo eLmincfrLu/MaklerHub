@@ -1,0 +1,47 @@
+{% extends 'makler/base.html' %}
+{% set page_css = 'elanlar.css' %}
+{% block title %}Elanlar{% endblock %}
+{% block main %}
+  <div class="head reveal" style="animation-delay:.05s">
+    <h1>Bütün Elanlar</h1>
+    <p>{{ sources|length }} mənbədən izlənən, kriteriyalarınıza görə süzülmüş elanlar.</p>
+  </div>
+
+  <div class="stats reveal" style="animation-delay:.12s">
+    <div class="stat"><div class="n">{{ stats.tracked }}</div><div class="l">Cəmi izlənən elan</div></div>
+    <div class="stat"><div class="n">{{ stats.today }}</div><div class="l">Bu gün yeni</div></div>
+    <div class="stat"><div class="n">{{ stats.hi }}</div><div class="l">90%+ uyğunluqlu</div></div>
+    <div class="stat"><div class="n">{{ stats.dropped }}</div><div class="l">Qiyməti düşüb</div></div>
+  </div>
+
+  <div class="toolbar reveal" style="animation-delay:.2s">
+    <div class="filters">
+      <div class="fchip{% if src == 'all' %} active{% endif %}" data-src="all">Hamısı</div>
+      {%- for s in sources %}
+      <div class="fchip{% if src == s.key %} active{% endif %}" data-src="{{ s.key }}"><img src="{{ url_for('static', filename='img/' ~ s.logo) }}" alt="">{{ s.name }}</div>
+      {%- endfor %}
+      {%- if profile %}
+      <div class="fchip active" id="profileChip" title="Filtri sil">{{ profile.name }} <span class="x">✕</span></div>
+      {%- endif %}
+    </div>
+    <div class="sortbox">
+      <select id="sortSel">
+        <option value="match"{% if sort == 'match' %} selected{% endif %}>Uyğunluğa görə</option>
+        <option value="new"{% if sort == 'new' %} selected{% endif %}>Ən yeni</option>
+        <option value="price_asc"{% if sort == 'price_asc' %} selected{% endif %}>Qiymət: ucuzdan bahaya</option>
+        <option value="price_desc"{% if sort == 'price_desc' %} selected{% endif %}>Qiymət: bahadan ucuza</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="list" id="list" data-profile="{{ profile.id if profile else '' }}">
+    {%- if items %}
+    {% with base_delay = 0.28 %}{% include 'makler/_elan_cards.html' %}{% endwith %}
+    {%- else %}
+    <div class="mh-empty">Hələ uyğun elan yoxdur. Axtarış profili yaradın — sistem mənbələri izləyib uyğun elanları burada göstərəcək.</div>
+    {%- endif %}
+  </div>
+
+  <button class="more" id="moreBtn"{% if total <= page_size %} style="display:none"{% endif %}>Daha çox göstər</button>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/elanlar.js') }}"></script>{% endblock %}

@@ -1,0 +1,8 @@
+/* Giriş / qeydiyyat səhifələri üçün bildiriş blokları */
+.alert{margin:-14px 0 24px;padding:11px 14px;font-size:.82rem;line-height:1.5;border-left:3px solid var(--gold);
+  background:#FBF4DE;color:#5B5540;animation:fadeUp .4s ease;}
+.alert.err{border-left-color:#B4543F;background:#F8E6E0;color:#8A3A28;}
+.alert.ok{border-left-color:var(--ok);background:#E6EFE8;color:#2F5A3E;}
+.alert ul{margin:0;padding-left:16px;}
+.demo{margin-top:18px;font-size:.74rem;color:#9A9478;line-height:1.6;border-top:1px dashed var(--line);padding-top:14px;}
+.demo b{color:#5B5540;font-weight:600;}

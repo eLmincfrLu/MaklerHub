@@ -1,0 +1,65 @@
+/* MaklerHub — admin panel üçün əlavə komponentlər (qaranlıq tema) */
+a.brand{text-decoration:none;}
+.logrow .lv.err{color:var(--bad);} .logrow .lv.info{color:var(--mut);}
+.logrow .lv{width:auto;min-width:52px;}
+.srcstat.down{color:var(--bad);} .srcstat.down .d{background:var(--bad);}
+.srcstat.off{color:var(--mut);} .srcstat.off .d{background:var(--mut);}
+.pill.trial{background:rgba(201,162,39,.15);color:var(--gold);}
+.mh-empty{padding:30px;text-align:center;color:var(--mut);font-size:.86rem;}
+.link-more{display:inline-block;margin-top:12px;font-size:.8rem;color:var(--gold-dim);text-decoration:none;}
+.link-more:hover{color:var(--gold);}
+
+/* menyu */
+.mh-menu{position:absolute;z-index:80;background:#1B2836;border:1px solid var(--line);min-width:210px;padding:6px 0;border-radius:5px;
+  box-shadow:0 18px 40px rgba(0,0,0,.45);opacity:0;transform:translateY(-4px);transition:opacity .18s ease,transform .22s cubic-bezier(.2,.7,.2,1);
+  font-family:var(--font-b);}
+.mh-menu.show{opacity:1;transform:none;}
+.mh-menu button{all:unset;box-sizing:border-box;display:block;width:100%;padding:9px 16px;font-size:.83rem;color:var(--txt);cursor:pointer;
+  transition:background .15s ease,color .15s ease;}
+.mh-menu button:hover{background:rgba(255,255,255,.05);color:var(--gold);}
+.mh-menu button.danger{color:var(--bad);}
+.mh-menu button.danger:hover{background:rgba(196,106,86,.1);color:var(--bad);}
+.mh-menu hr{border:none;border-top:1px solid var(--line);margin:5px 0;}
+
+/* modal */
+.mh-overlay{position:fixed;inset:0;z-index:70;background:rgba(5,9,13,.6);backdrop-filter:blur(3px);display:flex;align-items:center;
+  justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .25s ease;}
+.mh-overlay.show{opacity:1;pointer-events:auto;}
+.mh-modal{position:relative;background:var(--navy2);border:1px solid var(--line);border-radius:6px;width:100%;max-width:500px;
+  max-height:calc(100vh - 40px);overflow:auto;padding:28px 28px 24px;box-shadow:0 30px 70px rgba(0,0,0,.5);color:var(--txt);
+  transform:translateY(14px) scale(.985);transition:transform .35s cubic-bezier(.2,.7,.2,1);font-family:var(--font-b);}
+.mh-overlay.show .mh-modal{transform:none;}
+.mh-modal h2{font-family:var(--font-h);font-weight:600;font-size:1.15rem;margin-bottom:6px;}
+.mh-modal .mh-desc{font-size:.8rem;color:var(--mut);margin-bottom:20px;line-height:1.5;}
+.mh-x{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;border:none;background:none;cursor:pointer;color:var(--mut);font-size:1.05rem;}
+.mh-x:hover{background:rgba(255,255,255,.06);color:var(--txt);}
+.mh-field{margin-bottom:15px;}
+.mh-field label{display:block;font-size:.74rem;color:var(--mut);margin-bottom:6px;}
+.mh-field input,.mh-field select{width:100%;background:#101923;border:1px solid var(--line);border-radius:4px;color:var(--txt);
+  font-family:var(--font-b);font-size:.86rem;padding:10px 12px;}
+.mh-field input:focus,.mh-field select:focus{outline:none;border-color:var(--gold-dim);}
+.mh-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media(max-width:520px){.mh-two{grid-template-columns:1fr;gap:0;}}
+.mh-check{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-top:1px solid var(--line);margin-bottom:8px;}
+.mh-check b{font-weight:500;font-size:.86rem;display:block;}
+.mh-check span{font-size:.74rem;color:var(--mut);}
+.mh-err{display:none;font-size:.8rem;color:var(--bad);background:rgba(196,106,86,.1);border-left:3px solid var(--bad);padding:9px 12px;margin:0 0 14px;}
+.mh-err.show{display:block;}
+.mh-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;flex-wrap:wrap;}
+.mh-code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1.05rem;letter-spacing:.06em;background:#101923;border:1px dashed var(--gold-dim);
+  color:var(--gold);padding:12px 14px;border-radius:4px;text-align:center;margin:6px 0 4px;user-select:all;}
+
+/* toast */
+.mh-toast{position:fixed;right:24px;top:24px;z-index:90;background:rgba(91,144,112,.16);border:1px solid var(--ok);color:var(--ok);
+  padding:10px 18px;border-radius:4px;font-size:.84rem;font-family:var(--font-b);opacity:0;transform:translateY(-8px);transition:all .3s ease;
+  pointer-events:none;backdrop-filter:blur(6px);max-width:380px;}
+.mh-toast.show{opacity:1;transform:none;}
+.mh-toast.err{background:rgba(196,106,86,.16);border-color:var(--bad);color:var(--bad);}
+button:disabled{opacity:.6;cursor:default;}
+.tg{position:relative;width:40px;height:22px;flex-shrink:0;}
+.tg input{position:absolute;inset:0;opacity:0;cursor:pointer;margin:0;z-index:1;}
+.tg i{position:absolute;inset:0;border-radius:20px;background:#1B2836;border:1px solid var(--line);transition:all .25s ease;}
+.tg i::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--mut);transition:all .25s ease;}
+.tg input:checked+i{background:rgba(201,162,39,.25);border-color:var(--gold-dim);}
+.tg input:checked+i::after{left:20px;background:var(--gold);}
+.tg input:focus-visible+i{outline:2px solid var(--gold);outline-offset:2px;}

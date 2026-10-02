@@ -1,0 +1,52 @@
+{% extends 'admin/base.html' %}
+{% set page_css = 'admin-menbe.css' %}
+{% block title %}Admin · Mənbə statusu{% endblock %}
+{% block shell %}
+  <main>
+    <div class="head reveal" style="animation-delay:.05s">
+      <h1>Mənbə statusu</h1>
+      <p>İzlənən {{ sources|length }} platformanın canlı vəziyyəti və performansı</p>
+    </div>
+
+    <div class="srccards">
+      {%- for x in sources %}
+      <div class="srcbig" style="animation-delay:{{ '%.2f'|format(0.1 + loop.index0 * 0.08) }}s" data-key="{{ x.s.key }}" data-json='{{ {"key": x.s.key, "name": x.s.name, "enabled": x.s.enabled, "base_url": x.s.base_url, "rate": x.s.rate_limit}|tojson }}'>
+        <div class="srctop">
+          <img src="{{ x.logo }}" alt="">
+          <div><div class="srcname">{{ x.s.name }}</div><div class="srcstat {{ x.m.status }}"><span class="d"></span>{{ x.m.status_label }} · son sinxron {{ x.last }}</div></div>
+          <div class="srcactions"><button class="mini" data-settings>Tənzimləmələr</button><button class="mini gold" data-sync>İndi sinxronlaşdır</button></div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="l">Uptime (30 gün)</div><div class="n">{{ x.m.uptime }}</div></div>
+          <div class="metric"><div class="l">Bugünkü elan</div><div class="n">{{ '{:,}'.format(x.m.today) }}</div></div>
+          <div class="metric"><div class="l">Orta cavab vaxtı</div><div class="n">{{ x.m.latency }}</div></div>
+          <div class="metric"><div class="l">Xəta sayı (24s)</div><div class="n">{{ x.m.errors }}</div></div>
+        </div>
+        <div class="spark" data-vals="{{ x.m.spark|join(',') }}"></div>
+        <div class="sparklabel">Son 14 gün — sinxronizasiya zamanı tapılan yeni elan sayı{% if x.m.trend_down %} (aşağı tendensiya izlənir){% endif %}</div>
+      </div>
+      {%- endfor %}
+    </div>
+  </main>
+{% endblock %}
+
+{% block modals %}
+<div class="mh-overlay" id="srcModal">
+  <form class="mh-modal" id="srcForm" autocomplete="off">
+    <button class="mh-x" type="button" data-close aria-label="Bağla">✕</button>
+    <h2 data-title>Tənzimləmələr</h2>
+    <div class="mh-desc">Mənbənin izlənməsini idarə edin. Ümumi interval, sorğu limiti və vaxt həddi Ayarlar → Sinxronizasiya bölməsindədir.</div>
+    <div class="mh-err"></div>
+    <div class="mh-check"><div><b>Mənbəni izlə</b><span>Deaktiv olduqda yeni elanlar çəkilmir və maklerlərə göstərilmir</span></div>
+      <label class="tg"><input type="checkbox" name="enabled"><i></i></label></div>
+    <div class="mh-field"><label>Baza URL</label><input name="base_url" type="url" placeholder="https://"></div>
+    <div class="mh-field"><label>Cari sorğu limiti</label><input name="rate" type="text" disabled></div>
+    <div class="mh-actions">
+      <button class="mini" type="button" data-close>Ləğv et</button>
+      <button class="mini gold" type="submit">Yadda saxla</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}<script>window.MH_RATE={{ settings.rate_limit|int }};</script>
+<script src="{{ url_for('static', filename='js/pages/admin-menbe.js') }}"></script>{% endblock %}
