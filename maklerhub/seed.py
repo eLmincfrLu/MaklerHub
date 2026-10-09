@@ -1,8 +1,8 @@
 """Nümunə (demo) məlumatlar — dizayn fayllarındakı məlumatların eynisi, cari tarixə uyğunlaşdırılmış.
 
-Giriş hesabları:
-    Makler:  elvin@nümunə.az   /  maklerhub123
-    Admin:   admin@maklerhub.az /  admin12345
+Giriş hesabları mühit dəyişənlərindən gəlir (.env və ya Render Environment):
+    MAKLERHUB_ADMIN_USERNAME, MAKLERHUB_ADMIN_PASSWORD,
+    MAKLERHUB_DEMO_EMAIL, MAKLERHUB_DEMO_PASSWORD
 """
 import json
 import random
@@ -15,9 +15,12 @@ from .db import add_log
 from .helpers import day_start, now, ts
 from .sources import SOURCE_DEFS, gen_for_profile, gen_listing, insert_listing
 
-DEMO_PASSWORD = "maklerhub123"
-ADMIN_EMAIL = "admin@maklerhub.az"
-ADMIN_PASSWORD = "admin12345"
+import os
+
+ADMIN_EMAIL = os.environ.get("MAKLERHUB_ADMIN_USERNAME", "admin").strip().lower()
+ADMIN_PASSWORD = os.environ.get("MAKLERHUB_ADMIN_PASSWORD", "")
+DEMO_EMAIL = os.environ.get("MAKLERHUB_DEMO_EMAIL", "").strip().lower()
+DEMO_PASSWORD = os.environ.get("MAKLERHUB_DEMO_PASSWORD", "")
 
 MALE = ["Rəşad", "Kənan", "Tural", "Anar", "Elçin", "Vüqar", "Ramil", "Samir", "Nicat", "Ülvi", "Emil", "Cavid",
         "Fuad", "Rövşən", "Elnur", "Zaur", "İlkin", "Toğrul", "Namiq", "Orxan", "Seymur", "Mahir", "Hikmət"]
@@ -40,7 +43,11 @@ def _phone(rng):
 
 
 def seed_minimal(con):
-    """Boş baza: yalnız mənbələr və admin hesabı."""
+    """Boş baza: mənbələr, admin hesabı və bir makler hesabı."""
+    for name, val in (("MAKLERHUB_ADMIN_PASSWORD", ADMIN_PASSWORD), ("MAKLERHUB_DEMO_EMAIL", DEMO_EMAIL),
+                      ("MAKLERHUB_DEMO_PASSWORD", DEMO_PASSWORD)):
+        if not val:
+            raise RuntimeError(f"{name} mühit dəyişəni təyin olunmayıb.")
     n = now()
     for i, (key, name, logo, url) in enumerate(SOURCE_DEFS):
         con.execute("INSERT OR IGNORE INTO sources(key, name, logo, base_url, sort, last_sync) VALUES (?,?,?,?,?,?)",
@@ -49,6 +56,11 @@ def seed_minimal(con):
         "INSERT OR IGNORE INTO users(first_name, last_name, email, password_hash, role, plan, status, "
         "password_changed_at, created_at) VALUES ('Admin', '', ?, ?, 'admin', 'none', 'active', ?, ?)",
         (ADMIN_EMAIL, generate_password_hash(ADMIN_PASSWORD), ts(n), ts(n)),
+    )
+    con.execute(
+        "INSERT OR IGNORE INTO users(first_name, last_name, email, password_hash, role, plan, status, "
+        "password_changed_at, created_at) VALUES ('Elmin', '', ?, ?, 'makler', 'pro', 'active', ?, ?)",
+        (DEMO_EMAIL, generate_password_hash(DEMO_PASSWORD), ts(n), ts(n)),
     )
 
 

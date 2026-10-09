@@ -9,7 +9,8 @@ istifadə olunur; yoxdursa Flask-ın daxili serveri işləyir.
 """
 import argparse
 import sys
-
+from dotenv import load_dotenv
+load_dotenv()
 from maklerhub import create_app
 
 
@@ -28,8 +29,7 @@ def main():
     app = create_app()
     url = f"http://{'127.0.0.1' if args.host == '0.0.0.0' else args.host}:{args.port}"
     print("\n  MaklerHub işə düşdü →", url)
-    print("  Makler girişi:  elvin@nümunə.az  /  maklerhub123")
-    print("  Admin girişi:   admin@maklerhub.az  /  admin12345\n")
+    print()
 
     if args.debug:
         app.run(host=args.host, port=args.port, debug=True, use_reloader=False)

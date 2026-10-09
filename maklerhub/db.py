@@ -134,7 +134,7 @@ def init_app(app):
 
     # İlk işə salınmada baza avtomatik yaradılır
     if not os.path.exists(app.config["DATABASE"]):
-        init_db(app.config["DATABASE"], seed=True)
+        init_db(app.config["DATABASE"], seed=False)
     else:
         con = connect(app.config["DATABASE"])
         create_schema(con)  # yeni cədvəllər/ayarlar varsa əlavə olunur

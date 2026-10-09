@@ -26,12 +26,8 @@ Brauzerdə açın: **http://127.0.0.1:5000**
 İlk işə salınmada `instance/maklerhub.db` bazası avtomatik yaradılır və dizaynlardakı
 nümunə məlumatlarla doldurulur.
 
-| Rol | E-poçt | Şifrə |
-|-----|--------|-------|
-| Makler | `elvin@nümunə.az` | `maklerhub123` |
-| Admin | `admin@maklerhub.az` | `admin12345` |
-
-(Digər nümunə maklerlər — məs. `sabina@nümunə.az` — da `maklerhub123` şifrəsi ilə daxil olur.)
+Giriş hesabları `.env` faylındakı (və ya Render Environment-dəki) `MAKLERHUB_ADMIN_*` və
+`MAKLERHUB_DEMO_*` dəyişənləri ilə yaradılır. Şifrələr kodda saxlanmır.
 
 ## 2. Səhifələr
 
