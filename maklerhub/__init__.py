@@ -30,7 +30,6 @@ def create_app(overrides=None):
         app.config.update(overrides)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    os.makedirs(os.path.dirname(app.config["DATABASE"]), exist_ok=True)
     os.makedirs(app.config["UPLOAD_DIR"], exist_ok=True)
 
     helpers.set_timezone(app.config["TIMEZONE"])

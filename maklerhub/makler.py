@@ -558,7 +558,7 @@ def analitika():
                           (u["id"], ts(a), ts(b))).fetchone()[0]
 
     def detect(a, b):
-        v = db.execute("SELECT AVG((julianday(m.created_at) - julianday(l.posted_at)) * 1440) FROM matches m "
+        v = db.execute("SELECT AVG(EXTRACT(EPOCH FROM (m.created_at::timestamp - l.posted_at::timestamp)) / 60) FROM matches m "
                        "JOIN profiles p ON p.id = m.profile_id JOIN listings l ON l.id = m.listing_id "
                        "WHERE p.user_id = ? AND m.created_at >= ? AND m.created_at < ?",
                        (u["id"], ts(a), ts(b))).fetchone()[0]

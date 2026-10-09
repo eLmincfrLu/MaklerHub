@@ -25,7 +25,7 @@ def _secret_key():
 
 class Config:
     SECRET_KEY = _secret_key()
-    DATABASE = os.environ.get("MAKLERHUB_DB", os.path.join(INSTANCE_DIR, "maklerhub.db"))
+    DATABASE = os.environ.get("DATABASE_URL", "")  # Neon: postgresql://...?sslmode=require
     UPLOAD_DIR = os.path.join(INSTANCE_DIR, "uploads")
     TIMEZONE = os.environ.get("MAKLERHUB_TZ", "Asia/Baku")
 
