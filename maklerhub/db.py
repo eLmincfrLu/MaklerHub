@@ -205,7 +205,7 @@ def _get_pool(url):
     global _pool
     if _pool is None:
         _pool = ConnectionPool(
-            normalize_url(url), min_size=1, max_size=int(os.environ.get("MAKLERHUB_POOL_MAX", "8")),
+            normalize_url(url), min_size=0, max_size=int(os.environ.get("MAKLERHUB_POOL_MAX", "8")),
             kwargs={"connect_timeout": 15}, check=ConnectionPool.check_connection,
             max_idle=240, timeout=30, open=False)
         _pool.open()

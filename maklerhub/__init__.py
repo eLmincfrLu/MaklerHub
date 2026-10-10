@@ -16,6 +16,11 @@ def landing():
     sources = con.execute("SELECT COUNT(*) FROM sources WHERE enabled = 1").fetchone()[0]
     return render_template("landing.html", source_count=sources)
 
+@public.route("/saglamliq")
+def health():
+    """UptimeRobot üçün: bazaya toxunmur, ona görə Neon-u oyatmır."""
+    return "ok", 200, {"Cache-Control": "no-store"}
+
 
 @public.route("/media/avatars/<path:filename>")
 def avatar(filename):
