@@ -49,7 +49,7 @@ def run_full(category, nodes, has_next):
     store = Store(con)
     store.commit = lambda: None
     store.finish = lambda **kw: None
-    run._open_store = lambda: store
+    run._open_store = lambda **kw: store
     bina.BinaClient = lambda: FakeClient(nodes, has_next)
     run.OUT_DIR = SP
     sys.argv = ["run", "bina", "--full", "--deal", "rent", "--district", "Nərimanov", "--category", category]

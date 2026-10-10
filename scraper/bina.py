@@ -13,6 +13,8 @@ import time
 
 import requests
 
+from .common import BlockedError, ScrapeError, price_flags
+
 BASE = "https://bina.az"
 GRAPHQL = BASE + "/graphql"
 HASH = "b781511a943a4d710eefdf811a24dd4ae353e55d836952603ce0b37fde97d073"
@@ -27,19 +29,8 @@ DISTRICTS = {
 # Mənzil kateqoriyaları (brauzerin öz filtrindən): 2 = Yeni tikili, 3 = Köhnə tikili
 CATEGORIES = {"new": ("2", "Yeni tikili"), "old": ("3", "Köhnə tikili")}
 
-# "Şübhəli" qiymət hədləri (AZN). İstədikdə dəyişdirilə bilər.
-RENT_MIN_TOTAL = 100        # aylıq kirayə bundan azdırsa
-RENT_MIN_PER_M2 = 3         # aylıq kirayə 1 m²-ə bundan azdırsa
-SALE_MIN_TOTAL = 10000      # satış qiyməti bundan azdırsa
-SALE_MIN_PER_M2 = 400       # satış 1 m²-ə bundan azdırsa
-
-
-class BinaError(Exception):
-    pass
-
-
-class BlockedError(BinaError):
-    """Sayt sorğunu rədd etdi (403/429/JSON olmayan cavab). Davam etmək olmaz."""
+# Şübhəli qiymət hədləri və qaydası ortaq moduldadır (scraper/common.py)
+BinaError = ScrapeError
 
 
 class BinaClient:
@@ -115,27 +106,6 @@ class BinaClient:
             after = conn["pageInfo"]["endCursor"]
 
 
-def _price_flags(deal, period, price, area, currency):
-    flags = []
-    if currency != "AZN":
-        flags.append("valyuta " + str(currency))
-    if price is None or price <= 0:
-        flags.append("qiymət yoxdur")
-        return flags
-    per_m2 = (price / area) if area else None
-    if deal == "rent" and period == "month":
-        if price < RENT_MIN_TOTAL:
-            flags.append(f"aylıq kirayə {price} < {RENT_MIN_TOTAL}")
-        elif per_m2 is not None and per_m2 < RENT_MIN_PER_M2:
-            flags.append(f"kirayə {per_m2:.1f} AZN/m² < {RENT_MIN_PER_M2}")
-    elif deal == "sale":
-        if price < SALE_MIN_TOTAL:
-            flags.append(f"satış {price} < {SALE_MIN_TOTAL}")
-        elif per_m2 is not None and per_m2 < SALE_MIN_PER_M2:
-            flags.append(f"satış {per_m2:.0f} AZN/m² < {SALE_MIN_PER_M2}")
-    return flags
-
-
 def normalize(node, district, property_type):
     """Bina.az elanını bizim vahid formata çevirir.
 
@@ -161,7 +131,7 @@ def normalize(node, district, property_type):
     if area:
         title += f", {area:g} m²"
 
-    flags = _price_flags(deal, period, price, area, currency)
+    flags = price_flags(deal, period, price, area, currency)
     prev = node.get("preview") or {}
     img = prev.get("f460x345") or prev.get("thumbnail")
 

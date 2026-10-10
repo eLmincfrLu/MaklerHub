@@ -165,8 +165,22 @@ def _active_profiles(con):
     return con.execute("SELECT * FROM profiles WHERE status = 'active'").fetchall()
 
 
-def match_listing(con, listing, profiles=None, when=None):
-    """Yeni və ya dəyişmiş elanı aktiv profillərlə yoxlayır. Yeni uyğunluq sayını qaytarır."""
+def notify_new_match(con, p, listing, score, when=None):
+    """Profil yaradılandan sonra gələn elan üçün oxunmamış bildiriş yazır."""
+    client = con.execute("SELECT name FROM clients WHERE id = ?", (p["client_id"],)).fetchone()
+    con.execute(
+        "INSERT INTO notifications(user_id, kind, title, body, listing_id, profile_id, created_at) "
+        "VALUES (?, 'new_match', ?, ?, ?, ?, ?)",
+        (p["user_id"], f"Yeni uyğun elan — {client['name'] if client else 'müştəri'}",
+         f"{listing['title']} · {score}% uyğunluq", listing["id"], p["id"], when or ts()),
+    )
+
+
+def match_listing(con, listing, profiles=None, when=None, notify=False):
+    """Yeni və ya dəyişmiş elanı aktiv profillərlə yoxlayır. Yeni uyğunluq sayını qaytarır.
+
+    notify=True: YENİ uyğunluq yarananda və elan profildən SONRA bazaya düşübsə bildiriş yazılır.
+    """
     profiles = _active_profiles(con) if profiles is None else profiles
     created = 0
     for p in profiles:
@@ -188,6 +202,8 @@ def match_listing(con, listing, profiles=None, when=None):
                 (p["id"], listing["id"], score, json.dumps(reasons, ensure_ascii=False), when or ts()),
             )
             created += 1
+            if notify and listing["created_at"] > p["created_at"]:
+                notify_new_match(con, p, listing, score, when)
     return created
 
 

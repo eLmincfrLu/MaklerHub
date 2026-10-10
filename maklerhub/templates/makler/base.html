@@ -19,6 +19,10 @@
       <a href="{{ url_for(ep) }}"{% if active == ep %} class="active"{% endif %}>{{ label }}</a>
       {%- endfor %}
     </div>
+    <button type="button" class="mh-bell" id="bellBtn" aria-label="Bildirişlər" title="Bildirişlər">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 2H4.5L6 16.5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span class="mh-bell-n" id="bellCount"{% if not unread %} hidden{% endif %}>{{ unread if unread < 100 else '99+' }}</span>
+    </button>
     <div class="user" id="userMenuBtn" data-admin="{{ 1 if current_user.role == 'admin' else 0 }}">
       <div class="avatar" data-avatar>{% if current_user.avatar %}<img src="{{ url_for('public.avatar', filename=current_user.avatar) }}" alt="">{% else %}{{ initials(current_user.first_name, current_user.last_name) }}{% endif %}</div>
       <div><div class="uname" data-uname>{{ full_name(current_user) }}</div><div class="urole">{{ ROLE_LABELS[current_user.role] }}</div></div>
@@ -33,7 +37,7 @@
 {% block modals %}{% endblock %}
 <div class="mh-overlay" id="detailModal"><div class="mh-modal mh-wide"></div></div>
 <div class="mh-toast" id="mhToast" role="status"></div>
-<script>window.MH_URLS={settings:"{{ url_for('makler.ayarlar') }}",logout:"{{ url_for('auth.cixis') }}",match:"{{ url_for('makler.api_match', mid=0) }}".replace(/0$/,'')};</script>
+<script>window.MH_URLS={settings:"{{ url_for('makler.ayarlar') }}",logout:"{{ url_for('auth.cixis') }}",match:"{{ url_for('makler.api_match', mid=0) }}".replace(/0$/,''),notifs:"{{ url_for('makler.api_notifications') }}"};</script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>

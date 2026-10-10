@@ -34,9 +34,28 @@
     </div>
   </div>
 
-  <div class="list" id="list" data-profile="{{ profile.id if profile else '' }}">
+  {%- if profile %}
+  <div class="mh-sec reveal" style="animation-delay:.24s">
+    <h2>Yeni gələnlər <span class="cnt">{{ new_total }}</span></h2>
+    <p>Profil yaradılandan sonra mənbələrdə çıxan uyğun elanlar — ən təzəsi yuxarıda.</p>
+  </div>
+  <div class="list" id="newList">
+    {%- if new_items %}
+    {% with items = new_items, base_delay = 0.28 %}{% include 'makler/_elan_cards.html' %}{% endwith %}
+    {%- else %}
+    <div class="mh-empty">Profil yaradılandan sonra hələ yeni uyğun elan gəlməyib. Yeni elan çıxan kimi burada görünəcək və zəng ikonunda bildiriş yaranacaq.</div>
+    {%- endif %}
+  </div>
+  <div class="mh-sec reveal" style="animation-delay:.3s">
+    <h2>Profil yaradılanda mövcud olanlar <span class="cnt">{{ total }}</span></h2>
+    <p>Profil yaradılan anda bazada artıq olan uyğun elanlar.</p>
+  </div>
+  {%- endif %}
+  <div class="list" id="list" data-profile="{{ profile.id if profile else '' }}" data-section="{{ 'old' if profile else '' }}">
     {%- if items %}
     {% with base_delay = 0.28 %}{% include 'makler/_elan_cards.html' %}{% endwith %}
+    {%- elif profile %}
+    <div class="mh-empty">Profil yaradılanda bazada uyğun elan yox idi.</div>
     {%- else %}
     <div class="mh-empty">Hələ uyğun elan yoxdur. Axtarış profili yaradın — sistem mənbələri izləyib uyğun elanları burada göstərəcək.</div>
     {%- endif %}

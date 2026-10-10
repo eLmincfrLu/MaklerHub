@@ -32,11 +32,11 @@
       {%- for m in top %}
       <div class="card{% if m.mid %} mid{% endif %}" style="animation-delay:{{ '%.2f'|format(0.55 + loop.index0 * 0.13) }}s" data-match="{{ m.id }}">
         <div class="match"><svg width="56" height="56"><circle cx="28" cy="28" r="24" stroke="var(--line)" stroke-width="4" fill="none"/><circle class="ring" cx="28" cy="28" r="24" stroke="{{ 'var(--gold-dim)' if m.mid else 'var(--ok)' }}" stroke-width="4" fill="none" stroke-dasharray="151" stroke-dashoffset="151" data-final="{{ m.ring56 }}"/></svg><div class="pct" data-target="{{ m.score }}">0%</div></div>
-        <div class="info"><div class="title">{{ m.title_long }}</div><div class="meta">{{ m.meta }}</div><div class="why">{{ m.why_long }}</div></div>
+        <div class="info"><div class="title">{{ m.title_long }} <span class="mh-new">Yeni</span><span class="mh-arrived">{{ m.arrived }}</span></div><div class="meta">{{ m.meta }}</div><div class="why">{{ m.why_long }}</div></div>
         <div class="client"><div class="name">{{ m.client }}</div><div class="to">müştəri #{{ m.client_no }}</div></div>
       </div>
       {%- else %}
-      <div class="mh-empty">Bu gün hələ uyğun elan tapılmayıb. Sistem mənbələri fasiləsiz izləyir — yeni elan çıxan kimi burada görünəcək.</div>
+      <div class="mh-empty">Bu gün profillərinizə hələ yeni uyğun elan gəlməyib. Sistem mənbələri izləyir — yeni elan çıxan kimi burada görünəcək.</div>
       {%- endfor %}
     </div>
   </div>

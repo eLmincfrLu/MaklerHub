@@ -26,7 +26,9 @@ PAGE_SIZE = 10
 
 
 def render(template, active, **ctx):
-    return render_template(template, nav=NAV, active=active, **ctx)
+    unread = get_db().execute("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL",
+                              (g.user["id"],)).fetchone()[0]
+    return render_template(template, nav=NAV, active=active, unread=unread, **ctx)
 
 
 def err(message, code=400):
@@ -50,9 +52,10 @@ def _in(ids):
 MATCH_SQL = """
 SELECT m.id AS mid, m.score, m.reasons, m.created_at AS matched_at,
        l.id AS lid, l.title, l.suffix, l.district, l.rooms, l.area, l.floor, l.floors, l.price, l.deal_type,
-       l.building, l.renovation, l.metro_m, l.url, l.posted_at,
+       l.building, l.renovation, l.metro_m, l.url, l.posted_at, l.created_at AS listing_created,
        s.key AS skey, s.name AS sname, s.logo AS slogo,
-       c.id AS cid, c.name AS client_name, c.number AS client_no, c.phone AS client_phone, p.id AS pid
+       c.id AS cid, c.name AS client_name, c.number AS client_no, c.phone AS client_phone, p.id AS pid,
+       p.created_at AS profile_created
 FROM matches m
 JOIN profiles p ON p.id = m.profile_id
 JOIN clients c ON c.id = p.client_id
@@ -60,6 +63,10 @@ JOIN listings l ON l.id = m.listing_id
 JOIN sources s ON s.id = l.source_id
 WHERE p.user_id = ? AND l.active = 1 AND p.status = 'active' AND l.source_id IN ({ids})
 """
+# B: profil yaradılandan SONRA bazaya düşən elanlar ("Yeni gələnlər"); A: o vaxt artıq mövcud olanlar
+NEW_ONLY = " AND l.created_at > p.created_at"
+OLD_ONLY = " AND l.created_at <= p.created_at"
+SECTIONS = {"new": NEW_ONLY, "old": OLD_ONLY}
 
 
 def match_view(db, r):
@@ -79,6 +86,7 @@ def match_view(db, r):
         "client": r["client_name"], "client_no": f"{r['client_no']:03d}", "client_phone": r["client_phone"],
         "logo": url_for("static", filename="img/" + r["slogo"]), "source": r["sname"],
         "url": r["url"], "matched": r["matched_at"], "posted": r["posted_at"], "lid": r["lid"],
+        "new": r["listing_created"] > r["profile_created"], "arrived": rel(r["listing_created"]),
     }
 
 
@@ -123,7 +131,9 @@ def limit_error(db, user, kind):
 def kabinet():
     db, u = get_db(), g.user
     ids = visible_source_ids(db, u)
-    today = db.execute(MATCH_SQL.format(ids=_in(ids)) + " AND m.created_at >= ? ORDER BY m.score DESC, m.created_at DESC",
+    # yalnız B: profil yaradılandan sonra gələn elanlar (profil yaradılanda tapılan köhnələr bura düşmür)
+    today = db.execute(MATCH_SQL.format(ids=_in(ids)) + NEW_ONLY +
+                       " AND m.created_at >= ? ORDER BY m.score DESC, m.created_at DESC",
                        (u["id"], ts(day_start()))).fetchall()
     top = [match_view(db, r) for r in today[:3]]
     active_profiles = db.execute("SELECT COUNT(*) FROM profiles WHERE user_id = ? AND status = 'active'",
@@ -152,19 +162,19 @@ SORTS = {
 }
 
 
-def query_matches(db, user, src="all", sort="match", offset=0, profile_id=None):
+def query_matches(db, user, src="all", sort="match", offset=0, profile_id=None, section=None, limit=PAGE_SIZE):
     ids = visible_source_ids(db, user)
     if src != "all":
         row = db.execute("SELECT id FROM sources WHERE key = ?", (src,)).fetchone()
         ids = [i for i in ids if row and i == row["id"]]
-    sql = MATCH_SQL.format(ids=_in(ids))
+    sql = MATCH_SQL.format(ids=_in(ids)) + SECTIONS.get(section, "")
     args = [user["id"]]
     if profile_id:
         sql += " AND p.id = ?"
         args.append(profile_id)
     total = db.execute(f"SELECT COUNT(*) FROM ({sql})", args).fetchone()[0]
     rows = db.execute(sql + f" ORDER BY {SORTS.get(sort, SORTS['match'])} LIMIT ? OFFSET ?",
-                      args + [PAGE_SIZE, offset]).fetchall()
+                      args + [limit, offset]).fetchall()
     return [match_view(db, r) for r in rows], total
 
 
@@ -175,7 +185,12 @@ def elanlar():
     src = request.args.get("src", "all")
     sort = request.args.get("sort", "match")
     profile_id = request.args.get("profile", type=int)
-    items, total = query_matches(db, u, src, sort, 0, profile_id)
+    # Profil səhifəsi: B ("Yeni gələnlər", ən təzə yuxarıda) + A ("mövcud olanlar", səhifələnir)
+    section = "old" if profile_id else None
+    items, total = query_matches(db, u, src, sort, 0, profile_id, section)
+    new_items, new_total = ([], 0)
+    if profile_id:
+        new_items, new_total = query_matches(db, u, src, "new", 0, profile_id, "new", limit=100)
     ids = visible_source_ids(db, u)
     since = ts(now() - timedelta(days=30))
     visible = MATCH_SQL.format(ids=_in(ids))
@@ -195,7 +210,8 @@ def elanlar():
         profile = db.execute("SELECT p.id, c.name FROM profiles p JOIN clients c ON c.id = p.client_id "
                              "WHERE p.id = ? AND p.user_id = ?", (profile_id, u["id"])).fetchone()
     return render("makler/elanlar.html", "makler.elanlar", items=items, total=total, stats=stats,
-                  sources=sources, src=src, sort=sort, profile=profile, page_size=PAGE_SIZE)
+                  sources=sources, src=src, sort=sort, profile=profile, page_size=PAGE_SIZE,
+                  new_items=new_items, new_total=new_total)
 
 
 @bp.route("/api/elanlar")
@@ -203,8 +219,10 @@ def elanlar():
 def api_elanlar():
     db = get_db()
     offset = max(0, request.args.get("offset", 0, type=int))
+    profile_id = request.args.get("profile", type=int)
+    section = request.args.get("section") if profile_id else None
     items, total = query_matches(db, g.user, request.args.get("src", "all"), request.args.get("sort", "match"),
-                                 offset, request.args.get("profile", type=int))
+                                 offset, profile_id, section if section in SECTIONS else None)
     html = render_template("makler/_elan_cards.html", items=items, base_delay=0.05 if offset else 0.28)
     return jsonify(ok=True, html=html, total=total, has_more=offset + len(items) < total)
 
@@ -217,6 +235,10 @@ def api_match(mid):
     if not row:
         return err("Elan tapılmadı və ya artıq aktiv deyil.", 404)
     m = match_view(db, row)
+    # elan açıldı → bu profil+elan üzrə bildirişlər oxunmuş sayılır
+    db.execute("UPDATE notifications SET read_at = ? WHERE user_id = ? AND profile_id = ? AND listing_id = ? "
+               "AND read_at IS NULL", (ts(), u["id"], row["pid"], row["lid"]))
+    db.commit()
     history = db.execute("SELECT price, recorded_at FROM price_history WHERE listing_id = ? ORDER BY recorded_at",
                          (row["lid"],)).fetchall()
     history = [{"date": date_short(h["recorded_at"]), "price": price_str(h["price"], row["deal_type"])} for h in history]
@@ -228,6 +250,49 @@ def api_match(mid):
     html = render_template("makler/_detail.html", m=m, history=history, share_text=text, wa=wa,
                            posted=rel(row["posted_at"]), matched=rel(row["matched_at"]))
     return jsonify(ok=True, html=html)
+
+
+# ---------------------------------------------------------------- BİLDİRİŞLƏR
+def _unread(db, user_id):
+    return db.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL",
+                      (user_id,)).fetchone()[0]
+
+
+@bp.route("/api/notifications")
+@member_required
+def api_notifications():
+    db, u = get_db(), g.user
+    rows = db.execute(
+        "SELECT n.*, m.id AS mid FROM notifications n "
+        "LEFT JOIN matches m ON m.profile_id = n.profile_id AND m.listing_id = n.listing_id "
+        "WHERE n.user_id = ? ORDER BY n.created_at DESC, n.id DESC LIMIT 20", (u["id"],)).fetchall()
+    items = []
+    for n in rows:
+        href = url_for("makler.elanlar", profile=n["profile_id"]) if n["profile_id"] else url_for("makler.elanlar")
+        if n["mid"]:
+            href += f"&open={n['mid']}"
+        items.append({"id": n["id"], "title": n["title"], "body": n["body"], "read": bool(n["read_at"]),
+                      "when": rel(n["created_at"]), "href": href})
+    return jsonify(ok=True, unread=_unread(db, u["id"]), items=items)
+
+
+@bp.route("/api/notifications/<int:nid>/read", methods=["POST"])
+@member_required
+def api_notification_read(nid):
+    db, u = get_db(), g.user
+    db.execute("UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ? AND read_at IS NULL",
+               (ts(), nid, u["id"]))
+    db.commit()
+    return jsonify(ok=True, unread=_unread(db, u["id"]))
+
+
+@bp.route("/api/notifications/read-all", methods=["POST"])
+@member_required
+def api_notifications_read_all():
+    db, u = get_db(), g.user
+    db.execute("UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL", (ts(), u["id"]))
+    db.commit()
+    return jsonify(ok=True, unread=0)
 
 
 # ---------------------------------------------------------------- MÜŞTƏRİLƏR

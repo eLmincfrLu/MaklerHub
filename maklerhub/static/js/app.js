@@ -122,6 +122,64 @@
     });
   }
 
+  /* ---------- Bildiriş zəngi ---------- */
+  const bell=document.getElementById('bellBtn');
+  const bellN=document.getElementById('bellCount');
+  let bellPanel=null;
+  MH.setUnread=function(n){if(!bellN)return;bellN.textContent=n>99?'99+':String(n);bellN.hidden=!n;};
+  MH.refreshUnread=async function(){
+    if(!bell||!window.MH_URLS.notifs)return;
+    try{const j=await MH.api(window.MH_URLS.notifs);MH.setUnread(j.unread);}catch(e){}
+  };
+  function closeBell(){if(bellPanel){bellPanel.remove();bellPanel=null;}}
+  function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
+  function renderBell(p,j){
+    const head=p.querySelector('.mh-notifs-h');
+    const listEl=p.querySelector('.mh-notifs-l');listEl.innerHTML='';
+    head.querySelector('button')?.remove();
+    if(j.unread){
+      const all=el('button',null,'Hamısını oxunmuş et');all.type='button';
+      all.addEventListener('click',async ev=>{
+        ev.stopPropagation();
+        try{await MH.api(window.MH_URLS.notifs+'/read-all',{});MH.setUnread(0);
+          renderBell(p,{unread:0,items:j.items.map(i=>Object.assign({},i,{read:true}))});}catch(e){MH.toast(e.message,'err');}
+      });
+      head.appendChild(all);
+    }
+    if(!j.items.length){listEl.appendChild(el('div','mh-notifs-e','Hələ bildiriş yoxdur. Profil yaradılandan sonra yeni uyğun elan gələndə burada görünəcək.'));return;}
+    j.items.forEach(it=>{
+      const a=el('a','mh-notif'+(it.read?'':' unread'));a.href=it.href;
+      a.appendChild(el('div','t',it.title));a.appendChild(el('div','b',it.body));a.appendChild(el('div','w',it.when));
+      a.addEventListener('click',async ev=>{
+        if(it.read)return;
+        ev.preventDefault();
+        try{await MH.api(window.MH_URLS.notifs+'/'+it.id+'/read',{});}catch(e){}
+        location.href=it.href;
+      });
+      listEl.appendChild(a);
+    });
+  }
+  async function openBell(){
+    MH.closeMenu();
+    const p=el('div','mh-notifs');
+    const head=el('div','mh-notifs-h');head.appendChild(el('b',null,'Bildirişlər'));
+    p.appendChild(head);
+    const l=el('div','mh-notifs-l');l.appendChild(el('div','mh-notifs-e','Yüklənir...'));p.appendChild(l);
+    document.body.appendChild(p);bellPanel=p;
+    const r=bell.getBoundingClientRect();
+    let left=r.right+scrollX-p.offsetWidth;if(left<8)left=8;
+    p.style.left=left+'px';p.style.top=(r.bottom+scrollY+8)+'px';
+    requestAnimationFrame(()=>p.classList.add('show'));
+    try{const j=await MH.api(window.MH_URLS.notifs);MH.setUnread(j.unread);if(bellPanel===p)renderBell(p,j);}
+    catch(e){l.innerHTML='';l.appendChild(el('div','mh-notifs-e',e.message));}
+  }
+  if(bell){
+    bell.addEventListener('click',e=>{e.stopPropagation();if(bellPanel)closeBell();else openBell();});
+    document.addEventListener('click',e=>{if(bellPanel&&!bellPanel.contains(e.target))closeBell();});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeBell();});
+    addEventListener('resize',closeBell);
+  }
+
   /* ---------- Elan detalları ---------- */
   MH.showMatch=async function(id){
     const ov=document.getElementById('detailModal');if(!ov)return;
@@ -129,6 +187,7 @@
       const j=await MH.api(window.MH_URLS.match+id);
       ov.querySelector('.mh-modal').innerHTML=j.html;
       MH.openModal(ov);
+      MH.refreshUnread();  // elan açılanda onun bildirişi oxunmuş sayılır
       const cp=ov.querySelector('[data-copy]');
       if(cp)cp.addEventListener('click',async()=>{
         const txt=ov.querySelector('#shareText').value;

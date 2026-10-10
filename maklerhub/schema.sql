@@ -270,7 +270,7 @@ CREATE INDEX IF NOT EXISTS ix_phone_views_user_time ON phone_views(user_id, view
 CREATE TABLE IF NOT EXISTS notifications (
   id          SERIAL PRIMARY KEY,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  kind        TEXT NOT NULL,                             -- high_match | price_drop | duplicate_merged
+  kind        TEXT NOT NULL,                             -- new_match | high_match | price_drop | duplicate_merged
   title       TEXT NOT NULL,
   body        TEXT NOT NULL DEFAULT '',
   listing_id  INTEGER REFERENCES listings(id) ON DELETE CASCADE,

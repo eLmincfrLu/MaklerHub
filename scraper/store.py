@@ -20,8 +20,9 @@ REMOVE_AFTER = timedelta(hours=24)
 
 
 class Store:
-    def __init__(self, con, source_key="bina"):
+    def __init__(self, con, source_key="bina", notify=True):
         self.con = con
+        self.notify = notify  # False (--quiet): matching işləyir, bildiriş yaranmır
         self.source = con.execute("SELECT * FROM sources WHERE key = ?", (source_key,)).fetchone()
         if not self.source:
             raise RuntimeError(f"sources cədvəlində '{source_key}' yoxdur")
@@ -91,18 +92,34 @@ class Store:
         if not self.profiles:
             return
         row = self.con.execute("SELECT * FROM listings WHERE id = ?", (listing_id,)).fetchone()
-        self.stats["matches"] += matching.match_listing(self.con, row, self.profiles)
+        before = self._notif_count() if self.notify else 0
+        self.stats["matches"] += matching.match_listing(self.con, row, self.profiles, notify=self.notify)
+        if self.notify:
+            self.stats["notifications"] += self._notif_count() - before
+
+    def _notif_count(self):
+        return self.con.execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
 
     # ------------------------------------------------------------ yoxa çıxanlar
-    def mark_removed(self, district, property_type, deal_type):
-        """Sonuna qədər oxunmuş axında görünməyən köhnə elanları deaktiv edir. Sayı qaytarır."""
+    def mark_removed(self, deal_type, property_type, district=None, price_period=None):
+        """Sonuna qədər oxunmuş axında görünməyən köhnə elanları deaktiv edir. Sayı qaytarır.
+
+        Axın = sorğunun filtri: Bina.az üçün rayon + tip + əməliyyat (district verilir),
+        Tap.az üçün tip + əməliyyat + kirayə müddəti (price_period verilir; rayon filtri yoxdur).
+        """
         cutoff = ts(self.started - REMOVE_AFTER)
         stamp = ts()
+        where, args = ["source_id = ?", "active = 1", "deal_type = ?", "property_type = ?", "last_seen_at < ?"], \
+            [self.source["id"], deal_type, property_type, cutoff]
+        if district is not None:
+            where.append("district = ?")
+            args.append(district)
+        if price_period is not None:
+            where.append("price_period = ?")
+            args.append(price_period)
         cur = self.con.execute(
-            """UPDATE listings SET active = 0, removed_at = ?, updated_at = ?
-               WHERE source_id = ? AND active = 1 AND district = ? AND property_type = ? AND deal_type = ?
-                 AND last_seen_at < ?""",
-            (stamp, stamp, self.source["id"], district, property_type, deal_type, cutoff),
+            f"UPDATE listings SET active = 0, removed_at = ?, updated_at = ? WHERE {' AND '.join(where)}",
+            [stamp, stamp] + args,
         )
         n = cur.rowcount or 0
         self.stats["removed"] += n
@@ -128,7 +145,8 @@ class Store:
         )
         details = (f"job=scraper-{self.source['key']} {label} run=#{cur.lastrowid} müddət={duration}s\n"
                    f"yeni={s['new']} yenilənən={s['updated']} silinən={s['removed']} "
-                   f"şübhəli={s['suspicious']} atlanan={s['skipped']} uyğunluq={s['matches']}")
+                   f"şübhəli={s['suspicious']} atlanan={s['skipped']} uyğunluq={s['matches']} "
+                   f"bildiriş={s['notifications']}{' (quiet)' if not self.notify else ''}")
         name = self.source["name"]
         if ok:
             add_log(con, "ok", name, f"Scraper tamamlandı — {s['checked']} elan yoxlandı, {s['new']} yeni tapıldı",
