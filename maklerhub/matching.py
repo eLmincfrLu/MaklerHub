@@ -25,6 +25,12 @@ def evaluate(p, l):
     """(bal, səbəblər) və ya None. Səbəb: [növ ('ok'|'warn'), qısa, uzun]."""
     if p["deal_type"] != l["deal_type"]:
         return None
+    # Şübhəli qiymətli (o cümlədən AZN olmayan) elan uyğunluğa girmir
+    if l.get("suspicious"):
+        return None
+    # Günlük kirayə aylıq büdcə ilə müqayisə oluna bilməz
+    if l.get("price_period") == "day":
+        return None
     if not district_ok(p["district"], l["district"]):
         return None
 
@@ -105,7 +111,7 @@ def evaluate(p, l):
             score += 5
             warn.append(["warn", "Yeni tikili", "Tikili tipi arzuolunandan fərqlidir"])
     elif pt == "Studiya":
-        if (l["rooms"] or 0) == 1 and l["area"] <= 55:
+        if (l["rooms"] or 0) == 1 and l["area"] is not None and l["area"] <= 55:
             score += 10
             ok.append(["ok", "Tip uyğundur", "Tip uyğundur"])
         else:
@@ -114,7 +120,7 @@ def evaluate(p, l):
     else:
         score += 10
 
-    # Təmir — 15
+    # Təmir — 15 ('' = məlum deyil: xəbərdarlıq yoxdur, orta bal verilir)
     ren = l["renovation"] or ""
     if ren == "Təmirli":
         score += 15 if b == "Yeni tikili" else 13

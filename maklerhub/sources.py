@@ -7,11 +7,10 @@ elanları alır və `FetchResult` qaytarır. Sinxronizasiya funksiyası
 (`sync_source`) nəticəni bazaya yazır, qiymət dəyişikliklərini izləyir,
 uyğunlaşdırma mühərrikini işə salır və sistem loqlarını yaradır.
 
-Standart olaraq `DemoAdapter` işləyir: o, real bazar qiymətlərinə yaxın
-nümunə elanlar yaradır ki, platforma dərhal "canlı" işləsin. Real mənbəyə
-qoşulmaq üçün (rəsmi API, partnyor XML/JSON feed və s.) `BaseAdapter`-dən
-yeni sinif yaradıb `ADAPTERS` lüğətində qeyd etmək kifayətdir — qalan hər şey
-(bazaya yazma, uyğunlaşdırma, loqlar, admin panel statistikası) dəyişmədən işləyir.
+Saxta (Demo) elan yaradan adapter çıxarılıb. Bina.az elanları lokal scraper
+prosesindən yazılır (`python -m scraper.run bina --save`, bax: scraper/store.py).
+Adapteri olmayan mənbə üçün `sync_source` heç nə yazmır, sadəcə xəbər qaytarır.
+`gen_listing` / `gen_for_profile` yalnız `flask init-db --demo` nümunə bazası üçün qalır.
 """
 import logging
 import random
@@ -22,7 +21,7 @@ from datetime import timedelta
 
 from . import matching
 from .db import add_log, connect, get_settings
-from .helpers import day_start, now, parse, ts
+from .helpers import day_start, now, ts
 
 log = logging.getLogger("maklerhub.sources")
 
@@ -38,7 +37,8 @@ DISTRICT_PRICE = {
     "Səbail": 3200, "Nəsimi": 2800, "Yasamal": 2400, "Nərimanov": 2500, "Xətai": 2300,
     "Nizami": 1900, "Binəqədi": 1500, "Xəzər": 1300, "Sabunçu": 1200, "Suraxanı": 1100, "Qaradağ": 1000,
 }
-DISTRICTS = list(DISTRICT_PRICE)
+# Abşeron və Pirallahı üçün real kv.m qiyməti ölçülməyib — generator 1800 standartını işlədir
+DISTRICTS = list(DISTRICT_PRICE) + ["Abşeron", "Pirallahı"]
 PROPERTY_TYPES = ["", "Yeni tikili", "Köhnə tikili", "Studiya", "Ofis", "Həyət evi"]
 
 
@@ -137,48 +137,10 @@ class BaseAdapter:
         raise NotImplementedError
 
 
-class DemoAdapter(BaseAdapter):
-    PROFILES = {
-        "bina": dict(base=812, latency=1.4, fail=0.004, new=(0, 4)),
-        "tap": dict(base=640, latency=1.8, fail=0.01, new=(0, 3)),
-        "lalafo": dict(base=390, latency=4.2, fail=0.05, new=(0, 2)),
-    }
-
-    def fetch(self, con, source, settings):
-        cfg = self.PROFILES.get(source["key"], dict(base=300, latency=2.0, fail=0.02, new=(0, 2)))
-        rng = random.Random()
-        latency = round(max(0.3, rng.gauss(cfg["latency"], cfg["latency"] * 0.15)), 1)
-        timeout = float(settings.get("timeout", 10))
-        if rng.random() < cfg["fail"] or latency > timeout:
-            raise SourceError(f"bağlantı vaxtı bitdi (timeout {int(timeout)}s)")
-
-        profiles = con.execute("SELECT * FROM profiles WHERE status = 'active'").fetchall()
-        new = []
-        for _ in range(rng.randint(*cfg["new"])):
-            if profiles and rng.random() < 0.3:
-                new.append(gen_for_profile(rng, rng.choice(profiles)))
-            else:
-                new.append(gen_listing(rng))
-
-        active = con.execute(
-            "SELECT id, price, deal_type, created_at FROM listings WHERE source_id = ? AND active = 1",
-            (source["id"],),
-        ).fetchall()
-        price_changes, removed = [], []
-        if active and rng.random() < 0.35:
-            l = rng.choice(active)
-            step = 50 if l["deal_type"] == "rent" else 1000
-            price_changes.append((l["id"], _round(l["price"] * rng.uniform(0.91, 0.97), step)))
-        old = [l for l in active if parse(l["created_at"]) < now() - timedelta(days=3)]
-        if old and rng.random() < 0.3 * (len(new) or 1):
-            removed.append(rng.choice(old)["id"])
-
-        checked = cfg["base"] + rng.randint(-8, 8)
-        return FetchResult(checked=checked, latency=latency, new=new,
-                           price_changes=price_changes, removed=removed)
-
-
-ADAPTERS = {"bina": DemoAdapter(), "tap": DemoAdapter(), "lalafo": DemoAdapter()}
+# Real adapterlər. Bina.az veb prosesdən yox, lokal scraper-dən yazılır:
+#   python -m scraper.run bina --save   (bax: scraper/store.py)
+# Saxta (Demo) elan yaradan adapter çıxarılıb.
+ADAPTERS = {}
 
 
 # ---------------------------------------------------------------- bazaya yazma
@@ -203,9 +165,12 @@ def insert_listing(con, source_id, data, created_at=None, posted_at=None, active
 
 def sync_source(con, source, manual=False):
     """Bir mənbəni sinxronlaşdırır. Nəticə haqqında dict qaytarır."""
-    settings = get_settings(con)
-    adapter = ADAPTERS.get(source["key"], DemoAdapter())
+    adapter = ADAPTERS.get(source["key"])
     name = source["name"]
+    if adapter is None:
+        # Bazaya heç nə yazılmır (nə elan, nə sync_runs) — veb proses saxta elan yaratmır
+        return {"ok": False, "error": "veb paneldən sinxronizasiya yoxdur, elanlar lokal scraper ilə yenilənir"}
+    settings = get_settings(con)
     retries = int(settings.get("retries", 3))
     started = now()
     result, error, attempts = None, None, 0

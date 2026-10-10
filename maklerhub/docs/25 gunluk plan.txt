@@ -1,0 +1,96 @@
+MaklerHub: son tam plan (25 gün)
+ 
+Gün 1-3: Təməl və təhlükəsizlik
+ 
+seed.py və run.py düzəlişi: şifrələr environment-dən gəlsin (MAKLERHUB_ADMIN_PASSWORD, MAKLERHUB_DEMO_PASSWORD), run.py şifrələri loqa yazmasın
+Qovluq təmizliyi: maklerhub/ paketinin içindəki artıq nüsxələr (requirements.txt, run.py, start.bat, start.sh, iç-içə maklerhub/ və instance/) silinsin
+Bina.az, Tap.az və Lalafo istifadə şərtlərini oxu, nəticəni qeyd et
+Yeni dizayn əlavələrinin siyahısını çıxar. Pilot üçün vacib olanları plana, qalanlarını "V2 siyahısı"na yaz
+ 
+Gün 4-7: Neon PostgreSQL
+ 
+sqlite3 kodunu Postgres-ə keçir (? → %s, INSERT OR IGNORE, executescript, PRAGMA)
+Sxemə yeni cədvəllər əlavə et: licenses, plans, sessions, devices, phone_views, notifications (ikinci dəfə miqrasiya lazım olmasın)
+profiles cədvəlinə: min/max sahə, mərtəbə şərtləri (1-ci olmasın, sonuncu olmasın), hər meyar üçün prioritet (1-5), "mütləq" bayraqları
+listings cədvəlinə: ayrıca phone, mərtəbə, bina mərtəbə sayı, qiymət dövrü, keyfiyyət balı. Məlumat yoxdursa NULL saxlanılsın
+Nümunə məlumatları sil, baza boş başlasın (yalnız admin)
+Gün 7: UptimeRobot qur (5 dəqiqə interval, düşəndə e-poçt bildirişi)
+ 
+Gün 8-15: Scraper-lər
+ 
+Əvvəlcə Bina.az, sonra Tap.az, ən sonda Lalafo (vaxt qalmasa buraxıla bilər)
+Başlanğıc nöqtəsi: AI Studio kodundakı __NEXT_DATA__ / apolloState oxuma yanaşması. Əvvəlcə real səhifənin mənbəyinə baxıb təsdiqlə ("Apollo GraphQL SSR feed" qeydi)
+Heç bir sahəni uydurma. Məlumat yoxdursa NULL saxla (mərtəbə, təmir, sahə, metro, telefon). AI Studio-dakı sabit dəyərlər (6/16, "Əla təmirli", 75 m², keyfiyyət 92) götürülməsin
+Əməliyyat növü (kirayə/satış) qiymətə görə təxmin edilməsin, səhifədəki kateqoriyadan götürülsün
+Səhifələmə ilə çox elan çək (AI Studio yalnız ana səhifəni oxuyur)
+Hər mənbə ayrı modul, normalizasiya vahid formata
+Duplikat yoxlaması: eyni rayon, eyni otaq sayı, sahə fərqi ≤5 m², qiymət fərqi ≤8% (AI Studio qaydası). Duplikatlar tək kartda birləşsin, mənbələr siyahı şəklində göstərilsin
+sources.py-dakı saxta elan generatorunu söndür
+Scraper veb tətbiqdən ayrı proses kimi işləsin. Əvvəlcə öz kompüterində işlədib Neon-a yazdır, çünki Render IP-ləri tez bloklana bilər
+Elan silinəndə "aktiv deyil" işarələ, sorğular arasında 3-5 san fasilə, 15-30 dəqiqədən bir işlət
+Qiymət tarixçəsi: hər dəyişiklik tarixi ilə saxlansın (AI Studio-da yalnız bir nöqtə var)
+Saxla: mənbə, mənbə ID-si, link, başlıq, əməliyyat, əmlak növü, rayon, metro adı, otaq, sahə, qiymət, qiymət dövrü, mərtəbə, tikili tipi, təmir, şəkil linkləri, ilk və son görünmə, aktiv statusu
+Şəkli kopyalama, yalnız linkini saxla
+Telefon nömrəsi: yalnız uyğunluğu 70%+ olan elanlar üçün çəkilir (sorğu sayı azalır, bloklanma riski düşür). Nömrə sorğuları arasında 3-5 san fasilə. Elan aktiv deyilsə, nömrə bazadan silinir
+Satıcı adı və tam təsvir saxlanılmır
+Qiymət yoxlaması: məntiqsiz aşağı qiymətlər ("70 AZN / ay" kimi) "şübhəli" işarələnsin və uyğunluğa girməsin
+ 
+Gün 16-19: Matching, real məlumatla keyfiyyət və yeni funksiyalar
+ 
+Matching mühərrikini yenidən yaz (matching.py), sənədə uyğun 8 meyar: rayon 25, qiymət 20, otaq 15, sahə 15, tikili tipi 10, təmir 5, metro 5, mərtəbə 5
+Hər meyara 1-5 ulduz prioriteti və "mütləq / arzuolunan" ayrımı (mütləq şərt pozulsa, elan göstərilmir)
+Hər uyğunluq üçün "niyə uyğundur" izahı (✓ Rayon uyğundur, △ Metro bir az uzaq)
+Faiz çəkilərlə uyğun gəlməlidir (Rayon 25% + Qiymət 20% = ən azı 45%)
+İki istiqamətli uyğunlaşdırma: elan → hansı müştərilərə uyğundur (hər biri üçün ayrı faizlə) və müştəri → ən uyğun elanlar
+Uyğunluq faizini real elanlarla yoxla və düzəlt (rayon adları, qiymət formatı)
+Metro cədvəli (koordinat yoxdursa, yalnız metro adı), şəkil placeholder-i
+Elanda koordinat yoxdursa, "6 dəq" metro nişanı göstərilməsin
+"Real vaxt" yazılarını "Son yenilənmə" ilə əvəz et
+"Canlı Elanları Çək" düyməsini admin üçün et və ya makler üçün gündə bir neçə dəfə ilə məhdudlaşdır
+Bazar analitikası: rayon üzrə orta m² qiyməti real elanlardan hesablansın (AI Studio-da sabit rəqəmlərdir). "Bazardan ucuz" siyahısı, qiymət düşən elanlar, satıcı təzyiq indeksi
+WhatsApp təklif mesajı generatoru: tam mətn (başlıq, ünvan, qiymət, sahə/otaq, mərtəbə, təmir, metro, qiymət endirimi varsa "Endirim fürsəti"). Mənbə linki mesajda getsin
+Bildirişlər (zəng ikonu): yüksək uyğunluq (90%+), qiymət düşməsi, duplikat birləşdi
+Nömrənin göstərilməsi: kartda maskalı nömrə (+994 50 *** ** 12), "Göstər" düyməsi, hər baxış phone_views-a yazılır, günlük baxış limiti. Nömrə yalnız giriş etmiş və aktiv lisenziyalı makler üçün görünür, ümumi səhifələrdə, açıq API-də və CSV ixracında olmur, loqlara yazılmır
+ 
+Gün 20-22: Lisenziya, planlar və cihaz limiti
+ 
+Admin paneldə "Lisenziya yarat" (plan, müddət, makler adı, ödəniş qeydi) və Lisenziyalar səhifəsi: yeni, istifadə olunmuş, bitən, ləğv edilmiş, bitməyə 7 gün qalan, uzatmaq, ləğv etmək
+Qeydiyyat yalnız kodla (MH-XXXX-XXXX-XXXX), kod bir dəfə istifadə olunur, cəhdlər məhdudlaşdırılır, yoxlama və istifadə bir əməliyyatda olur
+"Planı idarə et" düyməsi planı dəyişmir, planı və bitmə tarixini göstərir
+Planların adlarını dizayna uyğunlaşdır (Free / Pro / Business / Agency), plan limitləri bazada saxlanılsın (tətbiqini sonra qərarlaşdırarıq)
+Hazır olmayanları işarələ: "AI Semantic Matching" → "Tezliklə", "SLA 99.9%" yazısını çıxar
+Cihaz limiti: maksimum 2 cihaz (limit planla dəyişə bilər), eyni anda 1 aktiv sessiya (yeni giriş köhnəsini bağlayır), yeni cihaz əlavə etməyə ayda limit, admin paneldə "Cihazlar" bölməsi (cihazlar, son giriş, "Sıfırla" düyməsi), şübhəli giriş işarəsi (fərqli şəhər və ya çox fərqli IP)
+Şifrə bərpası üçün real e-poçt (Brevo və ya Resend pulsuz planı), işləməyən ayarları (SMS, 2FA) gizlət
+ 
+Gün 23: Stabillik
+ 
+UptimeRobot-un işlədiyini yoxla, yavaşlıq olsa aylıq təxminən 7$ Starter plana keç
+Xəta izləmə (Sentry pulsuz plan), Neon-da ehtiyat nüsxə yoxlaması
+İstifadə şərtləri və məxfilik səhifəsi (qısa):
+hesab şəxsidir, paylaşılması qadağandır, pozulduqda lisenziya ləğv edilir
+nömrələr ictimai elanlardan alınır, mənbə linki göstərilir
+nömrənin silinməsi üçün əlaqə ünvanı, sorğu 1-2 gün ərzində icra olunur
+ 
+Gün 24-25: Pilot başlayır, paralel olaraq son əlavələr
+ 
+Admin 2-3 makler üçün lisenziya kodu yaradır, onlar kodla qeydiyyatdan keçir
+Hər gün rəy topla, bugları düzəlt
+Vaxt qalsa, pilotla paralel: AI Kriteriya (sərbəst mətndən axtarış profili, qaydalara əsaslanan versiya) və elan keyfiyyət balı (şəkil, qiymət, ünvan sahələrinin tamlığına görə, sabit 92 yox)
+Sonra qalan maklerlər üçün kodlar yaradılır
+Dizayn düzəlişləri
+Kartda qiymət yoxlaması ("70 AZN / ay" kimi məntiqsiz qiymətlər)
+Uyğunluq faizi çəkilərlə uyğun gəlməlidir
+Elanda koordinat yoxdursa, "6 dəq" metro nişanı göstərilməsin
+V2 siyahısı (pilotdan sonra)
+AI Semantic Matching (sənəddə V3)
+Telegram/SMS bildirişləri
+Onlayn ödəniş
+Lalafo (Gün 8-15-də yetişməsə)
+2FA
+Risklər
+Plan artıq çox sıxdır. Matching yenidən yazılması, iki istiqamətli uyğunlaşdırma, bazar analitikası, bildirişlər və WhatsApp generatoru Gün 16-19-u çox yüklədi. Vaxt çatmasa, əvvəlcə bunlardan imtina et: AI Kriteriya, keyfiyyət balı, satıcı təzyiq indeksi, bildirişlər. Matching və lisenziya pilot üçün vacib olanlardır.
+Scraper-lərin sınması və bloklanması ən böyük vaxt riskidir. Nömrə çəkmək ikinci sorğu tələb etdiyi üçün bu risk artır. Bina.az və Tap.az hazır olsa, pilot üçün kifayətdir.
+Telefon nömrələri şəxsi məlumatdır. Toplama və göstərmə qərarı sənindir, hüquqi və bloklanma riskini də sən qəbul edirsən. Satışa çıxmazdan əvvəl hüquqşünasla yoxla.
+Cihaz limiti 100% qoruma deyil. Cookie silinsə, yeni cihaz sayıla bilər. Məqsəd hesab paylaşmağı çətinləşdirməkdir.
+Pilot sadəcə 2 gündür. Real pilot rəyləri Gün 25-dən sonra da davam edəcək, bu normaldır.
+Hüquqi risk. Scraping istifadə şərtlərinə zidd ola bilər. Sprint Roadmap-da MVP üçün "icazəli mənbə" yazılıb, bunu Report-larda açıq qeyd et.

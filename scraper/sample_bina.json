@@ -1,0 +1,268 @@
+[
+ {
+  "id": "6533870",
+  "area": {
+   "value": 40.0,
+   "units": "m²",
+   "__typename": "ESArea"
+  },
+  "isLeased": true,
+  "floor": 3,
+  "floors": 7,
+  "city": {
+   "id": "1",
+   "name": "Bakı"
+  },
+  "location": {
+   "id": "198",
+   "name": "Masazır",
+   "fullName": "Masazır q."
+  },
+  "hasMortgage": false,
+  "price": {
+   "total": 300,
+   "currency": "AZN",
+   "perAre": null
+  },
+  "company": {
+   "id": "1",
+   "name": "SATICI ADI",
+   "targetType": null
+  },
+  "isPaidDaily": false,
+  "rooms": 2,
+  "hasBillOfSale": false,
+  "hasRepair": true,
+  "isVipped": false,
+  "isFeatured": false,
+  "updatedAt": "2026-10-10T20:46:15+04:00",
+  "path": "/items/6533870",
+  "description": "TƏSVİR",
+  "contactName": "AD",
+  "preview": {
+   "thumbnail": "https://bina.azstatic.com/uploads/thumbnail/a.jpg",
+   "f460x345": "https://bina.azstatic.com/uploads/f460x345/a.jpg"
+  }
+ },
+ {
+  "id": "6501770",
+  "area": {
+   "value": 110.0,
+   "units": "m²",
+   "__typename": "ESArea"
+  },
+  "isLeased": true,
+  "floor": 10,
+  "floors": 19,
+  "city": {
+   "id": "1",
+   "name": "Bakı"
+  },
+  "location": {
+   "id": "59",
+   "name": "Memar Əcəmi",
+   "fullName": "Memar Əcəmi m."
+  },
+  "hasMortgage": false,
+  "price": {
+   "total": 1200,
+   "currency": "AZN",
+   "perAre": null
+  },
+  "company": {
+   "id": "1",
+   "name": "SATICI ADI",
+   "targetType": null
+  },
+  "isPaidDaily": false,
+  "rooms": 3,
+  "hasBillOfSale": false,
+  "hasRepair": true,
+  "isVipped": false,
+  "isFeatured": false,
+  "updatedAt": "2026-10-10T20:45:17+04:00",
+  "path": "/items/6501770",
+  "description": "TƏSVİR",
+  "contactName": "AD",
+  "preview": {
+   "thumbnail": "https://bina.azstatic.com/uploads/thumbnail/b.jpg",
+   "f460x345": "https://bina.azstatic.com/uploads/f460x345/b.jpg"
+  }
+ },
+ {
+  "id": "6506163",
+  "area": {
+   "value": 220.0,
+   "units": "m²",
+   "__typename": "ESArea"
+  },
+  "isLeased": true,
+  "floor": null,
+  "floors": null,
+  "city": {
+   "id": "1",
+   "name": "Bakı"
+  },
+  "location": {
+   "id": "109",
+   "name": "Mərdəkan",
+   "fullName": "Mərdəkan q."
+  },
+  "hasMortgage": false,
+  "price": {
+   "total": 150,
+   "currency": "AZN",
+   "perAre": null
+  },
+  "company": {
+   "id": "1",
+   "name": "SATICI ADI",
+   "targetType": null
+  },
+  "isPaidDaily": true,
+  "rooms": 4,
+  "hasBillOfSale": false,
+  "hasRepair": true,
+  "isVipped": false,
+  "isFeatured": false,
+  "updatedAt": "2026-10-10T20:41:23+04:00",
+  "path": "/items/6506163",
+  "description": "TƏSVİR",
+  "contactName": "AD",
+  "preview": {
+   "thumbnail": "https://bina.azstatic.com/uploads/thumbnail/c.jpg",
+   "f460x345": "https://bina.azstatic.com/uploads/f460x345/c.jpg"
+  }
+ },
+ {
+  "id": "6533856",
+  "area": {
+   "value": 70.0,
+   "units": "m²",
+   "__typename": "ESArea"
+  },
+  "isLeased": true,
+  "floor": 14,
+  "floors": 18,
+  "city": {
+   "id": "1",
+   "name": "Bakı"
+  },
+  "location": {
+   "id": "5",
+   "name": "20 Yanvar",
+   "fullName": "20 Yanvar m."
+  },
+  "hasMortgage": false,
+  "price": {
+   "total": 175,
+   "currency": "AZN",
+   "perAre": null
+  },
+  "company": {
+   "id": "1",
+   "name": "SATICI ADI",
+   "targetType": null
+  },
+  "isPaidDaily": false,
+  "rooms": 2,
+  "hasBillOfSale": false,
+  "hasRepair": true,
+  "isVipped": false,
+  "isFeatured": false,
+  "updatedAt": "2026-10-10T20:34:44+04:00",
+  "path": "/items/6533856",
+  "description": "TƏSVİR",
+  "contactName": "AD",
+  "preview": {
+   "thumbnail": "https://bina.azstatic.com/uploads/thumbnail/d.jpg",
+   "f460x345": "https://bina.azstatic.com/uploads/f460x345/d.jpg"
+  }
+ },
+ {
+  "id": "6533866",
+  "area": {
+   "value": 48.0,
+   "units": "m²",
+   "__typename": "ESArea"
+  },
+  "isLeased": true,
+  "floor": 2,
+  "floors": 16,
+  "city": {
+   "id": "34",
+   "name": "Xırdalan"
+  },
+  "location": null,
+  "hasMortgage": false,
+  "price": {
+   "total": 450,
+   "currency": "AZN",
+   "perAre": null
+  },
+  "company": {
+   "id": "1",
+   "name": "SATICI ADI",
+   "targetType": null
+  },
+  "isPaidDaily": false,
+  "rooms": 2,
+  "hasBillOfSale": false,
+  "hasRepair": true,
+  "isVipped": false,
+  "isFeatured": false,
+  "updatedAt": "2026-10-10T20:42:45+04:00",
+  "path": "/items/6533866",
+  "description": "TƏSVİR",
+  "contactName": "AD",
+  "preview": {
+   "thumbnail": "https://bina.azstatic.com/uploads/thumbnail/e.jpg",
+   "f460x345": "https://bina.azstatic.com/uploads/f460x345/e.jpg"
+  }
+ },
+ {
+  "id": "6310873",
+  "area": {
+   "value": 75.0,
+   "units": "m²",
+   "__typename": "ESArea"
+  },
+  "isLeased": true,
+  "floor": null,
+  "floors": null,
+  "city": {
+   "id": "1",
+   "name": "Bakı"
+  },
+  "location": {
+   "id": "314",
+   "name": "Ağ şəhər",
+   "fullName": "Ağ şəhər q."
+  },
+  "hasMortgage": false,
+  "price": {
+   "total": 1500,
+   "currency": "AZN",
+   "perAre": null
+  },
+  "company": {
+   "id": "1",
+   "name": "SATICI ADI",
+   "targetType": null
+  },
+  "isPaidDaily": false,
+  "rooms": null,
+  "hasBillOfSale": false,
+  "hasRepair": true,
+  "isVipped": false,
+  "isFeatured": false,
+  "updatedAt": "2026-10-10T20:45:38+04:00",
+  "path": "/items/6310873",
+  "description": "TƏSVİR",
+  "contactName": "AD",
+  "preview": {
+   "thumbnail": "https://bina.azstatic.com/uploads/thumbnail/f.jpg",
+   "f460x345": "https://bina.azstatic.com/uploads/f460x345/f.jpg"
+  }
+ }
+]
