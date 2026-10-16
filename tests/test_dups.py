@@ -65,6 +65,15 @@ g, _, _ = dups.group_rows([L(1, "bina"), L(2, "bina", ptype="Köhnə tikili"), L
 check("A18 3 elan, Tap↔Bina#2 tikili tipi fərqli → qrup parçalanır, Bina↔Bina qalır", g == {1: 1, 2: 1})
 g, _, _ = dups.group_rows([L(1, "bina"), L(2, "bina"), L(3, "tap", area=71)])
 check("A19 3 elan, hər cüt uyğun → bir qrup", g == {1: 1, 2: 1, 3: 1})
+g, inh, _ = dups.group_rows([L(1, "bina"), L(2, "tap", district="", area=72.5)])
+check("A21 metrosuz Tap, sahə fərqi 2.5 m² → qrup var, rayon götürülmür", g == {1: 1, 2: 1} and inh == {})
+g, inh, _ = dups.group_rows([L(1, "bina"), L(2, "tap", district="", price=1040)])
+check("A22 metrosuz Tap, qiymət fərqi 4% → qrup var, rayon götürülmür", g == {1: 1, 2: 1} and inh == {})
+g, inh, _ = dups.group_rows([L(1, "bina"), L(2, "tap", district="", area=72, price=1030)])
+check("A23 metrosuz Tap, 2 m² və 3% → rayon götürülür", inh == {2: "Yasamal"})
+g, inh, _ = dups.group_rows([L(1, "bina", district="Səbail"), L(2, "tap", district="", metro="Sahil", area=72.5,
+                                                                  price=1045)], places)
+check("A24 metrolu Tap (Sahil ✓), 2.5 m² və 4.5% → rayon götürülür (dəyişməyib)", inh == {2: "Səbail"})
 check("A20 əsas nüsxə açıq mənbədən", dups.pick([(1, 10), (2, 20)], {20}) == 2
       and dups.pick([(1, 10), (2, 20)], {10, 20}) == 1 and dups.pick([(1, 10)], set()) is None)
 

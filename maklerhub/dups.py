@@ -13,6 +13,8 @@ Qaydalar (Gün 13):
 - Tap ↔ Tap birləşmir (mərtəbə yoxdur, oxşar mənzilləri ayırd etmək olmur).
 - 3+ elanlı qrupda HƏR cüt yuxarıdakı şərtləri ödəməlidir; ödəmirsə Bina ↔ Tap əlaqəsi qırılır (qrup parçalanır).
 - Tap elanının rayonu boşdursa və birləşdiyi Bina.az qrupunun rayonu varsa, rayon oradan götürülür.
+  Tap-da metro/qəsəbə yoxdursa (yer adı ilə yoxlamaq olmur) yalnız sahə fərqi ≤ 2 m² və qiymət fərqi ≤ 3%
+  olanda; qrup bu halda da qalır, sadəcə rayon boş qalır.
 - dup_group = qrupdakı ən kiçik listings.id; qrupda olmayan elanda NULL.
 - Əsas nüsxə (uyğunluq və kart onun üzərindədir) hər profil üçün ayrıca seçilir: makler üçün açıq olan
   mənbələrdən, Bina.az birinci, sonra ən kiçik id (maklerhub/matching.py). Açıq mənbə yoxdursa kart görünmür.
@@ -23,6 +25,9 @@ from collections import defaultdict
 
 AREA_TOL = 3        # m²
 PRICE_TOL = 0.05    # 5%
+# Tap elanında metro/qəsəbə yoxdursa rayon Bina nüsxəsindən yalnız bu daha sıx hədlərlə götürülür
+INHERIT_AREA_TOL = 2        # m²
+INHERIT_PRICE_TOL = 0.03    # 3%
 
 COLS = ("l.id, l.source_id, s.key AS skey, l.external_id, l.url, l.district, l.metro_name, l.settlement, l.rooms, "
         "l.area, l.price, l.price_period, l.deal_type, l.property_type, l.floor, l.floors, l.dup_group")
@@ -145,13 +150,24 @@ def group_rows(rows, places=None):
         gid = min(r["id"] for r in items)
         for r in items:
             groups[r["id"]] = gid
-        districts = {r["district"] for r in items if r["skey"] == "bina" and r["district"]}
+        bina_items = [r for r in items if r["skey"] == "bina" and r["district"]]
+        districts = {r["district"] for r in bina_items}
         if len(districts) == 1:
             d = next(iter(districts))
             for r in items:
-                if r["skey"] == "tap" and not r["district"]:
+                if r["skey"] == "tap" and not r["district"] and _can_inherit(r, bina_items):
                     inherit[r["id"]] = d
     return groups, inherit, ambiguous
+
+
+def _can_inherit(t, bina_items):
+    """Rayonu Bina nüsxəsindən götürmək olarmı. Metro/qəsəbə varsa yer adı artıq yoxlanıb (_cross);
+    yoxdursa rayon yalnız sahə/qiymət/otaqla bağlanır → daha sıx həd (sahə ≤ 2 m², qiymət ≤ 3%)."""
+    if t["metro_name"] or t["settlement"]:
+        return True
+    return all(abs(t["area"] - b["area"]) <= INHERIT_AREA_TOL
+               and abs(t["price"] - b["price"]) <= INHERIT_PRICE_TOL * max(t["price"], b["price"])
+               for b in bina_items)
 
 
 def bina_places(con):
