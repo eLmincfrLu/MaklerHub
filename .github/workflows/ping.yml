@@ -1,0 +1,23 @@
+# Bina.az və Tap.az GitHub Actions serverindən açılırmı? Yalnız əl ilə başladılır (cədvəl yoxdur).
+# Bazaya qoşulmur, secret lazım deyil: hər sayta 1 sorğu, HTTP status / JSON / elan sayı.
+name: ping
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "requests>=2.31"
+      - run: python -m scraper.auto ping
+        env:
+          PYTHONIOENCODING: utf-8

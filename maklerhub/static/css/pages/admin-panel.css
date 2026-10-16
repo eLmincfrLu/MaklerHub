@@ -78,3 +78,7 @@ td{padding:13px 18px;font-size:.85rem;}
 .logrow .lt{color:var(--mut);flex-shrink:0;}
 .logrow .lv{flex-shrink:0;width:52px;font-weight:600;}
 .logrow .lv.ok{color:var(--ok);} .logrow .lv.warn{color:var(--gold);}
+
+/* Son sinxronizasiya: bloklanma / uğursuz dövr xəbərdarlığı */
+.mh-syncwarn{margin:0 0 12px;padding:10px 14px;border-radius:10px;font-size:.84rem;
+  background:rgba(196,106,86,.12);color:var(--bad);border:1px solid rgba(196,106,86,.3);}

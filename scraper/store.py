@@ -6,6 +6,10 @@ Qaydalar (Gün 10 planı):
 - Yoxa çıxan elan → yalnız axın sonuna qədər oxunubsa (hasNextPage=false) VƏ elan
   sayğı başlanğıcından ən azı 24 saat əvvəl görülübsə: active=0, removed_at=indi.
 - Hər axından sonra commit olunur, ona görə bloklanma olsa da toplanan məlumat itmir.
+- save_many(): toplu yazma (scraper/auto.py): mövcud elanlar bir sorğu ilə oxunur, dəyişməyənlərin last_seen_at-ı
+  bir UPDATE ilə yenilənir, tam emal (qruplaşdırma, matching, bildiriş) yalnız yeni / dəyişmiş elanlar üçündür.
+- gate(row) → (icazə, məlumat): bildiriş qapısı (notify_min_id qaydası, scraper/auto.py). Yeni və uyğun elan
+  üçün qərar gate_events-ə yazılır.
 """
 import json
 import time
@@ -17,23 +21,80 @@ from maklerhub.db import add_log
 from maklerhub.helpers import now, ts
 
 REMOVE_AFTER = timedelta(hours=24)
+_MISSING = object()
+OLD_COLS = "id, external_id, price, active, suspicious, district, district_src, metro_name, settlement, images"
 
 
 class Store:
-    def __init__(self, con, source_key="bina", notify=True):
+    def __init__(self, con, source_key="bina", notify=True, gate=None, started=None, t0=None):
         self.con = con
         self.notify = notify  # False (--quiet): matching işləyir, bildiriş yaranmır
+        self.gate = gate      # None: qapı yoxdur (bütün uyğun yeni elanlar üçün bildiriş)
+        self.gate_events = []
+        self._places = None
         self.source = con.execute("SELECT * FROM sources WHERE key = ?", (source_key,)).fetchone()
         if not self.source:
             raise RuntimeError(f"sources cədvəlində '{source_key}' yoxdur")
         self.profiles = con.execute("SELECT * FROM profiles WHERE status = 'active'").fetchall()
-        self.started = now()
-        self.t0 = time.time()
+        # dövrün başlanğıcı (auto.py toplama başlayanda verir → sync_runs.duration = toplama + yazma)
+        self.started = started or now()
+        self.t0 = t0 or time.time()
         self.stats = Counter()
 
+    def attach(self, con):
+        """Yeni bağlantı (nightly hər axını ayrıca bağlantı ilə yazır); aktiv profillər yenidən oxunur."""
+        self.con = con
+        self.profiles = con.execute("SELECT * FROM profiles WHERE status = 'active'").fetchall()
+
+    # ------------------------------------------------------------ toplu
+    def save_many(self, rows):
+        """Bir neçə elanı yazır: dəyişməyənlər toplu, qalanları save() ilə. Nəticələrin sayını qaytarır."""
+        con, sid = self.con, self.source["id"]
+        result = Counter()
+        olds = {o["external_id"]: o for o in con.execute(
+            f"SELECT {OLD_COLS} FROM listings WHERE source_id = ? AND external_id = ANY(?)",
+            (sid, [r["external_id"] for r in rows]))}
+        seen = []
+        for row in rows:
+            old = olds.get(row["external_id"])
+            if old is not None and self._unchanged(row, old):
+                self.stats["checked"] += 1
+                if row["suspicious"]:
+                    self.stats["suspicious"] += 1
+                seen.append(old["id"])
+                result["seen"] += 1
+            else:
+                result[self.save(row, old=old)] += 1
+        if seen:
+            con.execute("UPDATE listings SET last_seen_at = ? WHERE id = ANY(?)", (ts(), seen))
+        return result
+
+    def _src(self, row):
+        # rayonun mənbəyi; Bina.az-da rayon həmişə sorğunun filtrindəndir
+        return row.get("district_src") or ("bina" if self.source["key"] == "bina" and row["district"] else None)
+
+    def _place(self, row, old):
+        """(rayon, rayon mənbəyi, metro, qəsəbə). Tap.az-da rayon xəritədən gəlir, xəritə yenilənəndə köhnə
+        elanların rayonu da düzəlir; Bina nüsxəsindən götürülmüş rayon ('dup') boş rayonla silinmir —
+        onu dups.refresh yenidən yoxlayır."""
+        district, src = row["district"], self._src(row)
+        if not district and old["district_src"] == "dup":
+            district, src = old["district"], "dup"
+        return district, src, row["metro_name"], row.get("settlement")
+
+    def _unchanged(self, row, old):
+        if row["price"] is None or row["price"] <= 0:
+            return False
+        return (old["active"] and old["price"] == int(round(row["price"])) and old["suspicious"] == row["suspicious"]
+                and old["images"] == json.dumps(row["images"] or [], ensure_ascii=False)
+                and self._place(row, old) == (old["district"], old["district_src"], old["metro_name"],
+                                              old["settlement"]))
+
     # ------------------------------------------------------------ bir elan
-    def save(self, row):
-        """Bir normalizə olunmuş elanı yazır. Nəticə: new | updated | seen | skipped."""
+    def save(self, row, old=_MISSING):
+        """Bir normalizə olunmuş elanı yazır. Nəticə: new | updated | seen | skipped.
+
+        old: save_many()-dən əvvəlcədən oxunmuş sətir (None = bazada yoxdur)."""
         con, sid = self.con, self.source["id"]
         self.stats["checked"] += 1
         if row["price"] is None or row["price"] <= 0:
@@ -45,12 +106,10 @@ class Store:
         images = json.dumps(row["images"] or [], ensure_ascii=False)
         stamp = ts()
         matchable = row["price_period"] != "day"
-        # rayonun mənbəyi; Bina.az-da rayon həmişə sorğunun filtrindəndir
-        src = row.get("district_src") or ("bina" if self.source["key"] == "bina" and row["district"] else None)
-
-        old = con.execute("SELECT id, price, active, suspicious, district, district_src, metro_name, settlement "
-                          "FROM listings WHERE source_id = ? AND external_id = ?",
-                          (sid, row["external_id"])).fetchone()
+        src = self._src(row)
+        if old is _MISSING:
+            old = con.execute(f"SELECT {OLD_COLS} FROM listings WHERE source_id = ? AND external_id = ?",
+                              (sid, row["external_id"])).fetchone()
         if old is None:
             cur = con.execute(
                 """INSERT INTO listings(source_id, external_id, url, title, suffix, district, rooms, area, floor,
@@ -68,7 +127,7 @@ class Store:
             con.execute("INSERT INTO price_history(listing_id, price, recorded_at) VALUES (?, ?, ?)",
                         (lid, price, stamp))
             self.stats["new"] += 1
-            self._group_and_match(lid, matchable)
+            self._group_and_match(lid, matchable, row=row, first_seen=True)
             return "new"
 
         lid = old["id"]
@@ -77,14 +136,8 @@ class Store:
         suspicious_changed = old["suspicious"] != row["suspicious"]
         con.execute("UPDATE listings SET last_seen_at = ?, images = ?, suspicious = ? WHERE id = ?",
                     (stamp, images, row["suspicious"], lid))
-        # Yer məlumatı: Tap.az-da rayon xəritədən gəlir, xəritə yenilənəndə köhnə elanların rayonu da düzəlir
-        # (rayon təkrar qrupundakı Bina.az nüsxəsindən götürülübsə — district_src='dup' — boş rayonla silinmir;
-        #  onu dups.refresh yenidən yoxlayır)
-        district = row["district"]
-        if not district and old["district_src"] == "dup":
-            district, src = old["district"], "dup"
-        place = (district, src, row["metro_name"], row.get("settlement"))
-        district_changed = old["district"] != district
+        place = self._place(row, old)
+        district_changed = old["district"] != place[0]
         if place != (old["district"], old["district_src"], old["metro_name"], old["settlement"]):
             con.execute("UPDATE listings SET district = ?, district_src = ?, metro_name = ?, settlement = ? "
                         "WHERE id = ?", place + (lid,))
@@ -101,14 +154,22 @@ class Store:
         if not (price_changed or reactivated or suspicious_changed or district_changed):
             return "seen"
         self.stats["updated"] += 1
-        self._group_and_match(lid, matchable)
+        self._group_and_match(lid, matchable, row=row)
         return "updated"
 
-    def _group_and_match(self, listing_id, matchable):
+    def _allowed(self, row):
+        """Bildiriş qapısı: (icazə, məlumat)."""
+        if self.gate is None or row is None:
+            return True, None
+        return self.gate(row)
+
+    def _group_and_match(self, listing_id, matchable, row=None, first_seen=False):
         """Əvvəl təkrar qrupları yenilənir (dups.py), sonra elan və qrupu dəyişən qonşuları uyğunlaşdırılır."""
         con = self.con
-        row = con.execute("SELECT * FROM listings WHERE id = ?", (listing_id,)).fetchone()
-        changed = dups.refresh(con, row)
+        if self._places is None:
+            self._places = dups.bina_places(con)
+        listing = con.execute("SELECT * FROM listings WHERE id = ?", (listing_id,)).fetchone()
+        changed = dups.refresh(con, listing, self._places)
         self.stats["dup_changed"] += len(changed - {listing_id})
         if not matchable or not self.profiles:
             return
@@ -119,12 +180,18 @@ class Store:
             if key in done:
                 continue
             done.add(key)
-            # bildiriş yalnız gələn elanın özü üçün; qrupu dəyişən köhnə qonşular bildirişsiz yenilənir
-            notify = self.notify and lid == listing_id
+            # bildiriş yalnız gələn elanın özü üçün (və qapıdan keçirsə); qrupu dəyişən köhnə qonşular bildirişsiz
+            own = lid == listing_id
+            allowed, info = self._allowed(row) if own else (False, None)
+            notify = self.notify and own and allowed
             before = self._notif_count() if notify else 0
-            self.stats["matches"] += matching.match_listing(con, r, self.profiles, notify=notify)
-            if notify:
-                self.stats["notifications"] += self._notif_count() - before
+            created = matching.match_listing(con, r, self.profiles, notify=notify)
+            self.stats["matches"] += created
+            sent = self._notif_count() - before if notify else 0
+            self.stats["notifications"] += sent
+            if own and first_seen and created and self.notify and info is not None:
+                self.gate_events.append(dict(info, external_id=row["external_id"], matches=created,
+                                             notified=sent > 0, allowed=allowed))
 
     def _notif_count(self):
         return self.con.execute("SELECT COUNT(*) FROM notifications").fetchone()[0]

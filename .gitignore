@@ -5,3 +5,5 @@ instance/*
 !instance/.gitkeep
 .env
 numuneler/
+scraper/logs/
+scraper/state/

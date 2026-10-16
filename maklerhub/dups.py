@@ -210,12 +210,14 @@ def _apply(con, rows, groups, inherit):
     return changed
 
 
-def refresh(con, listing):
-    """Bir elanın hissəsini yenidən qruplaşdırır (yeni / dəyişmiş elan üçün). Dəyişən id-lər."""
+def refresh(con, listing, places=None):
+    """Bir elanın hissəsini yenidən qruplaşdırır (yeni / dəyişmiş elan üçün). Dəyişən id-lər.
+
+    places: bina_places() nəticəsi (toplu yazmada bir dəfə oxunub ötürülür)."""
     if listing["rooms"] is None:
         return set()
     rows = _partition_rows(con, listing["deal_type"], listing["price_period"], listing["rooms"])
-    groups, inherit, _ = group_rows(rows, bina_places(con))
+    groups, inherit, _ = group_rows(rows, bina_places(con) if places is None else places)
     return _apply(con, rows, groups, inherit)
 
 

@@ -24,6 +24,23 @@
       </div>
     </div>
 
+    <div class="section reveal" style="animation-delay:.24s">
+      <div class="sh">Son sinxronizasiya</div>
+      {%- if sync_warn %}<div class="mh-syncwarn">⚠ {{ sync_warn }}</div>{% endif %}
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Mənbə</th><th>Vaxt</th><th>Nəticə</th><th>Yeni</th><th>Yenilənən</th><th>Silinən</th><th>Son uğurlu</th></tr></thead>
+          <tbody>
+            {%- for x in syncs %}
+            <tr><td><div class="mname">{{ x.name }}</div></td><td>{{ x.when }}<div class="msub">{{ x.at }}</div></td><td>{% if x.r %}<span class="pill {{ 'susp' if x.failed else 'active' }}">{{ 'Uğursuz' if x.failed else 'Uğurlu' }}</span>{% else %}—{% endif %}</td><td>{{ x.r.new_count if x.r else '—' }}</td><td>{{ x.r.updated if x.r else '—' }}</td><td>{{ x.r.removed if x.r else '—' }}</td><td>{{ x.last_ok }}</td></tr>
+            {%- else %}
+            <tr><td colspan="7" class="mh-empty">Aktiv mənbə yoxdur.</td></tr>
+            {%- endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="section reveal" style="animation-delay:.28s">
       <div class="sh">Son qeydiyyatdan keçən maklerlər</div>
       <div class="tablewrap">

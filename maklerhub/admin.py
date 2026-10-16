@@ -64,6 +64,29 @@ def sources_view(db):
 LEVEL_LABEL = {"ok": "OK", "warn": "DİQQƏT", "err": "XƏTA", "info": "MƏLUMAT"}
 
 
+def last_syncs(db):
+    """Admin paneli: hər mənbənin son sinxronizasiyası və scraper vəziyyəti (cooldown / bloklanma)."""
+    import json
+    rows = []
+    for s in db.execute("SELECT id, key, name FROM sources WHERE enabled = 1 AND key IN ('bina', 'tap') ORDER BY sort"):
+        r = db.execute("SELECT * FROM sync_runs WHERE source_id = ? ORDER BY id DESC LIMIT 1", (s["id"],)).fetchone()
+        ok_at = db.execute("SELECT MAX(started_at) FROM sync_runs WHERE source_id = ? AND ok = 1",
+                           (s["id"],)).fetchone()[0]
+        rows.append({"name": s["name"], "r": r, "when": rel(r["started_at"]) if r else "hələ yoxdur",
+                     "at": r["started_at"][:16] if r else "", "last_ok": rel(ok_at) if ok_at else "hələ yoxdur",
+                     "failed": bool(r) and not r["ok"]})
+    row = db.execute("SELECT value FROM settings WHERE key = 'scraper_state'").fetchone()
+    state = json.loads(row["value"]) if row else {}
+    until = parse(state.get("cooldown_until"))
+    warn = None
+    if until and until > now():
+        warn = (f"Bloklanma: {state.get('reason') or 'sayt sorğunu rədd etdi'}. Scraper {until:%H:%M}-ə qədər "
+                f"fasilədədir (ardıcıl {state.get('blocks')}-ci dəfə), sonra avtomatik davam edəcək.")
+    elif state.get("last_block") and any(x["failed"] for x in rows):
+        warn = f"Son dövr uğursuz oldu (son bloklanma: {state['last_block'][:16]}). Loqlara baxın."
+    return rows, warn
+
+
 # ---------------------------------------------------------------- səhifələr
 @bp.route("")
 @bp.route("/")
@@ -79,7 +102,9 @@ def panel():
     }
     logs = [{"t": r["created_at"][11:19], "lv": r["level"], "label": LEVEL_LABEL.get(r["level"], r["level"]),
              "msg": r["message"]} for r in db.execute("SELECT * FROM logs ORDER BY created_at DESC, id DESC LIMIT 8")]
-    return render("admin/panel.html", "admin.panel", kpi=kpi, sources=sources, maklers=makler_rows(db, 4), logs=logs)
+    syncs, sync_warn = last_syncs(db)
+    return render("admin/panel.html", "admin.panel", kpi=kpi, sources=sources, maklers=makler_rows(db, 4), logs=logs,
+                  syncs=syncs, sync_warn=sync_warn)
 
 
 @bp.route("/maklerler")

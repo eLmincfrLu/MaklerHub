@@ -60,16 +60,29 @@ class BinaClient:
             time.sleep(left)
         self._last = time.time()
 
-    def search(self, flt, after=None, first=16):
+    @staticmethod
+    def _params(flt, after, first):
         variables = {"first": first, "filter": flt, "sort": "BUMPED_AT_DESC"}
         if after:
             variables["after"] = after
-        params = {
+        return {
             "operationName": "SearchItems",
             "variables": json.dumps(variables, separators=(",", ":")),
             "extensions": json.dumps({"persistedQuery": {"version": 1, "sha256Hash": HASH}},
                                      separators=(",", ":")),
         }
+
+    def raw(self, flt, first=16):
+        """Bir xam sorğu (ping üçün): requests.Response, xəta atmır."""
+        self._wait()
+        t0 = time.time()
+        r = self.s.get(GRAPHQL, params=self._params(flt, None, first), timeout=30)
+        self.requests += 1
+        self.req_time += time.time() - t0
+        return r
+
+    def search(self, flt, after=None, first=16):
+        params = self._params(flt, after, first)
         self._wait()
         t0 = time.time()
         r = self.s.get(GRAPHQL, params=params, timeout=30)

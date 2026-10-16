@@ -86,11 +86,19 @@ class TapClient:
         self.req_time += time.time() - t0
         return r
 
-    def search(self, flt, after=None):
-        variables = {"first": PAGE_SIZE, "source": "DESKTOP", "filters": flt}
+    @staticmethod
+    def _body(flt, after, first=PAGE_SIZE):
+        variables = {"first": first, "source": "DESKTOP", "filters": flt}
         if after:
             variables["after"] = after
-        body = json.dumps({"operationName": "GetAdSearch", "query": QUERY, "variables": variables})
+        return json.dumps({"operationName": "GetAdSearch", "query": QUERY, "variables": variables})
+
+    def raw(self, flt, first=PAGE_SIZE):
+        """Bir xam sorğu (ping üçün): requests.Response, xəta atmır."""
+        return self._post(self._body(flt, None, first))
+
+    def search(self, flt, after=None):
+        body = self._body(flt, after)
         r = self._post(body)
         if r.status_code in (401, 403, 429):
             raise BlockedError(f"HTTP {r.status_code}: sayt sorğunu rədd etdi. Dayanılır.")

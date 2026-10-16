@@ -22,6 +22,44 @@ def health():
     return "ok", 200, {"Cache-Control": "no-store"}
 
 
+SCRAPER_STALE_MIN = 45      # son uğurlu sinxronizasiya bundan köhnədirsə → 503
+SCRAPER_HEALTH_TTL = 600    # nəticə 10 dəq yaddaşda (Neon-u hər yoxlamada oyatmamaq üçün)
+_scraper_health = {"at": 0.0, "result": None}
+
+
+def scraper_health_check(con):
+    """(JSON, HTTP kodu): aktiv Bina.az / Tap.az üçün son uğurlu sync_runs və cooldown vəziyyəti."""
+    import json
+    stamp = helpers.now()
+    body = {"ok": True, "checked_at": helpers.ts(stamp), "sources": {}, "cooldown_until": None}
+    for s in con.execute("SELECT id, key FROM sources WHERE enabled = 1 AND key IN ('bina', 'tap') ORDER BY sort"):
+        last = con.execute("SELECT MAX(started_at) FROM sync_runs WHERE source_id = ? AND ok = 1",
+                           (s["id"],)).fetchone()[0]
+        age = round((stamp - helpers.parse(last)).total_seconds() / 60) if last else None
+        fresh = age is not None and age <= SCRAPER_STALE_MIN
+        body["sources"][s["key"]] = {"last_ok": last, "age_min": age, "fresh": fresh}
+        body["ok"] = body["ok"] and fresh
+    row = con.execute("SELECT value FROM settings WHERE key = 'scraper_state'").fetchone()
+    state = json.loads(row["value"]) if row else {}
+    until = helpers.parse(state.get("cooldown_until"))
+    if until and until > stamp:
+        body.update(ok=False, cooldown_until=state["cooldown_until"], reason=state.get("reason"))
+    return body, 200 if body["ok"] else 503
+
+
+@public.route("/saglamliq/scraper")
+def scraper_health():
+    """UptimeRobot üçün: scraper işləyirmi. Bazaya yalnız bu link açılanda və 10 dəqiqədə bir dəfə toxunur."""
+    import time
+    from flask import jsonify
+    cache = _scraper_health
+    if cache["result"] is None or time.time() - cache["at"] > SCRAPER_HEALTH_TTL:
+        cache["result"] = scraper_health_check(dbmod.get_db())
+        cache["at"] = time.time()
+    body, code = cache["result"]
+    return jsonify(body), code, {"Cache-Control": "no-store"}
+
+
 @public.route("/media/avatars/<path:filename>")
 def avatar(filename):
     from flask import current_app
