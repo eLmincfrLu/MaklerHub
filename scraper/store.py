@@ -46,18 +46,19 @@ class Store:
         stamp = ts()
         matchable = row["price_period"] != "day"
 
-        old = con.execute("SELECT id, price, active, suspicious FROM listings WHERE source_id = ? AND external_id = ?",
+        old = con.execute("SELECT id, price, active, suspicious, district, metro_name, settlement FROM listings "
+                          "WHERE source_id = ? AND external_id = ?",
                           (sid, row["external_id"])).fetchone()
         if old is None:
             cur = con.execute(
                 """INSERT INTO listings(source_id, external_id, url, title, suffix, district, rooms, area, floor,
                        floors, price, price_period, deal_type, property_type, building, renovation, metro_name,
-                       images, suspicious, active, posted_at, created_at, updated_at, last_seen_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)""",
+                       settlement, images, suspicious, active, posted_at, created_at, updated_at, last_seen_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)""",
                 (sid, row["external_id"], row["url"], row["title"], "kirayə" if row["deal_type"] == "rent" else "",
                  row["district"], row["rooms"], row["area"], row["floor"], row["floors"], price,
                  row["price_period"], row["deal_type"], row["property_type"], row["property_type"], "",
-                 row["metro_name"], images, row["suspicious"], stamp, stamp, stamp, stamp),
+                 row["metro_name"], row.get("settlement"), images, row["suspicious"], stamp, stamp, stamp, stamp),
             )
             lid = cur.lastrowid
             con.execute("INSERT INTO price_history(listing_id, price, recorded_at) VALUES (?, ?, ?)",
@@ -73,6 +74,14 @@ class Store:
         suspicious_changed = old["suspicious"] != row["suspicious"]
         con.execute("UPDATE listings SET last_seen_at = ?, images = ?, suspicious = ? WHERE id = ?",
                     (stamp, images, row["suspicious"], lid))
+        # Yer məlumatı: Tap.az-da rayon xəritədən gəlir, xəritə yenilənəndə köhnə elanların rayonu da düzəlir
+        place = (row["district"], row["metro_name"], row.get("settlement"))
+        district_changed = old["district"] != row["district"]
+        if place != (old["district"], old["metro_name"], old["settlement"]):
+            con.execute("UPDATE listings SET district = ?, metro_name = ?, settlement = ? WHERE id = ?",
+                        place + (lid,))
+            if district_changed:
+                self.stats["district_changed"] += 1
         if price_changed:
             con.execute("UPDATE listings SET price = ?, updated_at = ? WHERE id = ?", (price, stamp, lid))
             con.execute("INSERT INTO price_history(listing_id, price, recorded_at) VALUES (?, ?, ?)",
@@ -81,7 +90,7 @@ class Store:
             con.execute("UPDATE listings SET active = 1, removed_at = NULL, updated_at = ? WHERE id = ?",
                         (stamp, lid))
             self.stats["reactivated"] += 1
-        if not (price_changed or reactivated or suspicious_changed):
+        if not (price_changed or reactivated or suspicious_changed or district_changed):
             return "seen"
         self.stats["updated"] += 1
         if matchable:

@@ -61,12 +61,16 @@ def selftest_tap():
     with open(os.path.join(HERE, "sample_tap.json"), encoding="utf-8") as fh:
         sample = json.load(fh)
     # xəritə bazadan qurulur və dəyişə bilər — test sabit xəritə ilə işləyir
-    saved = district_map.METRO, district_map.SETTLEMENT
-    district_map.METRO, district_map.SETTLEMENT = {"İnşaatçılar": "Yasamal"}, {"Masazır": "Abşeron"}
+    dm = district_map
+    saved = dm.METRO, dm.SETTLEMENT, dm.METRO_NAMES, dm.SETTLEMENT_NAMES
+    dm.METRO, dm.SETTLEMENT = {"İnşaatçılar": "Yasamal"}, {"Masazır": "Abşeron"}
+    dm.METRO_NAMES, dm.SETTLEMENT_NAMES = ["İnşaatçılar", "Memar Əcəmi"], ["Masazır"]
     try:
         rows = [tap.normalize(n, "rent", "month", "Yeni tikili") for n in sample]
+        names = [dm.canonical(n, ["İçəri Şəhər", "Həzi Aslanov", "Elmlər Akademiyası", "28 May"])
+                 for n in ("İçərişəhər", "H.Aslanov", "Elmlər", "28 may", "Yeni")]
     finally:
-        district_map.METRO, district_map.SETTLEMENT = saved
+        dm.METRO, dm.SETTLEMENT, dm.METRO_NAMES, dm.SETTLEMENT_NAMES = saved
     for r in rows:
         print(r["external_id"], "|", r["title"], "|", r["price"], r["price_period"], "| yer:", r["location_text"],
               "| metro:", r["metro_name"], "| qəsəbə:", r["settlement"], "| rayon:", repr(r["district"]),
@@ -76,7 +80,9 @@ def selftest_tap():
         ("satıcı/mağaza saxlanmır", all("shop" not in r and "company" not in r for r in rows)),
         ("otaq və sahə başlıqdan", by_id["48902243"]["rooms"] == 3 and by_id["48902243"]["area"] == 137),
         ("'Nərimanov r.' → Nərimanov", by_id["48902243"]["district"] == "Nərimanov"),
-        ("tanınmayan 'N.Nərimanov r.' → '' (uydurulmur)", by_id["47054424"]["district"] == ""),
+        ("'N.Nərimanov r.' → Nərimanov", by_id["47054424"]["district"] == "Nərimanov"),
+        ("yazılış fərqləri Bina.az adına gətirilir",
+         names == ["İçəri Şəhər", "Həzi Aslanov", "Elmlər Akademiyası", "28 May", None]),
         ("metro xəritədən: İnşaatçılar → Yasamal", by_id["48829394"]["district"] == "Yasamal"
          and by_id["48829394"]["metro_name"] == "İnşaatçılar"),
         ("qəsəbə xəritədən: Masazır qəs. → Abşeron", by_id["48777695"]["district"] == "Abşeron"
@@ -224,7 +230,7 @@ def main():
         store.finish(ok=error is None, error=error, latency=latency, label=label)
         st = store.stats
         print(f"\nBAZA: yoxlanan={st['checked']} yeni={st['new']} yenilənən={st['updated']} "
-              f"(geri qayıdan={st['reactivated']}) yoxa çıxan={st['removed']} şübhəli={st['suspicious']} "
+              f"(geri qayıdan={st['reactivated']}, rayonu dəyişən={st['district_changed']}) yoxa çıxan={st['removed']} şübhəli={st['suspicious']} "
               f"atlanan={st['skipped']} yeni uyğunluq={st['matches']} "
               f"bildiriş={st['notifications']}{' (--quiet: bildiriş söndürülüb)' if args.quiet else ''}")
         store.con.close()

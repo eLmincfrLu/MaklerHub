@@ -4,7 +4,8 @@ Qaydalar (Bina.az ilə eyni):
 - Heç bir sahə uydurulmur. Məlumat yoxdursa None (NULL) qalır; rayon tapılmasa district = ''.
 - Kirayə/satış, kirayə müddəti və tikili tipi sorğunun FİLTRİNDƏN götürülür.
 - Otaq, sahə və yer adı başlıqdan oxunur ("2-otaqlı …, Nəsimi m., 65 m²"). Mərtəbə Tap.az-da yoxdur → None.
-- Rayon: başlıqda "X r." varsa X (yalnız tanınan rayon adı), əks halda metro/qəsəbə → district_map.
+- Rayon: başlıqda "X r." varsa X (yalnız tanınan rayon adı, "N.Nərimanov" → Nərimanov), əks halda
+  metro/qəsəbə → district_map (adlar Bina.az yazılışına gətirilir).
 - Qiymətlər AZN sayılır (Tap.az-da valyuta sahəsi yoxdur).
 - Sorğular arasında 3-5 saniyə fasilə. 401/403/429 və ya JSON olmayan cavabda DAYANIR.
 - Satıcı / mağaza məlumatı və təsvir saxlanmır.
@@ -147,14 +148,16 @@ def parse_location(location):
     if not location:
         return None, None, None
     loc = location.strip()
+    # adlar Bina.az yazılışına gətirilir ("İçərişəhər" → "İçəri Şəhər"); tanınmasa olduğu kimi qalır
     if loc.endswith(" m."):
-        return loc[:-3].strip(), None, None
+        name = loc[:-3].strip()
+        return district_map.canonical(name, district_map.METRO_NAMES) or name, None, None
     for suf in (" qəs.", " q."):
         if loc.endswith(suf):
-            return None, loc[:-len(suf)].strip(), None
+            name = loc[:-len(suf)].strip()
+            return None, district_map.canonical(name, district_map.SETTLEMENT_NAMES) or name, None
     if loc.endswith(" r."):
-        name = loc[:-3].strip()
-        return None, None, name if name in KNOWN_DISTRICTS else None
+        return None, None, district_map.canonical(loc[:-3], list(KNOWN_DISTRICTS))
     return None, None, None
 
 
