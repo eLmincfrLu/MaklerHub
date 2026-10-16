@@ -1,0 +1,19 @@
+# Ortaq hazırlıq: Python + asılılıqlar + cooldown vəziyyətinin (scraper/state) cache-dən bərpası.
+# Cache-i yadda saxlamaq hər işin SONUNDA ayrıca addımdır (actions/cache/save, if: always()).
+name: setup-scraper
+description: Python, asılılıqlar və scraper/state cache-i
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+        cache: pip
+    - shell: bash
+      run: pip install --quiet -r requirements.txt
+    - name: cooldown vəziyyəti (cache-dən)
+      uses: actions/cache/restore@v4
+      with:
+        path: scraper/state
+        key: scraper-state-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+        restore-keys: scraper-state-

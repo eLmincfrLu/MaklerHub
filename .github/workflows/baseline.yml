@@ -1,0 +1,33 @@
+# Yalnız əl ilə: python -m scraper.auto baseline (hər axından 3 səhifə, bildirişsiz; notify_min_id yazılır).
+# Bloklanma olarsa iş UĞURSUZ bitir (baseline yarımçıqdır, təkrar işə salmaq lazımdır).
+name: baseline
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scraper
+  cancel-in-progress: false
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-scraper
+      - name: baseline
+        env:
+          PYTHONIOENCODING: utf-8
+          MAKLERHUB_NO_LOCK: "1"
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: bash .github/scripts/run-scraper.sh baseline
+      - name: cooldown vəziyyəti (cache-ə)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: scraper/state
+          key: scraper-state-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}

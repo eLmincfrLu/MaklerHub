@@ -1,0 +1,39 @@
+# Hər 15 dəqiqədən bir: python -m scraper.auto fast (52 Bina + 6 Tap axını, 1-ci səhifə).
+# Cədvəl YALNIZ repo dəyişəni SCRAPER_ENABLED=true olanda işləyir; yoxdursa iş dərhal ötürülür (skipped).
+# 23:00-23:59 UTC boşdur: o vaxt nightly başlayır (Bakı 03:00) və növbədəki nightly ləğv olunmasın.
+name: fast
+
+on:
+  schedule:
+    - cron: "*/15 0-22 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# fast, nightly və baseline eyni qrupdadır: eyni anda yalnız biri işləyir (saytlara sorğular ardıcıl gedir).
+concurrency:
+  group: scraper
+  cancel-in-progress: false
+
+jobs:
+  fast:
+    if: github.event_name == 'workflow_dispatch' || vars.SCRAPER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-scraper
+      - name: fast
+        env:
+          PYTHONIOENCODING: utf-8
+          MAKLERHUB_NO_LOCK: "1"
+          BLOCKED_OK: "1"
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: bash .github/scripts/run-scraper.sh fast
+      - name: cooldown vəziyyəti (cache-ə)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: scraper/state
+          key: scraper-state-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
