@@ -12,7 +12,7 @@ import time
 from collections import Counter
 from datetime import timedelta
 
-from maklerhub import matching
+from maklerhub import dups, matching
 from maklerhub.db import add_log
 from maklerhub.helpers import now, ts
 
@@ -46,8 +46,8 @@ class Store:
         stamp = ts()
         matchable = row["price_period"] != "day"
 
-        old = con.execute("SELECT id, price, active, suspicious, district, metro_name, settlement FROM listings "
-                          "WHERE source_id = ? AND external_id = ?",
+        old = con.execute("SELECT id, price, active, suspicious, district, metro_name, settlement, dup_group "
+                          "FROM listings WHERE source_id = ? AND external_id = ?",
                           (sid, row["external_id"])).fetchone()
         if old is None:
             cur = con.execute(
@@ -64,8 +64,7 @@ class Store:
             con.execute("INSERT INTO price_history(listing_id, price, recorded_at) VALUES (?, ?, ?)",
                         (lid, price, stamp))
             self.stats["new"] += 1
-            if matchable:
-                self._match(lid)
+            self._group_and_match(lid, matchable)
             return "new"
 
         lid = old["id"]
@@ -75,8 +74,10 @@ class Store:
         con.execute("UPDATE listings SET last_seen_at = ?, images = ?, suspicious = ? WHERE id = ?",
                     (stamp, images, row["suspicious"], lid))
         # Yer məlumatı: Tap.az-da rayon xəritədən gəlir, xəritə yenilənəndə köhnə elanların rayonu da düzəlir
-        place = (row["district"], row["metro_name"], row.get("settlement"))
-        district_changed = old["district"] != row["district"]
+        # (Tap.az elanının rayonu təkrar qrupundakı Bina.az elanından götürülübsə, boş rayonla silinmir)
+        district = row["district"] or (old["district"] if old["dup_group"] is not None else "")
+        place = (district, row["metro_name"], row.get("settlement"))
+        district_changed = old["district"] != district
         if place != (old["district"], old["metro_name"], old["settlement"]):
             con.execute("UPDATE listings SET district = ?, metro_name = ?, settlement = ? WHERE id = ?",
                         place + (lid,))
@@ -93,18 +94,30 @@ class Store:
         if not (price_changed or reactivated or suspicious_changed or district_changed):
             return "seen"
         self.stats["updated"] += 1
-        if matchable:
-            self._match(lid)
+        self._group_and_match(lid, matchable)
         return "updated"
 
-    def _match(self, listing_id):
-        if not self.profiles:
+    def _group_and_match(self, listing_id, matchable):
+        """Əvvəl təkrar qrupları yenilənir (dups.py), sonra elan və qrupu dəyişən qonşuları uyğunlaşdırılır."""
+        con = self.con
+        row = con.execute("SELECT * FROM listings WHERE id = ?", (listing_id,)).fetchone()
+        changed = dups.refresh(con, row)
+        self.stats["dup_changed"] += len(changed - {listing_id})
+        if not matchable or not self.profiles:
             return
-        row = self.con.execute("SELECT * FROM listings WHERE id = ?", (listing_id,)).fetchone()
-        before = self._notif_count() if self.notify else 0
-        self.stats["matches"] += matching.match_listing(self.con, row, self.profiles, notify=self.notify)
-        if self.notify:
-            self.stats["notifications"] += self._notif_count() - before
+        done = set()
+        for lid in [listing_id] + sorted(changed - {listing_id}):
+            r = con.execute("SELECT * FROM listings WHERE id = ?", (lid,)).fetchone()
+            key = ("g", r["dup_group"]) if r["dup_group"] is not None else ("l", lid)
+            if key in done:
+                continue
+            done.add(key)
+            # bildiriş yalnız gələn elanın özü üçün; qrupu dəyişən köhnə qonşular bildirişsiz yenilənir
+            notify = self.notify and lid == listing_id
+            before = self._notif_count() if notify else 0
+            self.stats["matches"] += matching.match_listing(con, r, self.profiles, notify=notify)
+            if notify:
+                self.stats["notifications"] += self._notif_count() - before
 
     def _notif_count(self):
         return self.con.execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
@@ -127,11 +140,19 @@ class Store:
             where.append("price_period = ?")
             args.append(price_period)
         cur = self.con.execute(
-            f"UPDATE listings SET active = 0, removed_at = ?, updated_at = ? WHERE {' AND '.join(where)}",
+            f"UPDATE listings SET active = 0, removed_at = ?, updated_at = ? WHERE {' AND '.join(where)} "
+            "RETURNING dup_group",
             [stamp, stamp] + args,
         )
+        groups = {r["dup_group"] for r in cur.fetchall() if r["dup_group"] is not None}
         n = cur.rowcount or 0
         self.stats["removed"] += n
+        # təkrar qrupunda qalan nüsxələr: qrup yenidən hesablanır, uyğunluq yeni əsas nüsxəyə keçir
+        for gid in groups:
+            self.con.execute("UPDATE listings SET dup_group = NULL WHERE dup_group = ? AND active = 0", (gid,))
+            rest = self.con.execute("SELECT * FROM listings WHERE dup_group = ? AND active = 1", (gid,)).fetchall()
+            if rest:
+                self._group_and_match(rest[0]["id"], rest[0]["price_period"] != "day")
         return n
 
     def commit(self):

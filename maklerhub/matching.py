@@ -9,6 +9,7 @@ Sərt şərtlər: əməliyyat növü (satış/kirayə) və rayon mütləq uyğun
 import json
 import time
 
+from . import dups
 from .helpers import ts
 
 CENTER = {"Səbail", "Nəsimi", "Yasamal"}   # "Bakı, mərkəz"
@@ -176,12 +177,90 @@ def notify_new_match(con, p, listing, score, when=None):
     )
 
 
+def _notified(con, profile_id, listing_ids):
+    marks = ",".join("?" * len(listing_ids))
+    return con.execute(f"SELECT 1 FROM notifications WHERE profile_id = ? AND listing_id IN ({marks}) LIMIT 1",
+                       [profile_id] + list(listing_ids)).fetchone() is not None
+
+
+def visible_source_ids(con, user):
+    """Makler üçün açıq mənbələr: admin aktiv edib VƏ makler Ayarlar-da söndürməyib (users.src_<key>)."""
+    ids = set()
+    for src in con.execute("SELECT id, key FROM sources WHERE enabled = 1"):
+        col = f"src_{src['key']}"
+        if col not in user.keys() or user[col]:
+            ids.add(src["id"])
+    return ids
+
+
+def _visible_for(con, cache, user_id):
+    if user_id not in cache:
+        user = con.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        cache[user_id] = visible_source_ids(con, user) if user else set()
+    return cache[user_id]
+
+
+def _retarget_notifications(con, profile_id, main_id, ids):
+    """Qrupun köhnə bildirişləri əsas nüsxənin kartını açsın."""
+    others = [i for i in ids if i != main_id]
+    if others:
+        con.execute(f"UPDATE notifications SET listing_id = ? WHERE profile_id = ? "
+                    f"AND listing_id IN ({','.join('?' * len(others))})", [main_id, profile_id] + others)
+
+
+def _match_group(con, gid, profiles, when, notify):
+    """Təkrar qrupu: uyğunluq yalnız əsas nüsxədədir. Əsas nüsxə hər profil üçün makler üçün açıq mənbələrdən
+    seçilir (Bina.az birinci); açıq mənbə yoxdursa uyğunluq yoxdur. Digər nüsxələrin uyğunluğu oraya köçür
+    (ilk tapılma vaxtı saxlanır), bildiriş qrup üçün bir dəfə yaranır."""
+    group = dups.members(con, gid)
+    if not group:
+        return 0
+    ids = [r["id"] for r in group]
+    marks = ",".join("?" * len(ids))
+    cache, created = {}, 0
+    for p in profiles:
+        visible = _visible_for(con, cache, p["user_id"])
+        main = next((r for r in group if r["source_id"] in visible), None)
+        old = con.execute(f"SELECT id, listing_id, created_at FROM matches WHERE profile_id = ? "
+                          f"AND listing_id IN ({marks})", [p["id"]] + ids).fetchall()
+        res = evaluate(p, main) if main else None
+        for m in old:
+            if not main or m["listing_id"] != main["id"]:
+                con.execute("DELETE FROM matches WHERE id = ?", (m["id"],))
+        if not main:
+            continue
+        mine = next((m for m in old if m["listing_id"] == main["id"]), None)
+        if not res:
+            if mine:
+                con.execute("DELETE FROM matches WHERE id = ?", (mine["id"],))
+            continue
+        score, reasons = res
+        reasons = json.dumps(reasons, ensure_ascii=False)
+        if mine:
+            con.execute("UPDATE matches SET score = ?, reasons = ? WHERE id = ?", (score, reasons, mine["id"]))
+        elif old:
+            # başqa nüsxədə artıq var idi → köçür, yeni uyğunluq sayılmır
+            con.execute("INSERT INTO matches(profile_id, listing_id, score, reasons, created_at) "
+                        "VALUES (?, ?, ?, ?, ?)", (p["id"], main["id"], score, reasons, min(m["created_at"] for m in old)))
+        else:
+            con.execute("INSERT INTO matches(profile_id, listing_id, score, reasons, created_at) "
+                        "VALUES (?, ?, ?, ?, ?)", (p["id"], main["id"], score, reasons, when or ts()))
+            created += 1
+            if notify and main["created_at"] > p["created_at"] and not _notified(con, p["id"], ids):
+                notify_new_match(con, p, main, score, when)
+        _retarget_notifications(con, p["id"], main["id"], ids)
+    return created
+
+
 def match_listing(con, listing, profiles=None, when=None, notify=False):
     """Yeni və ya dəyişmiş elanı aktiv profillərlə yoxlayır. Yeni uyğunluq sayını qaytarır.
 
     notify=True: YENİ uyğunluq yarananda və elan profildən SONRA bazaya düşübsə bildiriş yazılır.
+    Təkrar qrupundakı elan (dup_group) qrupun əsas nüsxəsi üzərindən yoxlanır.
     """
     profiles = _active_profiles(con) if profiles is None else profiles
+    if listing.get("dup_group") is not None and listing.get("active", 1):
+        return _match_group(con, listing["dup_group"], profiles, when, notify)
     created = 0
     for p in profiles:
         res = evaluate(p, listing)
@@ -202,7 +281,7 @@ def match_listing(con, listing, profiles=None, when=None, notify=False):
                 (p["id"], listing["id"], score, json.dumps(reasons, ensure_ascii=False), when or ts()),
             )
             created += 1
-            if notify and listing["created_at"] > p["created_at"]:
+            if notify and listing["created_at"] > p["created_at"] and not _notified(con, p["id"], [listing["id"]]):
                 notify_new_match(con, p, listing, score, when)
     return created
 
@@ -212,12 +291,19 @@ def rematch_profile(con, profile_id):
     p = con.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
     if not p:
         return 0
-    existing = {
-        r["listing_id"]: r["created_at"]
-        for r in con.execute(
+    # təkrar qruplarında uyğunluq yalnız əsas nüsxəyə yazılır (makler üçün açıq mənbədən);
+    # ilk tapılma vaxtı qrup üzrə ən erkən
+    groups = dups.ordered_groups(con)
+    group_of = {lid: gid for gid, items in groups.items() for lid, _ in items}
+    user = con.execute("SELECT * FROM users WHERE id = ?", (p["user_id"],)).fetchone()
+    visible = visible_source_ids(con, user) if user else set()
+    main_of = {gid: dups.pick(items, visible) for gid, items in groups.items()}
+    existing = {}
+    for r in con.execute(
             "SELECT m.listing_id, m.created_at FROM matches m JOIN listings l ON l.id = m.listing_id "
-            "WHERE m.profile_id = ? AND l.active = 1", (profile_id,))
-    }
+            "WHERE m.profile_id = ? AND l.active = 1", (profile_id,)):
+        key = ("g", group_of[r["listing_id"]]) if r["listing_id"] in group_of else r["listing_id"]
+        existing[key] = min(existing.get(key, r["created_at"]), r["created_at"])
     con.execute(
         "DELETE FROM matches WHERE profile_id = ? AND listing_id IN (SELECT id FROM listings WHERE active = 1)",
         (profile_id,),
@@ -227,15 +313,26 @@ def rematch_profile(con, profile_id):
     stamp = ts()
     count = 0
     for l in con.execute("SELECT * FROM listings WHERE active = 1 AND deal_type = ?", (p["deal_type"],)):
+        key = l["id"]
+        if l["id"] in group_of:
+            key = ("g", group_of[l["id"]])
+            if main_of[group_of[l["id"]]] != l["id"]:
+                continue
         res = evaluate(p, l)
         if not res:
             continue
         score, reasons = res
         con.execute(
             "INSERT INTO matches(profile_id, listing_id, score, reasons, created_at) VALUES (?, ?, ?, ?, ?)",
-            (p["id"], l["id"], score, json.dumps(reasons, ensure_ascii=False), existing.get(l["id"], stamp)),
+            (p["id"], l["id"], score, json.dumps(reasons, ensure_ascii=False), existing.get(key, stamp)),
         )
         count += 1
+    notified = {r["listing_id"] for r in con.execute(
+        "SELECT DISTINCT listing_id FROM notifications WHERE profile_id = ? AND listing_id IS NOT NULL", (profile_id,))}
+    for gid, items in groups.items():
+        ids = [lid for lid, _ in items]
+        if main_of[gid] and notified & set(ids):
+            _retarget_notifications(con, profile_id, main_of[gid], ids)
     con.execute("UPDATE profiles SET last_checked = ? WHERE id = ?", (stamp, profile_id))
     return count
 

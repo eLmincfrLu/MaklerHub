@@ -37,12 +37,7 @@ def err(message, code=400):
 
 # ---------------------------------------------------------------- ümumi sorğular
 def visible_source_ids(db, user):
-    ids = []
-    for s in db.execute("SELECT id, key FROM sources WHERE enabled = 1"):
-        col = f"src_{s['key']}"
-        if col not in user.keys() or user[col]:
-            ids.append(s["id"])
-    return ids
+    return sorted(matching.visible_source_ids(db, user))
 
 
 def _in(ids):
@@ -55,7 +50,9 @@ SELECT m.id AS mid, m.score, m.reasons, m.created_at AS matched_at,
        l.building, l.renovation, l.metro_m, l.url, l.posted_at, l.created_at AS listing_created,
        s.key AS skey, s.name AS sname, s.logo AS slogo,
        c.id AS cid, c.name AS client_name, c.number AS client_no, c.phone AS client_phone, p.id AS pid,
-       p.created_at AS profile_created
+       p.created_at AS profile_created, l.dup_group,
+       (SELECT COUNT(DISTINCT d.source_id) FROM listings d WHERE d.dup_group = l.dup_group AND d.active = 1
+        AND d.source_id IN ({ids})) AS nsrc
 FROM matches m
 JOIN profiles p ON p.id = m.profile_id
 JOIN clients c ON c.id = p.client_id
@@ -87,6 +84,7 @@ def match_view(db, r):
         "logo": url_for("static", filename="img/" + r["slogo"]), "source": r["sname"],
         "url": r["url"], "matched": r["matched_at"], "posted": r["posted_at"], "lid": r["lid"],
         "new": r["listing_created"] > r["profile_created"], "arrived": rel(r["listing_created"]),
+        "nsrc": r["nsrc"] or 1,
     }
 
 
@@ -247,7 +245,17 @@ def api_match(mid):
             f"Uyğunluq: {m['score']}%\n\n— {full_name(u)}, MaklerHub")
     digits = re.sub(r"\D", "", row["client_phone"] or "")
     wa = f"https://wa.me/{digits}?text={quote(text)}" if digits else None
-    html = render_template("makler/_detail.html", m=m, history=history, share_text=text, wa=wa,
+    # təkrar qrupunun digər nüsxələri (eyni mənzil başqa mənbədə / təkrar yerləşdirmə)
+    copies = []
+    if row["dup_group"] is not None:
+        copies = db.execute(
+            "SELECT l.url, s.name, s.logo FROM listings l JOIN sources s ON s.id = l.source_id "
+            f"WHERE l.dup_group = ? AND l.active = 1 AND l.id <> ? AND l.source_id IN ({_in(visible_source_ids(db, u))}) "
+            "ORDER BY l.id",
+            (row["dup_group"], row["lid"])).fetchall()
+        copies = [{"url": c["url"], "source": c["name"], "logo": url_for("static", filename="img/" + c["logo"])}
+                  for c in copies]
+    html = render_template("makler/_detail.html", m=m, history=history, share_text=text, wa=wa, copies=copies,
                            posted=rel(row["posted_at"]), matched=rel(row["matched_at"]))
     return jsonify(ok=True, html=html)
 
@@ -778,10 +786,17 @@ def api_me_prefs():
     db = get_db()
     data = request.get_json(silent=True) or {}
     changed = 0
+    sources_changed = False
     for k, v in data.items():
         if k in PREF_KEYS:
             db.execute(f"UPDATE users SET {k} = ? WHERE id = ?", (1 if v else 0, g.user["id"]))
             changed += 1
+            sources_changed = sources_changed or (k.startswith("src_") and bool(v) != bool(g.user[k]))
+    if sources_changed:
+        # təkrar qruplarında əsas nüsxə açıq mənbələrdən seçilir → bu maklerin profilləri yenidən
+        for p in db.execute("SELECT id FROM profiles WHERE user_id = ? AND status = 'active'",
+                            (g.user["id"],)).fetchall():
+            matching.rematch_profile(db, p["id"])
     db.commit()
     return jsonify(ok=True, message="Ayar yadda saxlanıldı" if changed else "Dəyişiklik yoxdur")
 

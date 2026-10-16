@@ -6,6 +6,7 @@ from datetime import timedelta
 from flask import Blueprint, g, jsonify, render_template, request, url_for
 from werkzeug.security import generate_password_hash
 
+from . import matching
 from .auth import admin_required, normalize_email, valid_email
 from .db import DEFAULT_SETTINGS, add_log, get_db, get_settings, set_setting
 from .helpers import PLAN_LABELS, date_short, full_name, initials, log_time, now, parse, rel, ts
@@ -234,6 +235,8 @@ def api_source_update(key):
     if enabled != s["enabled"]:
         add_log(db, "info", s["name"], f"{s['name']} {'aktivləşdirildi' if enabled else 'dayandırıldı'}",
                 f"icra edən={g.user['email']}")
+        # təkrar qruplarında əsas nüsxə yalnız aktiv mənbələrdən seçilir
+        matching.rematch_all(db)
     db.commit()
     return jsonify(ok=True, message="Mənbə ayarları yadda saxlanıldı")
 

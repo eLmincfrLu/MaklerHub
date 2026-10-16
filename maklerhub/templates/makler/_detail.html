@@ -12,6 +12,7 @@
   <div class="mh-row"><span>Xüsusiyyətlər</span><span>{{ m.meta }}</span></div>
   <div class="mh-row"><span>Müştəri</span><span>{{ m.client }} · #{{ m.client_no }}</span></div>
   <div class="mh-row"><span>Uyğunluq tapıldı</span><span>{{ matched }}</span></div>
+  {% if copies %}<div class="mh-row"><span>Digər elanlar</span><span>{% for c in copies %}<a class="mh-copy" href="{{ c.url }}" target="_blank" rel="noopener"><img src="{{ c.logo }}" alt="">{{ c.source }}</a>{% endfor %}</span></div>{% endif %}
   {% if m.drop %}<div class="mh-row"><span>Qiymət dəyişikliyi</span><span style="color:#B4543F">▼ {{ m.drop }}% · {{ m.drop_text }}</span></div>{% endif %}
 </div>
 

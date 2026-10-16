@@ -2,7 +2,7 @@
     <div class="card{% if m.mid %} mid{% endif %}" style="animation-delay:{{ '%.2f'|format(base_delay + loop.index0 * 0.07) }}s" data-match="{{ m.id }}">
       <div class="match"><svg width="52" height="52"><circle cx="26" cy="26" r="22" stroke="var(--line)" stroke-width="4" fill="none"/><circle cx="26" cy="26" r="22" stroke="{{ 'var(--gold-dim)' if m.mid else 'var(--ok)' }}" stroke-width="4" fill="none" stroke-dasharray="138" stroke-dashoffset="{{ m.ring52 }}"/></svg><div class="pct">{{ m.score }}%</div></div>
       <div class="info">
-        <div class="top-row"><img class="srcbadge" src="{{ m.logo }}" alt=""><div class="title">{{ m.title }}</div>{% if m.new %}<span class="mh-new">Yeni</span><span class="mh-arrived">{{ m.arrived }}</span>{% endif %}</div>
+        <div class="top-row"><img class="srcbadge" src="{{ m.logo }}" alt=""><div class="title">{{ m.title }}</div>{% if m.nsrc > 1 %}<span class="mh-dup">{{ m.nsrc }} mənbədə</span>{% endif %}{% if m.new %}<span class="mh-new">Yeni</span><span class="mh-arrived">{{ m.arrived }}</span>{% endif %}</div>
         <div class="meta">{{ m.meta }}</div>
         <div class="why">{{ m.why_short }}</div>
       </div>

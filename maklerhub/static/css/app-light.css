@@ -136,6 +136,11 @@ a.brand{text-decoration:none;}
 .mh-new{display:inline-block;flex-shrink:0;font-size:.66rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
   color:#fff;background:var(--ok);padding:2px 7px;border-radius:10px;vertical-align:middle;margin-left:4px;}
 .mh-arrived{font-size:.74rem;color:#8A8372;white-space:nowrap;margin-left:6px;vertical-align:middle;font-weight:400;}
+/* təkrar elan: eyni mənzil bir neçə mənbədə (dup_group) */
+.mh-dup{display:inline-block;flex-shrink:0;font-size:.66rem;font-weight:600;color:#8A8372;border:1px solid var(--line);
+  padding:1px 7px;border-radius:10px;vertical-align:middle;margin-left:4px;white-space:nowrap;}
+.mh-copy{display:inline-flex;align-items:center;gap:5px;margin-left:8px;}
+.mh-copy img{width:14px;height:14px;border-radius:50%;object-fit:cover;}
 
 /* profil səhifəsində bölmə başlıqları */
 .mh-sec{margin:26px 0 10px;}

@@ -47,9 +47,9 @@ try:
         n[0] += 1
         r = {"external_id": f"TEST-{n[0]}", "url": None, "title": f"Test elan {n[0]}", "deal_type": "rent",
              "property_type": "Yeni tikili", "district": district, "metro_name": None, "rooms": p["rooms"] or 2,
-             "area": 70, "floor": 5, "floors": 12, "price": mid_price, "price_period": "month", "images": [],
+             "area": 60 + n[0], "floor": 5, "floors": 12, "price": mid_price, "price_period": "month", "images": [],
              "suspicious": 0}
-        r.update(kw)
+        r.update(kw)  # sahə hər elanda fərqlidir: eyni elanlar təkrar qrupuna (dup_group) düşməsin
         return r
 
     def added(store, r):
