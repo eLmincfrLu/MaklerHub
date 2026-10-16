@@ -29,7 +29,10 @@ PRICE_TOL = 0.05    # 5%
 INHERIT_AREA_TOL = 2        # m²
 INHERIT_PRICE_TOL = 0.03    # 3%
 
-COLS = ("l.id, l.source_id, s.key AS skey, l.external_id, l.url, l.district, l.metro_name, l.settlement, l.rooms, "
+# Bina nüsxəsindən götürülmüş rayon (district_src='dup') qruplaşdırmada boş sayılır və hər dəfə yenidən yoxlanır
+COLS = ("l.id, l.source_id, s.key AS skey, l.external_id, l.url, "
+        "CASE WHEN l.district_src = 'dup' THEN '' ELSE l.district END AS district, "
+        "l.district AS stored_district, l.district_src, l.metro_name, l.settlement, l.rooms, "
         "l.area, l.price, l.price_period, l.deal_type, l.property_type, l.floor, l.floors, l.dup_group")
 
 
@@ -195,8 +198,14 @@ def _apply(con, rows, groups, inherit):
         if r["dup_group"] != gid:
             con.execute("UPDATE listings SET dup_group = ? WHERE id = ?", (gid, r["id"]))
             changed.add(r["id"])
-        if r["id"] in inherit and r["district"] != inherit[r["id"]]:
-            con.execute("UPDATE listings SET district = ? WHERE id = ?", (inherit[r["id"]], r["id"]))
+        if r["id"] in inherit:
+            if (r["stored_district"], r["district_src"]) != (inherit[r["id"]], "dup"):
+                con.execute("UPDATE listings SET district = ?, district_src = 'dup' WHERE id = ?",
+                            (inherit[r["id"]], r["id"]))
+                changed.add(r["id"])
+        elif r["district_src"] == "dup":
+            # artıq götürmək olmur (qrup dağıldı / qayda dəyişdi) → elanın öz rayonu boş idi
+            con.execute("UPDATE listings SET district = '', district_src = NULL WHERE id = ?", (r["id"],))
             changed.add(r["id"])
     return changed
 

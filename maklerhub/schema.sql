@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS listings (
   renovation   TEXT NOT NULL DEFAULT '',
   metro_name   TEXT,
   settlement   TEXT,                                     -- qəsəbə adı (məs. "Masazır"), yoxdursa NULL
+  district_src TEXT,                                     -- rayon haradan: bina | title | map | dup (NULL = boş/məlum deyil)
   metro_m      INTEGER,
   images       TEXT,                                     -- şəkil linkləri (JSON massiv), şəkil kopyalanmır
   phone        TEXT,                                     -- yalnız uyğunluğu 70%+ olan elanlar üçün
@@ -150,6 +151,7 @@ CREATE TABLE IF NOT EXISTS listings (
 CREATE INDEX IF NOT EXISTS ix_listings_active ON listings(active, deal_type, district);
 -- köhnə bazalar üçün (Gün 11): qəsəbə sütunu
 ALTER TABLE listings ADD COLUMN IF NOT EXISTS settlement TEXT;
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS district_src TEXT;
 
 CREATE TABLE IF NOT EXISTS price_history (
   id           SERIAL PRIMARY KEY,

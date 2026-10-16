@@ -143,6 +143,7 @@ def normalize(node, district, property_type):
         "deal_type": deal,
         "property_type": property_type,
         "district": district,
+        "district_src": "bina" if district else None,   # rayon sorğunun filtrindəndir
         "metro_name": metro,
         "settlement": settlement,
         "rooms": rooms,

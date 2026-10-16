@@ -151,10 +151,17 @@ try:
     t3 = row(area=b3["area"], district="")
     bina.save(b3)
     tap.save(t3)
-    check("B3 rayonu boş Tap → Bina-dan rayon", get(t3["external_id"])["district"] == district
-          and get(t3["external_id"])["dup_group"] == get(b3["external_id"])["dup_group"] is not None)
+    check("B3 rayonu boş Tap → Bina-dan rayon, district_src='dup'", get(t3["external_id"])["district"] == district
+          and get(t3["external_id"])["district_src"] == "dup"
+          and get(t3["external_id"])["dup_group"] == get(b3["external_id"])["dup_group"] is not None
+          and get(b3["external_id"])["district_src"] == "bina")
     tap.save(dict(t3))  # növbəti yükləmədə yenə '' gəlir
-    check("B4 təkrar yükləmədə götürülmüş rayon silinmir", get(t3["external_id"])["district"] == district)
+    check("B4 təkrar yükləmədə götürülmüş rayon silinmir", get(t3["external_id"])["district"] == district
+          and get(t3["external_id"])["district_src"] == "dup")
+    bina.save(dict(b3, price=price * 2))  # Bina qiyməti dəyişdi → artıq təkrar deyil
+    check("B4b qrup dağılanda götürülmüş rayon geri alınır (district='' , district_src=NULL)",
+          get(t3["external_id"])["dup_group"] is None and get(t3["external_id"])["district"] == ""
+          and get(t3["external_id"])["district_src"] is None)
 
     # B5: rayonu boş Tap, iki Bina namizədi (fərqli rayon) → heç nə
     b5a = row()

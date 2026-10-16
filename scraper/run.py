@@ -54,6 +54,7 @@ def selftest_bina():
         ("mərtəbə yoxdursa None", by_id["6310873"]["floor"] is None),
         ("otaq yoxdursa None", by_id["6310873"]["rooms"] is None),
         ("renovation uydurulmur", all(r["renovation"] is None for r in rows)),
+        ("district_src = 'bina'", all(r["district_src"] == "bina" for r in rows)),
     ])
 
 
@@ -81,6 +82,9 @@ def selftest_tap():
         ("otaq və sahə başlıqdan", by_id["48902243"]["rooms"] == 3 and by_id["48902243"]["area"] == 137),
         ("'Nərimanov r.' → Nərimanov", by_id["48902243"]["district"] == "Nərimanov"),
         ("'N.Nərimanov r.' → Nərimanov", by_id["47054424"]["district"] == "Nərimanov"),
+        ("district_src: başlıq → title, xəritə → map, boş → None",
+         by_id["48902243"]["district_src"] == "title" and by_id["48829394"]["district_src"] == "map"
+         and by_id["48777695"]["district_src"] == "map" and by_id["48910575"]["district_src"] is None),
         ("yazılış fərqləri Bina.az adına gətirilir",
          names == ["İçəri Şəhər", "Həzi Aslanov", "Elmlər Akademiyası", "28 May", None]),
         ("metro xəritədən: İnşaatçılar → Yasamal", by_id["48829394"]["district"] == "Yasamal"

@@ -45,20 +45,24 @@ class Store:
         images = json.dumps(row["images"] or [], ensure_ascii=False)
         stamp = ts()
         matchable = row["price_period"] != "day"
+        # rayonun mənbəyi; Bina.az-da rayon həmişə sorğunun filtrindəndir
+        src = row.get("district_src") or ("bina" if self.source["key"] == "bina" and row["district"] else None)
 
-        old = con.execute("SELECT id, price, active, suspicious, district, metro_name, settlement, dup_group "
+        old = con.execute("SELECT id, price, active, suspicious, district, district_src, metro_name, settlement "
                           "FROM listings WHERE source_id = ? AND external_id = ?",
                           (sid, row["external_id"])).fetchone()
         if old is None:
             cur = con.execute(
                 """INSERT INTO listings(source_id, external_id, url, title, suffix, district, rooms, area, floor,
                        floors, price, price_period, deal_type, property_type, building, renovation, metro_name,
-                       settlement, images, suspicious, active, posted_at, created_at, updated_at, last_seen_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)""",
+                       settlement, district_src, images, suspicious, active, posted_at, created_at, updated_at,
+                       last_seen_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)""",
                 (sid, row["external_id"], row["url"], row["title"], "kirayə" if row["deal_type"] == "rent" else "",
                  row["district"], row["rooms"], row["area"], row["floor"], row["floors"], price,
                  row["price_period"], row["deal_type"], row["property_type"], row["property_type"], "",
-                 row["metro_name"], row.get("settlement"), images, row["suspicious"], stamp, stamp, stamp, stamp),
+                 row["metro_name"], row.get("settlement"), src, images, row["suspicious"],
+                 stamp, stamp, stamp, stamp),
             )
             lid = cur.lastrowid
             con.execute("INSERT INTO price_history(listing_id, price, recorded_at) VALUES (?, ?, ?)",
@@ -74,13 +78,16 @@ class Store:
         con.execute("UPDATE listings SET last_seen_at = ?, images = ?, suspicious = ? WHERE id = ?",
                     (stamp, images, row["suspicious"], lid))
         # Yer məlumatı: Tap.az-da rayon xəritədən gəlir, xəritə yenilənəndə köhnə elanların rayonu da düzəlir
-        # (Tap.az elanının rayonu təkrar qrupundakı Bina.az elanından götürülübsə, boş rayonla silinmir)
-        district = row["district"] or (old["district"] if old["dup_group"] is not None else "")
-        place = (district, row["metro_name"], row.get("settlement"))
+        # (rayon təkrar qrupundakı Bina.az nüsxəsindən götürülübsə — district_src='dup' — boş rayonla silinmir;
+        #  onu dups.refresh yenidən yoxlayır)
+        district = row["district"]
+        if not district and old["district_src"] == "dup":
+            district, src = old["district"], "dup"
+        place = (district, src, row["metro_name"], row.get("settlement"))
         district_changed = old["district"] != district
-        if place != (old["district"], old["metro_name"], old["settlement"]):
-            con.execute("UPDATE listings SET district = ?, metro_name = ?, settlement = ? WHERE id = ?",
-                        place + (lid,))
+        if place != (old["district"], old["district_src"], old["metro_name"], old["settlement"]):
+            con.execute("UPDATE listings SET district = ?, district_src = ?, metro_name = ?, settlement = ? "
+                        "WHERE id = ?", place + (lid,))
             if district_changed:
                 self.stats["district_changed"] += 1
         if price_changed:

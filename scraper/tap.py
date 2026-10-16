@@ -5,7 +5,7 @@ Qaydalar (Bina.az ilə eyni):
 - Kirayə/satış, kirayə müddəti və tikili tipi sorğunun FİLTRİNDƏN götürülür.
 - Otaq, sahə və yer adı başlıqdan oxunur ("2-otaqlı …, Nəsimi m., 65 m²"). Mərtəbə Tap.az-da yoxdur → None.
 - Rayon: başlıqda "X r." varsa X (yalnız tanınan rayon adı, "N.Nərimanov" → Nərimanov), əks halda
-  metro/qəsəbə → district_map (adlar Bina.az yazılışına gətirilir).
+  metro/qəsəbə → district_map (adlar Bina.az yazılışına gətirilir). Mənbə district_src: title | map | None.
 - Qiymətlər AZN sayılır (Tap.az-da valyuta sahəsi yoxdur).
 - Sorğular arasında 3-5 saniyə fasilə. 401/403/429 və ya JSON olmayan cavabda DAYANIR.
 - Satıcı / mağaza məlumatı və təsvir saxlanmır.
@@ -165,8 +165,10 @@ def normalize(node, deal, period, property_type):
     """Tap.az elanını bizim vahid formata çevirir (scraper/bina.py normalize ilə eyni açarlar)."""
     rooms, area, location = parse_title(node.get("title"))
     metro, settlement, district = parse_location(location)
+    src = "title" if district else None              # başlıqda "X r."
     if not district:
         district = district_map.district_for(metro=metro, settlement=settlement)
+        src = "map" if district else None            # metro/qəsəbə xəritəsindən
     price = node.get("price")
     currency = "AZN"
     title = f"{rooms} otaqlı {property_type.lower()}" if rooms else property_type
@@ -182,6 +184,7 @@ def normalize(node, deal, period, property_type):
         "deal_type": deal,
         "property_type": property_type,
         "district": district or "",
+        "district_src": src,
         "metro_name": metro,
         "settlement": settlement,
         "location_text": location,
