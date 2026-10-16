@@ -11,8 +11,11 @@ Qaydalar:
 - fast: əvvəl bütün axınlar yaddaşa toplanır (bu müddətdə bazaya qoşulmur), sonra BİR qısa yazma partlayışı
   (Store.save_many). Bloklanma olsa toplanan hissə yenə yazılır və dövr dayanır.
 - Bloklanma (401/403/429/JSON olmayan cavab) → cooldown 60 → 120 → 240 → 360 dəq (ardıcıl bloklanmalarda);
-  uğurlu dövrdən sonra sayğac sıfırlanır. Vəziyyət settings.scraper_state-dədir (əvvəlcə bazadan oxunur),
-  lokal fayl (scraper/state/state.json) yalnız ehtiyatdır.
+  uğurlu dövrdən sonra sayğac sıfırlanır. Vəziyyət həm lokal faylda (scraper/state/cooldown.json), həm
+  settings.scraper_state-dədir. fast başlayanda YALNIZ fayla baxır (Neon-u oyatmamaq üçün); bazadakı vəziyyət
+  elanlar toplandıqdan sonra yazma bağlantısında oxunur və daha təzədirsə (məs. CI-da fayl yoxdur) götürülür.
+  Fayl yoxdursa və ilk sorğu bloklanırsa toplama dərhal dayanır, cooldown fayla və bazaya yazılır.
+  nightly / baseline başlanğıcda bazaya baxır (onsuz da uzun müddət bazaya yazırlar).
 - Kilid: scraper/state/auto.lock (PID + vaxt; prosesi ölmüş və ya köhnə kilid götürülür).
   MAKLERHUB_NO_LOCK=1 kilidi söndürür (CI-da concurrency istifadə olunur).
 - Bildiriş qapısı: elan yalnız external_id > notify_min_id_<mənbə> − notify_margin_<mənbə> olanda bildiriş
@@ -41,7 +44,7 @@ ROOT = os.path.dirname(HERE)
 STATE_DIR = os.path.join(HERE, "state")
 LOG_DIR = os.path.join(HERE, "logs")
 LOCK_PATH = os.path.join(STATE_DIR, "auto.lock")
-STATE_PATH = os.path.join(STATE_DIR, "state.json")
+STATE_PATH = os.path.join(STATE_DIR, "cooldown.json")
 
 NO_LOCK_ENV = "MAKLERHUB_NO_LOCK"
 LOG_QUIET_ENV = "MAKLERHUB_LOG_QUIET"       # 1: yalnız fayla yaz (Task Scheduler)
@@ -190,12 +193,16 @@ def _write_file(state):
         log.warning("vəziyyət faylı yazılmadı: %s", e)
 
 
+def _db_state(con):
+    row = con.execute("SELECT value FROM settings WHERE key = ?", (STATE_KEY,)).fetchone()
+    return json.loads(row["value"]) if row else {}
+
+
 def load_state(con=None):
-    """Əvvəlcə bazadan (settings.scraper_state); baza əlçatmazdırsa lokal fayldan."""
+    """con varsa bazadan (və fayl yenilənir), yoxdursa / baza xətasında lokal fayldan."""
     if con is not None:
         try:
-            row = con.execute("SELECT value FROM settings WHERE key = ?", (STATE_KEY,)).fetchone()
-            state = json.loads(row["value"]) if row else {}
+            state = _db_state(con)
             _write_file(state)
             return state
         except Exception as e:  # baza xətası → ehtiyat fayl
@@ -203,8 +210,26 @@ def load_state(con=None):
     return _read_file()
 
 
+def merge_db_state(state, con):
+    """Yazma bağlantısında: bazadakı vəziyyət fayldakından təzədirsə (və ya fayl yoxdursa) onu götürür.
+    Bazada aktiv cooldown varsa, fayl isə bilmirsə, cooldown saxlanılır (True qaytarır)."""
+    db = _db_state(con)
+    file_missing = not state.get("updated_at")
+    newer = (db.get("updated_at") or "") > (state.get("updated_at") or "")
+    if db and (file_missing or newer):
+        keep = {k: state[k] for k in ("baseline",) if k in state}
+        state.clear()
+        state.update(db, **keep)
+    adopted = cooldown_until(state) is not None
+    if adopted:
+        log.warning("bazada aktiv cooldown var (%s-ə qədər), lokal fayl %s — fayl yenilənir, cooldown saxlanılır",
+                    state["cooldown_until"], "yox idi" if file_missing else "köhnə idi")
+    return adopted
+
+
 def save_state(state, con=None):
     """Lokal fayla və (con varsa) bazaya yazır. Commit çağırana aiddir."""
+    state["updated_at"] = fmt(now())
     _write_file(state)
     if con is not None:
         con.execute("INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -344,12 +369,23 @@ def _latency(client):
     return client.req_time / client.requests if getattr(client, "requests", 0) else 0.0
 
 
-def write_burst(ctx, rows, label, error, notify, started, t0, removal=None):
-    """Toplananları BİR bağlantı ilə yazır; hər mənbə üçün sync_runs. → {mənbə: stats}, gate events."""
+class NoBaseline(Exception):
+    pass
+
+
+def write_burst(ctx, rows, label, error, notify, started, t0, removal=None, before=None, after=None):
+    """Toplananları BİR bağlantı ilə yazır; hər mənbə üçün sync_runs. → {mənbə: stats}, gate events.
+
+    before(con): yazmadan əvvəl (vəziyyət / baseline yoxlaması); False → heç nə yazılmır, NoBaseline.
+    after(con): bağlanmadan əvvəl (vəziyyəti eyni bağlantı ilə yazmaq üçün)."""
     from .store import Store
     con = ctx.connect()
     out, events = {}, []
     try:
+        if before is not None and not before(con):
+            if after is not None:
+                after(con)
+            raise NoBaseline()
         for src in SOURCES:
             if src not in rows:
                 continue
@@ -371,6 +407,8 @@ def write_burst(ctx, rows, label, error, notify, started, t0, removal=None):
                     f"{sum(not e['allowed'] for e in events)} nömrəyə görə bildirişsiz",
                     "\n".join(_event_line(e) for e in events))
             con.commit()
+        if after is not None:
+            after(con)
     finally:
         con.close()
     for e in events:
@@ -378,20 +416,27 @@ def write_burst(ctx, rows, label, error, notify, started, t0, removal=None):
     return out, events
 
 
-def _finish_state(ctx, state, error, mode):
-    """Dövrün sonunda vəziyyəti yazır (bloklanma → cooldown). Ayrı qısa bağlantı."""
+def _update_state(state, error, mode):
+    """Bloklanma → cooldown; uğurlu dövr → sıfırla (bazadan götürülmüş aktiv cooldown varsa saxlanılır)."""
     if isinstance(error, BlockedError):
         minutes = mark_block(state, error)
         log.warning("BLOKLANMA: %s → cooldown %s dəq (%s-ə qədər, ardıcıl %s)", error, minutes,
                     state["cooldown_until"], state["blocks"])
-    elif error is None:
+    elif error is None and cooldown_until(state) is None:
         mark_ok(state, mode)
-    con = ctx.connect()
+
+
+def _finish_state(ctx, state, error, mode, con=None):
+    """Vəziyyəti fayla və bazaya yazır. con verilməyibsə ayrı qısa bağlantı açılır."""
+    _update_state(state, error, mode)
+    own = con is None
+    con = con or ctx.connect()
     try:
         save_state(state, con)
         con.commit()
     finally:
-        con.close()
+        if own:
+            con.close()
 
 
 def _summary(stats):
@@ -408,11 +453,24 @@ def fast_cycle(ctx, state, notify=True, update_state=True, mode="fast"):
     collect_s = time.time() - t0
     label = f"{mode} collect={collect_s:.0f}s{'' if notify else ' quiet'}"
     tw = time.time()
-    stats, _ = write_burst(ctx, rows, label, error, notify, started, t0)
+
+    def before(con):
+        # baza ilk dəfə burada açılır: bazadakı cooldown / baseline vəziyyəti
+        merge_db_state(state, con)
+        state["baseline"] = has_baseline(con)
+        if notify and not state["baseline"]:
+            log.error("%s: baseline yoxdur (settings.notify_min_id_*) — elanlar YAZILMADI. Əvvəl: "
+                      "python -m scraper.auto baseline (və ya --quiet)", mode)
+            return False
+        return True
+
+    def after(con):
+        _finish_state(ctx, state, error, mode, con=con)
+
+    stats, _ = write_burst(ctx, rows, label, error, notify, started, t0,
+                           before=before if update_state else None, after=after if update_state else None)
     log.info("%s: toplama %.0f san, yazma %.1f san, %s%s", mode, collect_s, time.time() - tw, _summary(stats),
              f" | XƏTA: {error}" if error else "")
-    if update_state:
-        _finish_state(ctx, state, error, mode)
     return error
 
 
@@ -442,6 +500,7 @@ def baseline(ctx, state):
         con.commit()
     finally:
         con.close()
+    state["baseline"] = True
     _finish_state(ctx, state, None, "baseline")
     return None
 
@@ -592,6 +651,23 @@ def main(argv=None, ctx=None):
         log.info("%s: başqa işləmə davam edir (kilid: %s) — çıxılır", args.cmd, lock.info())
         return 0
     try:
+        if args.cmd == "fast":
+            # Neon-u oyatmamaq üçün başlanğıcda yalnız lokal fayl; baza toplamadan sonra (fast_cycle.before)
+            state = _read_file()
+            until = cooldown_until(state)
+            if until:
+                log.info("fast: cooldown davam edir (%s-ə qədər, ardıcıl bloklanma %s, lokal fayl) — çıxılır",
+                         fmt(until), state.get("blocks"))
+                return 0
+            if not args.quiet and state.get("baseline") is False:
+                log.error("fast: baseline yoxdur (son yoxlama: bazada notify_min_id_* yox idi). Əvvəl: "
+                          "python -m scraper.auto baseline (və ya --quiet)")
+                return 2
+            try:
+                error = fast_cycle(ctx, state, notify=not args.quiet)
+            except NoBaseline:
+                return 2
+            return 0 if error is None else (3 if isinstance(error, BlockedError) else 1)
         try:
             con = ctx.connect()
         except Exception as e:
@@ -599,7 +675,7 @@ def main(argv=None, ctx=None):
             return 1
         try:
             state = load_state(con)
-            baseline_ok = has_baseline(con)
+            baseline_ok = state["baseline"] = has_baseline(con)
         finally:
             con.close()
         until = cooldown_until(state)
@@ -607,13 +683,7 @@ def main(argv=None, ctx=None):
             log.info("%s: cooldown davam edir (%s-ə qədər, ardıcıl bloklanma %s) — çıxılır",
                      args.cmd, fmt(until), state.get("blocks"))
             return 0
-        if args.cmd == "fast":
-            if not args.quiet and not baseline_ok:
-                log.error("fast: baseline yoxdur (settings.notify_min_id_*). Əvvəl: python -m scraper.auto baseline "
-                          "(və ya --quiet)")
-                return 2
-            error = fast_cycle(ctx, state, notify=not args.quiet)
-        elif args.cmd == "baseline":
+        if args.cmd == "baseline":
             error = baseline(ctx, state)
         else:
             if not baseline_ok:

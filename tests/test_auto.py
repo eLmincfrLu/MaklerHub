@@ -24,7 +24,7 @@ from scraper.common import BlockedError
 URL = os.environ["DATABASE_URL"]
 TMP = tempfile.mkdtemp(prefix="mh-auto-")
 auto.STATE_DIR, auto.LOG_DIR = TMP, TMP
-auto.LOCK_PATH, auto.STATE_PATH = os.path.join(TMP, "auto.lock"), os.path.join(TMP, "state.json")
+auto.LOCK_PATH, auto.STATE_PATH = os.path.join(TMP, "auto.lock"), os.path.join(TMP, "cooldown.json")
 
 results = []
 def check(name, ok, info=""):
@@ -160,24 +160,65 @@ try:
           f"state={state}")
     check("B3 1-ci səhifə rejimi: fast yalnız 1 səhifə oxuyur", get("bina", B + 2) is None
           and clients["bina"].requests == 1)
-    check("B4 vəziyyət bazaya yazılıb və əvvəlcə bazadan oxunur (fayl yalnız ehtiyat)",
-          auto.load_state(con)["blocks"] == 1
-          and (auto._write_file({"blocks": 7}) or True) and auto.load_state(con)["blocks"] == 1
-          and (auto._write_file({"blocks": 7}) or True) and auto.load_state(None)["blocks"] == 7)
+    db_state = auto._db_state(con)
+    check("B4 cooldown həm fayla, həm bazaya yazılıb (eyni bağlantıda, ikinci qoşulma yoxdur)",
+          auto._read_file().get("cooldown_until") == db_state.get("cooldown_until") == state["cooldown_until"]
+          and sum(1 for e in events if e[0] == "connect") == 1, f"qoşulma={sum(1 for e in events if e[0] == 'connect')}")
 
-    # B5: cooldown davam edərkən main çıxır, sayta sorğu getmir
-    clients["bina"].requests = 0
+    def reset_state():
+        auto.save_state({}, con)
+        if os.path.exists(auto.STATE_PATH):
+            os.remove(auto.STATE_PATH)
+
+    def fresh_clients(block=False, k=5):
+        return {"bina": FakeClient("bina", {"b": [[row("bina", B + k)]]}, block=block),
+                "tap": FakeClient("tap", {"t": [[row("tap", T + k)]]})}
+
+    # B5: lokal faylda cooldown → bazaya da, sayta da toxunmadan çıxır
+    events.clear()
+    clients = fresh_clients()
+    ctx = auto.Ctx(clients, fake_connect)
     code = auto.main(["fast", "--quiet"], ctx=ctx)
-    check("B5 cooldown vaxtı: main sorğusuz çıxır", code == 0 and clients["bina"].requests == 0)
+    check("B5 fayldakı cooldown: fast nə sayta, nə bazaya qoşulmadan çıxır",
+          code == 0 and not events, f"hadisələr={events}")
 
-    # B6: baseline olmadan bildirişli fast işləmir
-    auto.save_state({}, con)
+    # B6: fayl yoxdur (CI), bazada aktiv cooldown → toplama gedir, sonra bazadakı cooldown götürülür
+    os.remove(auto.STATE_PATH)
+    events.clear()
+    code = auto.main(["fast", "--quiet"], ctx=ctx)
+    f = auto._read_file()
+    check("B6 fayl yoxdur, bazada cooldown: bazaya yalnız toplamadan sonra qoşulur, cooldown fayla keçir, "
+          "sayğac sıfırlanmır",
+          [e[0] for e in events][-1] == "connect" and events[0][0] == "req"
+          and f.get("cooldown_until") == db_state["cooldown_until"] and f.get("blocks") == 1, f"fayl={f}")
+
+    # B7: fayl yoxdur, bazada da vəziyyət yoxdur, ilk sorğu bloklanır → dərhal dayanır, fayla və bazaya yazılır
+    reset_state()
+    events.clear()
+    clients = fresh_clients(block=True)
+    ctx = auto.Ctx(clients, fake_connect)
+    code = auto.main(["fast", "--quiet"], ctx=ctx)
+    f, d = auto._read_file(), auto._db_state(con)
+    check("B7 fayl yoxdur + ilk sorğu bloklanır: 1 sorğudan sonra dayanır, cooldown fayl və bazada",
+          code == 3 and [e[0] for e in events].count("req") == 1 and clients["tap"].requests == 0
+          and f.get("blocks") == d.get("blocks") == 1 and auto.cooldown_until(f) is not None
+          and f.get("cooldown_until") == d.get("cooldown_until"), f"hadisələr={[e[0] for e in events]}")
+
+    # B8: baseline olmadan bildirişli fast: (fayl bilmir) toplayır, amma heç nə yazmır; sonra fayl bilir → dərhal çıxır
+    reset_state()
     con.execute("DELETE FROM settings WHERE key LIKE 'notify_min_id_%' OR key LIKE 'notify_margin_%' "
                 "OR key = 'notify_baseline_at'")
+    clients = fresh_clients(k=6)
+    ctx = auto.Ctx(clients, fake_connect)
     code = auto.main(["fast"], ctx=ctx)
-    check("B6 baseline yoxdursa bildirişli fast işləmir (kod 2)", code == 2 and clients["bina"].requests == 0)
+    check("B8 baseline yoxdur: kod 2, elan yazılmadı, fayl 'baseline: false' bilir",
+          code == 2 and clients["bina"].requests == 1 and get("bina", B + 6) is None and auto._read_file().get("baseline") is False)
+    events.clear()
+    code = auto.main(["fast"], ctx=ctx)
+    check("B9 növbəti dəfə baseline yoxdursa sayta da, bazaya da qoşulmadan çıxır (kod 2)",
+          code == 2 and not events, f"hadisələr={events}")
 
-    # B7-B8: baseline (3 səhifə, bildirişsiz) → notify_min_id = ən böyük nömrə
+    # B10-B11: baseline (3 səhifə, bildirişsiz) → notify_min_id = ən böyük nömrə
     n_before = con.execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
     clients = {"bina": FakeClient("bina", {"b": [[row("bina", B + 10)], [row("bina", B + 30)], [row("bina", B + 20)],
                                                  [row("bina", B + 99)]]}),
@@ -185,16 +226,16 @@ try:
     ctx = auto.Ctx(clients, fake_connect)
     code = auto.main(["baseline"], ctx=ctx)
     setting = {r["key"]: r["value"] for r in con.execute("SELECT key, value FROM settings WHERE key LIKE 'notify_%'")}
-    check("B7 baseline: hər mənbədən 3 səhifə, notify_min_id = ən böyük nömrə, N default",
+    check("B10 baseline: hər mənbədən 3 səhifə, notify_min_id = ən böyük nömrə, N default",
           code == 0 and clients["bina"].requests == 3 and setting.get("notify_min_id_bina") == str(B + 30)
           and setting.get("notify_min_id_tap") == str(T + 70) and setting.get("notify_margin_bina") == "800"
           and setting.get("notify_margin_tap") == "2000" and "notify_baseline_at" in setting, f"{setting}")
-    check("B8 baseline bildiriş yaratmır, amma uyğunluq yaranır",
+    check("B11 baseline bildiriş yaratmır, amma uyğunluq yaranır",
           con.execute("SELECT COUNT(*) FROM notifications").fetchone()[0] == n_before
           and con.execute("SELECT COUNT(*) FROM matches WHERE listing_id = ?",
                           (get("bina", B + 10)["id"],)).fetchone()[0] >= 1)
 
-    # B9-B11: notify_min_id − N qaydası
+    # B12-B15: notify_min_id − N qaydası
     con.execute("UPDATE settings SET value = '100' WHERE key = 'notify_margin_bina'")  # test üçün kiçik N
     hi, lo = B + 30 - 100 + 1, B + 30 - 100     # hədd = min_id − N
     clients = {"bina": FakeClient("bina", {"b": [[row("bina", hi), row("bina", lo)]]}),
@@ -205,19 +246,19 @@ try:
     def notifs(ext):
         return con.execute("SELECT COUNT(*) FROM notifications WHERE listing_id = ?",
                            (get("bina", ext)["id"],)).fetchone()[0]
-    check("B9 nömrə > notify_min_id − N → bildiriş getdi", code == 0 and notifs(hi) == 1, f"bildiriş={notifs(hi)}")
-    check("B10 nömrə ≤ notify_min_id − N → uyğunluq var, bildiriş yox", notifs(lo) == 0
+    check("B12 nömrə > notify_min_id − N → bildiriş getdi", code == 0 and notifs(hi) == 1, f"bildiriş={notifs(hi)}")
+    check("B13 nömrə ≤ notify_min_id − N → uyğunluq var, bildiriş yox", notifs(lo) == 0
           and con.execute("SELECT COUNT(*) FROM matches WHERE listing_id = ?",
                           (get("bina", lo)["id"],)).fetchone()[0] >= 1)
     gl = con.execute("SELECT details FROM logs WHERE source = 'Bildiriş qaydası' ORDER BY id DESC LIMIT 1").fetchone()
-    check("B11 qərar loqa yazılır (bildiriş getdi / bildirişsiz qaldı)",
+    check("B14 qərar loqa yazılır (bildiriş getdi / bildirişsiz qaldı)",
           gl is not None and f"{hi}" in gl["details"] and "bildiriş getdi" in gl["details"]
           and f"{lo}" in gl["details"] and "bildirişsiz qaldı" in gl["details"])
-    check("B12 sync_runs dövr müddətini və toplama vaxtını yazır",
+    check("B15 sync_runs dövr müddətini və toplama vaxtını yazır",
           bool(runs("fast collect=")) and con.execute("SELECT COUNT(*) FROM sync_runs WHERE started_at >= ?",
                                                       (auto.fmt(auto.now() - timedelta(minutes=10)),)).fetchone()[0] >= 2)
 
-    # B13-B14: nightly (axın üzrə yazılır, tam oxunan axında yoxa çıxanlar, içində fast dövrü)
+    # B16-B18: nightly (axın üzrə yazılır, tam oxunan axında yoxa çıxanlar, içində fast dövrü)
     ran = []
     real_fast = auto.fast_cycle
     auto.fast_cycle = lambda *a, **kw: ran.append(kw.get("mode")) or None
@@ -227,10 +268,10 @@ try:
     ctx = auto.Ctx(clients, fake_connect)
     code = auto.main(["nightly", "--deal", "rent"], ctx=ctx)
     auto.fast_cycle, auto.FAST_EVERY = real_fast, 15 * 60
-    check("B13 nightly: bütün səhifələr oxunur və yazılır", code == 0 and get("bina", B + 201) is not None
+    check("B16 nightly: bütün səhifələr oxunur və yazılır", code == 0 and get("bina", B + 201) is not None
           and get("tap", T + 200) is not None and bool(runs("nightly deal=rent")))
-    check("B14 nightly içində fast dövrü işləyir", "fast(nightly)" in ran, f"{ran}")
-    check("B15 kilid nightly bitəndə buraxılıb", not os.path.exists(auto.LOCK_PATH))
+    check("B17 nightly içində fast dövrü işləyir", "fast(nightly)" in ran, f"{ran}")
+    check("B18 kilid nightly bitəndə buraxılıb", not os.path.exists(auto.LOCK_PATH))
 finally:
     real_rollback()
     real_close()
