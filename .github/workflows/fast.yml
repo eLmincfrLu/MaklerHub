@@ -1,24 +1,22 @@
-# Hər 15 dəqiqədən bir: python -m scraper.auto fast (52 Bina + 6 Tap axını, 1-ci səhifə).
-# Cədvəl YALNIZ repo dəyişəni SCRAPER_ENABLED=true olanda işləyir; yoxdursa iş dərhal ötürülür (skipped).
-# 23:00-23:59 UTC boşdur: o vaxt nightly başlayır (Bakı 03:00) və növbədəki nightly ləğv olunmasın.
+# Yalnız əl ilə: python -m scraper.auto fast (52 Bina + 6 Tap axını, 1-ci səhifə). Cədvəl loop.yml-dədir.
+# Eyni concurrency qrupundadır: loop işləyirsə növbədə gözləyir (və ya loop-un növbəti işi onu əvəz edir).
+# SCRAPER_ENABLED=true olanda sonda loop zəncirini bərpa edir (bu iş növbədə loop-u əvəz etmişdisə).
 name: fast
 
 on:
-  schedule:
-    - cron: "*/15 0-22 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: write
 
-# fast, nightly və baseline eyni qrupdadır: eyni anda yalnız biri işləyir (saytlara sorğular ardıcıl gedir).
+# fast, nightly, baseline və loop eyni qrupdadır: eyni anda yalnız biri işləyir (saytlara sorğular ardıcıl gedir).
 concurrency:
   group: scraper
   cancel-in-progress: false
 
 jobs:
   fast:
-    if: github.event_name == 'workflow_dispatch' || vars.SCRAPER_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -37,3 +35,8 @@ jobs:
         with:
           path: scraper/state
           key: scraper-state-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+      - name: loop zəncirini bərpa et
+        if: ${{ !cancelled() && vars.SCRAPER_ENABLED == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run loop.yml --ref "$GITHUB_REF_NAME" -f chain=true

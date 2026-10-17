@@ -1,5 +1,6 @@
 """scraper/auto.py testi: kilid, cooldown, "topla sonra yaz", baseline və notify_min_id qaydası, nightly,
-Tap.az təkrar cəhdləri (timeout) və bir axının xətasının digər axınları ləğv etməməsi.
+Tap.az təkrar cəhdləri (timeout), bir axının xətasının digər axınları ləğv etməməsi, davam edən tam sayğı
+(deadline → növbəti iş qaldığı yerdən), loop (növbəti işin işə salınması, söndürmə açarı, cooldown, SIGTERM).
 
 Saytlara sorğu getmir (saxta klientlər). Real Neon bazasına qoşulur (DATABASE_URL .env-dən): hər şey bir
 tranzaksiyadadır (commit → SAVEPOINT), sonda ROLLBACK. Kilid / vəziyyət / loq faylları müvəqqəti qovluqdadır.
@@ -8,6 +9,7 @@ Bazada aktiv kirayə profili olmalıdır. İşlətmək (layihə kökündən):
 """
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -62,9 +64,78 @@ check("A8 ardıcıl bloklanma uzanır, uğurlu dövr sıfırlayır",
 check("A9 nightly: bazar günü satış da, digər günlər kirayə",
       auto.nightly_deal(auto.parse("2026-10-18 03:00:00")) == "both"
       and auto.nightly_deal(auto.parse("2026-10-19 03:00:00")) == "rent")
-items = list(range(58))
-check("A10 --chunk i/n siyahını üst-üstə düşmədən bölür",
-      sum((auto.chunk(items, f"{i}/3") for i in (1, 2, 3)), []) == items and len(auto.chunk(items, "1/3")) == 20)
+
+
+# ---------------------------------------------------------------- E: loop (bazasız: saxta fast dövrü)
+class Proc:
+    def __init__(self, code=0):
+        self.returncode, self.stdout, self.stderr = code, "", ""
+
+
+calls = []
+fake_run = lambda args, **kw: calls.append(args) or Proc()
+env_keys = ("SCRAPER_ENABLED", "GITHUB_ACTIONS", "GH_TOKEN", "GITHUB_OUTPUT", "GITHUB_REF_NAME")
+saved_env = {k: os.environ.get(k) for k in env_keys}
+for k in env_keys:
+    os.environ.pop(k, None)
+out_file = os.path.join(TMP, "gh_output")
+os.environ.update(GITHUB_ACTIONS="true", GH_TOKEN="x", GITHUB_OUTPUT=out_file, GITHUB_REF_NAME="main")
+check("E1 söndürmə açarı: SCRAPER_ENABLED yoxdur → növbəti iş başladılmır",
+      auto.dispatch_next(run=fake_run) is False and not calls)
+os.environ["SCRAPER_ENABLED"] = "false"
+check("E2 SCRAPER_ENABLED=false → növbəti iş başladılmır", auto.dispatch_next(run=fake_run) is False and not calls)
+os.environ["SCRAPER_ENABLED"] = "true"
+ok = auto.dispatch_next(run=fake_run)
+check("E3 SCRAPER_ENABLED=true → gh workflow run loop.yml -f chain=true, GITHUB_OUTPUT dispatched=true",
+      ok and calls == [["gh", "workflow", "run", "loop.yml", "--ref", "main", "-f", "chain=true"]]
+      and "dispatched=true" in open(out_file, encoding="utf-8").read(), f"{calls}")
+check("E4 gh xətası → False (workflow-un ehtiyat addımı işə düşür)",
+      auto.dispatch_next(run=lambda a, **kw: Proc(1)) is False)
+
+real_fast, real_due, real_left = auto.fast_cycle, auto._due, auto.LOOP_MIN_LEFT
+fast_calls, sent = [], []
+auto.LOOP_MIN_LEFT = 0.3
+auto._due = lambda ctx: False
+auto.fast_cycle = lambda ctx, state, **kw: fast_calls.append(time.time()) or None
+t = time.time()
+code = auto.loop(None, {}, minutes=0.05, dispatch_at=0.02, every=1, dispatch=lambda: sent.append(time.time()))
+check("E5 loop: --minutes bitəndə dayanır, fast hər `every` san, növbəti iş BİR dəfə dispatch_at-da",
+      code == 0 and 2.5 <= time.time() - t <= 4.5 and 2 <= len(fast_calls) <= 4 and len(sent) == 1
+      and sent[0] - t >= 1.1, f"müddət={time.time() - t:.1f} fast={len(fast_calls)} dispatch={len(sent)}")
+fast_calls.clear(), sent.clear()
+st_cd = {"cooldown_until": auto.fmt(auto.now() + timedelta(hours=1)), "blocks": 1}
+code = auto.loop(None, st_cd, minutes=0.03, dispatch_at=0.01, every=1, dispatch=lambda: sent.append(1))
+check("E6 cooldown: loop sayta sorğu göndərmir, gözləyir, amma növbəti işi yenə işə salır (zəncir qırılmır)",
+      code == 0 and not fast_calls and len(sent) == 1)
+
+
+def sigterm_fast(ctx, state, **kw):
+    fast_calls.append(1)
+    signal.raise_signal(signal.SIGTERM)
+
+
+fast_calls.clear(), sent.clear()
+auto.fast_cycle = sigterm_fast
+auto.install_signals()
+t = time.time()
+code = auto.loop(None, {}, minutes=1, dispatch_at=0.9, every=1, dispatch=lambda: sent.append(1))
+check("E7 SIGTERM: loop dərhal dayanır (kod 0), növbəti dövr başlamır",
+      code == 0 and len(fast_calls) == 1 and time.time() - t < 3, f"fast={len(fast_calls)}")
+for k, v in saved_env.items():
+    if v is None:
+        os.environ.pop(k, None)
+    else:
+        os.environ[k] = v
+state_file = {"cooldown_until": None, "blocks": 0, "baseline": True, "marker": "sigterm"}
+with open(auto.STATE_PATH, "w", encoding="utf-8") as fh:
+    json.dump(state_file, fh)
+code = auto.main(["loop", "--minutes", "1"], ctx=auto.Ctx({}, lambda: None))
+check("E8 SIGTERM main-də: kod 0, vəziyyət faylı itməyib, kilid buraxılıb",
+      code == 0 and auto._read_file().get("marker") == "sigterm" and not os.path.exists(auto.LOCK_PATH))
+signal.signal(signal.SIGTERM, signal.SIG_DFL)
+signal.signal(signal.SIGINT, signal.default_int_handler)
+auto.fast_cycle, auto._due, auto.LOOP_MIN_LEFT = real_fast, real_due, real_left
+os.remove(auto.STATE_PATH)
 
 
 # ---------------------------------------------------------------- C: Tap.az təkrar cəhd və axın xətaları (bazasız)
@@ -382,7 +453,7 @@ try:
     code = auto.main(["nightly", "--deal", "rent"], ctx=ctx)
     auto.fast_cycle, auto.FAST_EVERY = real_fast, 15 * 60
     check("B16 nightly: bütün səhifələr oxunur və yazılır", code == 0 and get("bina", B + 201) is not None
-          and get("tap", T + 200) is not None and bool(runs("nightly deal=rent")))
+          and get("tap", T + 200) is not None and bool(runs("nightly TAMAMLANDI deal=rent")))
     check("B17 nightly içində fast dövrü işləyir", "fast(nightly)" in ran, f"{ran}")
     check("B18 kilid nightly bitəndə buraxılıb", not os.path.exists(auto.LOCK_PATH))
 
@@ -410,6 +481,60 @@ try:
     bina_log = con.execute("SELECT details FROM logs WHERE source = (SELECT name FROM sources WHERE key = 'bina') "
                            "ORDER BY id DESC LIMIT 1").fetchone()
     check("B20 yazma fazalarının vaxtı logs.details-də", "yazma fazaları: yükləmə=" in bina_log["details"])
+
+    # D: davam edən tam sayğı (3 axın; 1-ci axından sonra vaxt bitir → növbəti iş qaldığı yerdən)
+    con.execute("DELETE FROM settings WHERE key IN (?, ?)", (auto.PROGRESS_KEY, auto.LAST_FULL_KEY))
+    reset_state()
+    STREAMS[:] = [stream("bina", "b"), stream("tap", "t"), stream("bina", "b2")]
+    stale = con.execute("SELECT l.id FROM listings l JOIN sources s ON s.id = l.source_id WHERE s.key = 'bina' "
+                        "AND l.active = 1 AND l.district = ? AND l.deal_type = 'rent' AND l.property_type = 'Yeni tikili' "
+                        "ORDER BY l.id LIMIT 1", (district,)).fetchone()["id"]
+    con.execute("UPDATE listings SET last_seen_at = '2020-01-01 00:00:00' WHERE id = ?", (stale,))
+    clients = {"bina": FakeClient("bina", {"b": [[row("bina", B + 400)], [row("bina", B + 401)]],
+                                           "b2": [[row("bina", B + 402)]]}),
+               "tap": FakeClient("tap", {"t": [[row("tap", T + 400)]]})}
+    ctx = auto.Ctx(clients, fake_connect)
+    st = auto.load_state(con)
+
+    def tick():  # 1-ci axın (2 səhifə) bitəndən sonra "vaxt bitir"
+        if clients["bina"].requests >= 2:
+            raise auto.Deadline("vaxt bitdi (test)")
+
+    runs_before = con.execute("SELECT COUNT(*) FROM logs WHERE details LIKE '%nightly TAMAMLANDI%'").fetchone()[0]
+    err = auto.nightly(ctx, st, deal="rent", tick=tick)
+    prog = auto.load_progress(con)
+    active = lambda lid: con.execute("SELECT active FROM listings WHERE id = ?", (lid,)).fetchone()["active"]
+    done_runs = lambda: con.execute("SELECT COUNT(*) FROM logs WHERE details LIKE '%nightly TAMAMLANDI%'"
+                                    ).fetchone()[0] - runs_before
+    check("D1 deadline: 1-ci axın bazada 'bitdi' kimi qeyd olunub, sayğı yarımçıqdır, elanları yazılıb",
+          err is None and list(prog["done"]) == ["bina: test bina b"] and prog["done"]["bina: test bina b"] is True
+          and not prog["finished_at"] and get("bina", B + 401) is not None and get("tap", T + 400) is None,
+          f"done={prog['done']}")
+    check("D2 yarımçıq sayğıda yoxa çıxan işarələnmir, 'TAMAMLANDI' yoxdur",
+          active(stale) == 1 and done_runs() == 0)
+    check("D3 yarımçıq sayğı varsa nightly_due → True (vaxtdan asılı olmayaraq)",
+          auto.nightly_due(con, at=auto.parse("2026-10-17 01:00:00")) is True)
+    req_b = clients["bina"].requests
+    code = auto.main(["nightly", "--deal", "sale"], ctx=ctx)
+    prog = auto.load_progress(con)
+    check("D4 növbəti iş qaldığı yerdən davam edir (1-ci axın təkrar oxunmur, --deal nəzərə alınmır)",
+          code == 0 and clients["bina"].requests == req_b + 1 and prog["deal"] == "rent"
+          and len(prog["done"]) == 3 and prog["finished_at"] and get("tap", T + 400) is not None,
+          f"sorğu={clients['bina'].requests - req_b} done={len(prog['done'])}")
+    check("D5 bütün axınlar bitəndən sonra yoxa çıxanlar toplu işarələnir, sync_runs + 'nightly TAMAMLANDI'",
+          active(stale) == 0 and done_runs() >= 2
+          and auto._setting(con, auto.LAST_FULL_KEY) == prog["finished_at"])
+    fin = auto.parse(prog["finished_at"])
+    check("D6 nightly_due: tam sayğıdan sonra 20 saat keçməyibsə yox; >20 saat və Bakı ≥03:00 → bəli; 03:00-dan əvvəl yox",
+          auto.nightly_due(con, at=fin + timedelta(hours=1)) is False
+          and auto.nightly_due(con, at=(fin + timedelta(days=1)).replace(hour=12)) is True
+          and auto.nightly_due(con, at=(fin + timedelta(days=2)).replace(hour=2)) is False)
+    req_b = clients["bina"].requests
+    code = auto.main(["nightly", "--restart", "--deadline-minutes", "0.0001"], ctx=ctx)
+    prog = auto.load_progress(con)
+    check("D7 --deadline-minutes: vaxt bitibsə heç bir axın başlamır, yeni sayğı yarımçıq saxlanır (kod 0)",
+          code == 0 and clients["bina"].requests == req_b and prog["done"] == {} and not prog["finished_at"])
+    STREAMS[:] = [stream("bina", "b"), stream("tap", "t")]
 finally:
     real_rollback()
     real_close()

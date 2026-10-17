@@ -3,8 +3,9 @@
     PYTHONIOENCODING=utf-8 python -m scraper.auto ping        (hər sayta 1 sorğu; bazaya qoşulmur)
     PYTHONIOENCODING=utf-8 python -m scraper.auto baseline    (hər axından 3 səhifə, bildirişsiz; notify_min_id)
     PYTHONIOENCODING=utf-8 python -m scraper.auto fast        (hər 15 dəq: bütün axınların 1-ci səhifəsi)
-    PYTHONIOENCODING=utf-8 python -m scraper.auto nightly     (03:00: kirayə tam sayğı, bazar günü satış da)
-    PYTHONIOENCODING=utf-8 python -m scraper.auto nightly --deal sale --source bina --chunk 1/3
+    PYTHONIOENCODING=utf-8 python -m scraper.auto nightly     (tam sayğını başlat / qaldığı yerdən davam et)
+    PYTHONIOENCODING=utf-8 python -m scraper.auto nightly --deal sale --deadline-minutes 330 [--restart]
+    PYTHONIOENCODING=utf-8 python -m scraper.auto loop --minutes 340   (davamlı rejim, GitHub Actions loop.yml)
     PYTHONIOENCODING=utf-8 python -m scraper.auto status      (cooldown və son sinxronizasiyalar)
 
 Qaydalar:
@@ -20,8 +21,14 @@ Qaydalar:
   MAKLERHUB_NO_LOCK=1 kilidi söndürür (CI-da concurrency istifadə olunur).
 - Bildiriş qapısı: elan yalnız external_id > notify_min_id_<mənbə> − notify_margin_<mənbə> olanda bildiriş
   yaradır (settings; baseline əmri yazır). Baseline olmadan fast bildirişlə işləmir (--quiet lazımdır).
-- nightly: axın üzrə yazılır (hər axın ayrıca qısa bağlantı) və yoxa çıxanlar işarələnir; içində hər 15 dəq
-  bir fast dövrü işləyir (sorğular yenə ardıcıl, 3-5 san fasilə ilə).
+- nightly: DAVAM EDƏN tam sayğı. Hər axın ayrıca qısa bağlantı ilə yazılır və bitən axın elə həmin tranzaksiyada
+  settings.nightly_progress-ə qeyd olunur; vaxt bitəndə (--deadline-minutes / loop --minutes), SIGTERM-də və ya
+  bloklanmada növbəti iş qaldığı yerdən davam edir (bazar günü satış da). Yoxa çıxanlar yalnız BÜTÜN axınlar
+  bitəndən sonra toplu işarələnir, sonra sync_runs və "nightly TAMAMLANDI". 48 saatdan köhnə yarımçıq sayğı atılır.
+  İçində hər 15 dəq bir fast dövrü işləyir (sorğular yenə ardıcıl, 3-5 san fasilə ilə).
+- loop: `--minutes` ərzində hər 15 dəq fast; Bakı 03:00-dan sonra və son TAM sayğıdan 20 saatdan çox keçibsə
+  (və ya yarımçıq sayğı varsa) nightly. (minutes − 10)-cu dəqiqədə növbəti iş `gh workflow run loop.yml` ilə
+  işə salınır (yalnız SCRAPER_ENABLED=true olanda). Cooldown olanda iş gözləyir (zəncir qırılmır).
 - Bir axının xətası (timeout, HTTP 5xx, GraphQL xətası) digər axınları ləğv etmir: o axın "alınmadı" kimi loqa
   yazılır (yoxa çıxanlar onda işarələnmir). Bir mənbədə ardıcıl SOURCE_FAIL_LIMIT axın alınmasa, həmin mənbənin
   dövrdəki qalan axınları ötürülür (sayt əlçatmazdır, dövr uzanmasın). Bloklanma isə bütün toplamanı dayandırır.
@@ -32,6 +39,8 @@ import argparse
 import json
 import logging
 import os
+import signal
+import subprocess
 import sys
 import time
 from argparse import Namespace
@@ -62,6 +71,12 @@ BASELINE_PAGES = 3
 SOURCE_FAIL_LIMIT = 2                        # bir mənbədə ardıcıl bu qədər axın alınmasa, qalanı ötürülür
 DEFAULT_MARGIN = {"bina": 800, "tap": 2000}  # ~6 saatlıq nömrə artımı (Bina ~3300/gün, Tap ~8000/gün)
 FMT = "%Y-%m-%d %H:%M:%S"
+PROGRESS_KEY = "nightly_progress"            # settings: davam edən tam sayğının irəliləyişi (JSON)
+LAST_FULL_KEY = "nightly_last_full"          # settings: son TAM bitmiş sayğının vaxtı
+NIGHTLY_HOUR = 3                             # Bakı vaxtı: tam sayğı bu saatdan sonra başlayır
+NIGHTLY_GAP = timedelta(hours=20)            # son tam sayğıdan ən azı bu qədər keçməlidir
+COUNT_MAX_AGE = timedelta(hours=48)          # bundan köhnə yarımçıq sayğı atılır, yenisi başlayır
+LOOP_MIN_LEFT = 6 * 60                       # loop: bundan az vaxt qalıbsa yeni fast dövrü başlamır (san)
 
 log = logging.getLogger("scraper.auto")
 
@@ -277,17 +292,6 @@ def all_streams(deal="both", sources=SOURCES):
     return [s for src in sources for s in streams_for(src, deal)]
 
 
-def chunk(items, spec):
-    """'2/3' → siyahının 2-ci üçdə biri (ardıcıl hissələr)."""
-    if not spec:
-        return items
-    i, n = (int(x) for x in spec.split("/"))
-    if not 1 <= i <= n:
-        raise ValueError(f"--chunk {spec}: 1 ≤ i ≤ n olmalıdır")
-    size = -(-len(items) // n)
-    return items[(i - 1) * size: i * size]
-
-
 def collect(streams, clients, pages, on_page=None):
     """Axınları şəbəkədən oxuyur (bazaya toxunmur).
     → (rows {mənbə: [elan]}, done [(axın, tam oxundu)], xəta, failed {mənbə: [alınmayan axın etiketi]}).
@@ -317,9 +321,9 @@ def collect(streams, clients, pages, on_page=None):
                     seen[src].add(row["external_id"])
                     rows[src].append(row)
                 complete = not has_next
-                if on_page:
+                if on_page and has_next:  # son səhifədən sonra yox: axın tam oxunubsa yarımçıq sayılmasın
                     on_page()
-        except BlockedError as e:
+        except (BlockedError, Deadline) as e:
             error = e
             break
         except (ScrapeError, requests.RequestException) as e:
@@ -565,68 +569,302 @@ def nightly_deal(at=None):
     return "both" if (at or now()).weekday() == 6 else "rent"
 
 
-def nightly(ctx, state, deal="auto", sources=SOURCES, chunk_spec=None):
-    """Tam sayğı, axın üzrə yazılır; yoxa çıxanlar işarələnir; içində hər 15 dəq fast dövrü."""
-    from .store import Store
-    deal = nightly_deal() if deal == "auto" else deal
+# ---------------------------------------------------------------- deadline və siqnallar
+class Deadline(Exception):
+    """İş vaxtı bitdi (--minutes / --deadline-minutes) və ya SIGTERM/SIGINT gəldi: vəziyyət yazılıb çıxılır."""
+
+
+_SIGNAL = {"hit": False}
+
+
+def _on_signal(signum, _frame):
+    if _SIGNAL["hit"]:
+        return
+    _SIGNAL["hit"] = True
+    raise Deadline(f"siqnal {signal.Signals(signum).name}")
+
+
+def install_signals():
+    """GitHub ləğv / timeout zamanı əvvəl SIGINT, ~7,5 san sonra SIGTERM göndərir: Deadline qaldırılır,
+    yazılmış hissə commit olunub, vəziyyət (cooldown, sayğının irəliləyişi) yazılır."""
+    _SIGNAL["hit"] = False
+    for name in ("SIGTERM", "SIGINT"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), _on_signal)
+
+
+def _hm(sec):
+    sec = max(int(sec), 0)
+    return f"{sec // 3600}:{sec % 3600 // 60:02d}"
+
+
+# ---------------------------------------------------------------- nightly: davam edən tam sayğı
+def stream_key(st):
+    return f"{st['source']}: {st['label']}"
+
+
+def load_progress(con):
+    row = con.execute("SELECT value FROM settings WHERE key = ?", (PROGRESS_KEY,)).fetchone()
+    return json.loads(row["value"]) if row else None
+
+
+def save_progress(con, prog):
+    """Commit çağırana aiddir (axının elanları ilə eyni tranzaksiyada)."""
+    con.execute("INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (PROGRESS_KEY, json.dumps(prog, ensure_ascii=False)))
+
+
+def count_streams(deal):
     deals = ["rent", "sale"] if deal == "both" else [deal]
-    streams = chunk([s for d in deals for src in sources for s in streams_for(src, d)], chunk_spec)
-    log.info("nightly: deal=%s mənbə=%s chunk=%s → %s axın", deal, ",".join(sources), chunk_spec or "—", len(streams))
-    t0, started = time.time(), now()
-    stores, error = {}, None
-    failed = {}
-    last_fast = [time.time()]
+    return [s for d in deals for src in SOURCES for s in streams_for(src, d)]
+
+
+def nightly_due(con, at=None):
+    """Sayğı başlamalıdır / davam etməlidir: yarımçıq sayğı varsa — həmişə; yoxdursa Bakı 03:00-dan sonra VƏ son
+    TAM sayğıdan 20 saatdan çox keçibsə."""
+    at = at or now()
+    prog = load_progress(con)
+    if prog and not prog.get("finished_at") and at - parse(prog["started_at"]) < COUNT_MAX_AGE:
+        return True
+    last = parse(_setting(con, LAST_FULL_KEY))
+    return at.hour >= NIGHTLY_HOUR and (last is None or at - last > NIGHTLY_GAP)
+
+
+def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, last_fast=None):
+    """Tam sayğı (davam edən): hansı axınların bitdiyi settings.nightly_progress-dədir; vaxt bitəndə (deadline,
+    siqnal) və ya bloklanmada növbəti iş qaldığı yerdən davam edir. Silinmiş elanlar yalnız BÜTÜN axınlar
+    bitəndən sonra, toplu işarələnir; sonra sync_runs və "nightly TAMAMLANDI". İçində hər 15 dəq fast dövrü.
+
+    → xəta (BlockedError) və ya None; Deadline qalxmır (irəliləyiş yazılır, None qaytarılır)."""
+    from .store import Store
+    t_job = time.time()
+    last_fast = last_fast or [time.time()]
+    tick = tick or (lambda: None)
+
+    def check():
+        tick()
+        if deadline is not None and time.time() >= deadline:
+            raise Deadline("vaxt bitdi")
+
+    con = ctx.connect()
+    try:
+        prog = load_progress(con)
+        at = now()
+        if prog and not prog.get("finished_at") and at - parse(prog["started_at"]) >= COUNT_MAX_AGE:
+            log.warning("nightly: yarımçıq sayğı çox köhnədir (%s başlayıb) — yeni sayğı başlayır", prog["started_at"])
+            prog = None
+        if restart or not prog or prog.get("finished_at"):
+            d = nightly_deal(at) if deal == "auto" else deal
+            prog = {"started_at": fmt(at), "deal": d, "streams": [stream_key(s) for s in count_streams(d)],
+                    "done": {}, "failed": [], "stats": {}, "finished_at": None}
+            save_progress(con, prog)
+            con.commit()
+            log.info("nightly: YENİ sayğı deal=%s, %s axın", d, len(prog["streams"]))
+        else:
+            if deal not in ("auto", prog["deal"]):
+                log.info("nightly: yarımçıq sayğı davam edir (deal=%s), --deal %s nəzərə alınmır", prog["deal"], deal)
+            log.info("nightly: sayğı DAVAM EDİR (%s başlayıb, deal=%s): %s/%s axın bitib", prog["started_at"],
+                     prog["deal"], len(prog["done"]), len(prog["streams"]))
+    finally:
+        con.close()
+
+    by_key = {stream_key(s): s for s in count_streams(prog["deal"])}
+    total = len(prog["streams"])
+    todo = [by_key[k] for k in prog["streams"] if k not in prog["done"] and k in by_key]
+    started = parse(prog["started_at"])
+    t_count = time.time() - (now() - started).total_seconds()   # sayğının başlanğıcı (epoch)
+    stores, error, stop = {}, None, None
+    done_here = 0
 
     def on_page():
+        check()
         if time.time() - last_fast[0] >= FAST_EVERY:
             last_fast[0] = time.time()
             err = fast_cycle(ctx, state, update_state=False, mode="fast(nightly)")
-            if isinstance(err, BlockedError):
+            if isinstance(err, (BlockedError, Deadline)):
                 raise err
 
-    for i, st in enumerate(streams, 1):
+    def store_for(con, src):
+        if src not in stores:
+            stores[src] = Store(con, src, notify=True, gate=make_gate(con, src), started=started, t0=t_count)
+            stores[src].stats = Counter(prog["stats"].get(src, {}))
+        store = stores[src]
+        store.attach(con)
+        return store
+
+    for st in todo:
+        try:
+            on_page()  # axınlar arası: deadline / siqnal və vaxtı çatıbsa fast dövrü
+        except Deadline as e:
+            stop = e
+            break
+        except BlockedError as e:
+            error = e
+            break
         rows, done, error, bad = collect([st], ctx.clients, pages=100000, on_page=on_page)
-        for src, labels in bad.items():
-            failed.setdefault(src, []).extend(labels)
+        if isinstance(error, Deadline):
+            stop, error = error, None
+        src, key = st["source"], stream_key(st)
+        finished = stop is None and error is None   # axın işlənib (tam oxunub və ya "alınmadı")
         con = ctx.connect()
         try:
-            src = st["source"]
-            if src not in stores:
-                gate = make_gate(con, src)
-                stores[src] = Store(con, src, notify=True, gate=gate, started=started, t0=t0)
-            store = stores[src]
-            store.attach(con)
+            store = store_for(con, src)
             if rows.get(src):
                 store.save_many(rows[src])
-            removed = 0
-            if done and done[0][1]:
-                removed = store.mark_removed(**st["removal"])
+            if finished:
+                prog["done"][key] = bool(done and done[0][1])
+                if bad.get(src):
+                    prog["failed"].append(key)
+            prog["stats"][src] = dict(store.stats)
+            save_progress(con, prog)
             store.commit()
             for e in store.gate_events:
                 log.info(_event_line(e))
             store.gate_events = []
         finally:
             con.close()
-        log.info("nightly [%s/%s] %s: %s elan, %s, yoxa çıxan %s", i, len(streams), st["label"],
-                 len(rows.get(st["source"], [])),
-                 "ALINMADI" if bad.get(st["source"]) else ("tam oxundu" if done and done[0][1] else "TAM OXUNMADI"),
-                 removed)
-        if error is not None:
+        if finished:
+            done_here += 1
+            left = total - len(prog["done"])
+            spent = time.time() - t_job
+            log.info("nightly axın %s/%s %s: %s elan, %s | keçən %s, ETA %s", len(prog["done"]), total, st["label"],
+                     len(rows.get(src, [])),
+                     "ALINMADI" if bad.get(src) else ("tam oxundu" if prog["done"][key] else "TAM OXUNMADI"),
+                     _hm(time.time() - t_count), _hm(spent / done_here * left))
+        if stop is not None or error is not None:
             break
+
+    complete = len([k for k in prog["streams"] if k in prog["done"] or k not in by_key]) == total
+    if not complete:
+        why = f"bloklanma: {error}" if error is not None else f"{stop}"
+        log.info("nightly dayandı (%s): %s/%s axın bitib — növbəti işdə qaldığı yerdən davam edəcək",
+                 why, len(prog["done"]), total)
+        _finish_state(ctx, state, error, "nightly")
+        return error
+
+    # bütün axınlar bitdi: yoxa çıxanlar TOPLU, sonra sync_runs + "nightly TAMAMLANDI"
     con = ctx.connect()
     try:
+        for src in SOURCES:
+            store_for(con, src)
+        for key in prog["streams"]:
+            if prog["done"].get(key) and key in by_key:
+                st = by_key[key]
+                stores[st["source"]].mark_removed(**st["removal"])
+        prog["finished_at"] = fmt(now())
         for src, store in stores.items():
-            store.attach(con)
-            err = source_error(error, failed, src, streams)
+            prog["stats"][src] = dict(store.stats)
+        save_progress(con, prog)
+        con.execute("INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (LAST_FULL_KEY, prog["finished_at"]))
+        con.commit()
+        failed = {}
+        for key in prog["failed"]:
+            failed.setdefault(key.split(":")[0], []).append(key.split(": ", 1)[1])
+        all_streams_ = [by_key[k] for k in prog["streams"] if k in by_key]
+        for src, store in stores.items():
+            err = source_error(None, failed, src, all_streams_)
             store.finish(ok=err is None, error=err, latency=_latency(ctx.clients[src]),
-                         label=f"nightly deal={deal} chunk={chunk_spec or '—'}", failed=failed.get(src, ()))
+                         label=f"nightly TAMAMLANDI deal={prog['deal']} başlayıb={prog['started_at']}",
+                         failed=failed.get(src, ()))
     finally:
         con.close()
-    log.info("nightly bitdi (%.0f dəq): %s%s%s", (time.time() - t0) / 60,
-             _summary({k: dict(v.stats, fazalar=v.phase_line()) for k, v in stores.items()}), _failed_line(failed),
-             f" | XƏTA: {error}" if error else "")
-    _finish_state(ctx, state, error, "nightly")
-    return error
+    log.info("nightly TAMAMLANDI (%s → %s, %s axın, deal=%s): %s%s", prog["started_at"], prog["finished_at"], total,
+             prog["deal"], _summary({k: dict(v.stats) for k, v in stores.items()}), _failed_line(failed))
+    _finish_state(ctx, state, None, "nightly")
+    return None
+
+
+# ---------------------------------------------------------------- loop: davamlı rejim (GitHub Actions)
+def dispatch_next(run=subprocess.run):
+    """Növbəti loop işini işə salır (gh workflow run loop.yml). SCRAPER_ENABLED != true → başlamır (söndürmə açarı).
+    → True (göndərildi) / False."""
+    if os.environ.get("SCRAPER_ENABLED") != "true":
+        log.info("loop: SCRAPER_ENABLED != true — növbəti iş başladılmır (zəncir dayanır)")
+        return False
+    if not (os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GH_TOKEN")):
+        log.info("loop: GitHub Actions mühiti deyil — növbəti iş başladılmır")
+        return False
+    ref = os.environ.get("GITHUB_REF_NAME") or "main"
+    try:
+        p = run(["gh", "workflow", "run", "loop.yml", "--ref", ref, "-f", "chain=true"],
+                capture_output=True, text=True, timeout=60)
+        ok = p.returncode == 0
+        info = (p.stderr or p.stdout or "").strip()[:300]
+    except (OSError, subprocess.SubprocessError) as e:
+        ok, info = False, f"{type(e).__name__}: {e}"
+    if ok:
+        log.info("loop: növbəti iş işə salındı (loop.yml, ref=%s) — bu iş bitəndə başlayacaq", ref)
+        out = os.environ.get("GITHUB_OUTPUT")
+        if out:
+            with open(out, "a", encoding="utf-8") as fh:
+                fh.write("dispatched=true\n")
+    else:
+        log.error("loop: növbəti iş işə salınmadı (%s) — ehtiyat: workflow-un son addımı və 2 saatlıq cron", info)
+    return ok
+
+
+def _due(ctx):
+    con = ctx.connect()
+    try:
+        return nightly_due(con)
+    finally:
+        con.close()
+
+
+def loop(ctx, state, minutes, dispatch_at=None, every=FAST_EVERY, dispatch=dispatch_next):
+    """`minutes` dəqiqə ərzində hər `every` san fast dövrü; vaxtı çatanda nightly sayğısı (içində fast davam edir).
+    `dispatch_at` dəqiqədə (standart: minutes − 10) növbəti iş işə salınır ki, ötürmədə fasilə olmasın.
+    Cooldown olanda iş gözləyir (zəncir qırılmasın, sayta sorğu getmir). → çıxış kodu."""
+    t0 = time.time()
+    end = t0 + minutes * 60
+    dispatch_t = t0 + (max(minutes - 10, 0) if dispatch_at is None else dispatch_at) * 60
+    sent = [False]
+    last_fast = [0.0]
+
+    def tick():
+        if not sent[0] and time.time() >= dispatch_t:
+            sent[0] = True
+            dispatch()
+
+    def wait_until(t):
+        while time.time() < t:
+            tick()
+            time.sleep(max(0.0, min(30.0, t - time.time())))
+        tick()
+
+    log.info("loop: %s dəq, fast hər %s dəq, növbəti iş %s-cı dəqiqədə", minutes, every // 60,
+             round((dispatch_t - t0) / 60))
+    cycles = 0
+    try:
+        while True:
+            tick()
+            if end - time.time() < LOOP_MIN_LEFT:
+                break
+            until = cooldown_until(state)
+            if until:
+                left = (until - now()).total_seconds()
+                log.info("loop: cooldown %s-ə qədər — gözlənilir (sayta sorğu yoxdur)", fmt(until))
+                wait_until(min(time.time() + left, end))
+                continue
+            if time.time() - last_fast[0] >= every:
+                last_fast[0] = time.time()
+                err = fast_cycle(ctx, state, notify=True)
+                cycles += 1
+                if isinstance(err, Deadline):
+                    raise err
+                if err is None and _due(ctx):
+                    nightly(ctx, state, deadline=end, tick=tick, last_fast=last_fast)
+                continue
+            wait_until(min(last_fast[0] + every, end))
+    except Deadline as e:
+        log.info("loop: dayandı (%s)", e)
+    except NoBaseline:
+        return 2
+    tick()
+    log.info("loop bitdi: %.0f dəq, %s fast dövrü, növbəti iş %s", (time.time() - t0) / 60, cycles,
+             "işə salındı" if sent[0] else "İŞƏ SALINMADI")
+    return 0
 
 
 def ping():
@@ -668,6 +906,12 @@ def status(ctx):
         until = cooldown_until(state)
         print("cooldown:", f"{fmt(until)}-ə qədər (ardıcıl bloklanma {state.get('blocks')})" if until else "yoxdur")
         print("son bloklanma:", state.get("last_block") or "—", state.get("reason") or "")
+        prog = load_progress(con)
+        if prog:
+            print("tam sayğı:", f"{prog['started_at']} başlayıb, deal={prog['deal']}, "
+                  f"{len(prog['done'])}/{len(prog['streams'])} axın bitib, "
+                  + (f"TAMAMLANDI {prog['finished_at']}" if prog.get("finished_at") else "davam edir"))
+        print("son tam sayğı:", _setting(con, LAST_FULL_KEY) or "—")
         print("baseline:", {k: _setting(con, k) for k in ("notify_baseline_at", "notify_min_id_bina", "notify_margin_bina",
                                                          "notify_min_id_tap", "notify_margin_tap")})
         for r in con.execute(
@@ -688,12 +932,17 @@ def main(argv=None, ctx=None):
     sub.add_parser("baseline", help="3 səhifə, bildirişsiz, notify_min_id")
     f = sub.add_parser("fast", help="bütün axınların 1-ci səhifəsi")
     f.add_argument("--quiet", action="store_true", help="bildiriş yaranmır (baseline olmadan da işləyir)")
-    n = sub.add_parser("nightly", help="tam sayğı")
+    n = sub.add_parser("nightly", help="tam sayğı (yarımçıq varsa qaldığı yerdən davam edir)")
     n.add_argument("--deal", choices=["auto", "rent", "sale", "both"], default="auto",
-                   help="auto: hər gün kirayə, bazar günü satış da")
-    n.add_argument("--source", choices=["both", "bina", "tap"], default="both")
-    n.add_argument("--chunk", default=None, help="i/n: axın siyahısının i-ci hissəsi (məs. 1/3)")
-    sub.add_parser("status", help="cooldown və son sinxronizasiyalar")
+                   help="YENİ sayğı üçün; auto: hər gün kirayə, bazar günü satış da")
+    n.add_argument("--deadline-minutes", type=float, default=None,
+                   help="bu qədər dəqiqədən sonra dayanır (irəliləyiş saxlanır, növbəti dəfə davam edir)")
+    n.add_argument("--restart", action="store_true", help="yarımçıq sayğını at, yenisini başlat")
+    lp = sub.add_parser("loop", help="davamlı rejim: hər 15 dəq fast, vaxtı çatanda nightly")
+    lp.add_argument("--minutes", type=float, default=340, help="işin müddəti (dəq)")
+    lp.add_argument("--dispatch-at", type=float, default=None,
+                    help="növbəti işi bu dəqiqədə işə sal (standart: minutes − 10)")
+    sub.add_parser("status", help="cooldown, sayğı və son sinxronizasiyalar")
     args = ap.parse_args(argv)
 
     if args.cmd == "ping":
@@ -702,31 +951,34 @@ def main(argv=None, ctx=None):
     ctx = ctx or Ctx()
     if args.cmd == "status":
         return status(ctx)
-    if args.cmd == "nightly" and args.chunk:
-        chunk([0], args.chunk)  # format yoxlaması
 
     lock = Lock(mode=args.cmd)
     if not lock.acquire():
         log.info("%s: başqa işləmə davam edir (kilid: %s) — çıxılır", args.cmd, lock.info())
         return 0
+    install_signals()
+    state = {}
     try:
-        if args.cmd == "fast":
+        if args.cmd in ("fast", "loop"):
             # Neon-u oyatmamaq üçün başlanğıcda yalnız lokal fayl; baza toplamadan sonra (fast_cycle.before)
             state = _read_file()
+            if not getattr(args, "quiet", False) and state.get("baseline") is False:
+                log.error("%s: baseline yoxdur (son yoxlama: bazada notify_min_id_* yox idi). Əvvəl: "
+                          "python -m scraper.auto baseline", args.cmd)
+                return 2
+        if args.cmd == "loop":
+            return loop(ctx, state, args.minutes, dispatch_at=args.dispatch_at)
+        if args.cmd == "fast":
             until = cooldown_until(state)
             if until:
                 log.info("fast: cooldown davam edir (%s-ə qədər, ardıcıl bloklanma %s, lokal fayl) — çıxılır",
                          fmt(until), state.get("blocks"))
                 return 0
-            if not args.quiet and state.get("baseline") is False:
-                log.error("fast: baseline yoxdur (son yoxlama: bazada notify_min_id_* yox idi). Əvvəl: "
-                          "python -m scraper.auto baseline (və ya --quiet)")
-                return 2
             try:
                 error = fast_cycle(ctx, state, notify=not args.quiet)
             except NoBaseline:
                 return 2
-            return 0 if error is None else (3 if isinstance(error, BlockedError) else 1)
+            return 0 if error is None or isinstance(error, Deadline) else (3 if isinstance(error, BlockedError) else 1)
         try:
             con = ctx.connect()
         except Exception as e:
@@ -748,9 +1000,14 @@ def main(argv=None, ctx=None):
             if not baseline_ok:
                 log.error("nightly: baseline yoxdur (settings.notify_min_id_*). Əvvəl: python -m scraper.auto baseline")
                 return 2
-            sources = SOURCES if args.source == "both" else (args.source,)
-            error = nightly(ctx, state, deal=args.deal, sources=sources, chunk_spec=args.chunk)
+            deadline = time.time() + args.deadline_minutes * 60 if args.deadline_minutes else None
+            error = nightly(ctx, state, deal=args.deal, deadline=deadline, restart=args.restart)
         return 0 if error is None else (3 if isinstance(error, BlockedError) else 1)
+    except Deadline as e:
+        # siqnal yazma anında gəldi: yazılmış hissə commit olunub; vəziyyət lokal fayla (cache) yazılır
+        log.warning("%s: dayandırıldı (%s) — vəziyyət yazılır", args.cmd, e)
+        _write_file(state)
+        return 0
     finally:
         lock.release()
 

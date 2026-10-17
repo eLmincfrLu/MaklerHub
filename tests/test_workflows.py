@@ -1,4 +1,5 @@
-"""GitHub Actions fayllarının yoxlanması (şəbəkəsiz, bazasız): YAML sintaksisi və təhlükəsizlik qaydaları.
+"""GitHub Actions fayllarının yoxlanması (şəbəkəsiz, bazasız): YAML sintaksisi, təhlükəsizlik qaydaları,
+cədvəlin yalnız loop.yml-də olması, zəncir (növbəti işin işə salınması) və söndürmə açarı.
 
 PyYAML lazımdır (`pip install pyyaml`). İşlətmək (layihə kökündən):
     PYTHONIOENCODING=utf-8 python tests/test_workflows.py
@@ -71,7 +72,14 @@ for name, (text, data) in docs.items():
         ok = all("vars.SCRAPER_ENABLED == 'true'" in str(j.get("if", "")) for j in first)
         check(f"{name}: cədvəl yalnız SCRAPER_ENABLED=true olanda (ilk işlərin if-i)", ok)
         check(f"{name}: workflow_dispatch də var", "workflow_dispatch" in on)
-    if name in ("fast.yml", "nightly.yml", "baseline.yml"):
+    check(f"{name}: run mətnində ${{{{ inputs.* }}}} yoxdur (env ilə ötürülür)",
+          not any("inputs." in str(s_.get("run", "")) for s_ in steps(data)))
+    dispatches = [s_ for s_ in steps(data) if "gh workflow run loop.yml" in str(s_.get("run", ""))]
+    if dispatches:
+        check(f"{name}: loop-u işə salan addım yalnız SCRAPER_ENABLED=true olanda, permissions actions: write",
+              all("vars.SCRAPER_ENABLED == 'true'" in str(s_.get("if", "")) for s_ in dispatches)
+              and data.get("permissions", {}).get("actions") == "write")
+    if name in ("fast.yml", "nightly.yml", "baseline.yml", "loop.yml"):
         c = data.get("concurrency", {})
         check(f"{name}: concurrency qrupu 'scraper', cancel-in-progress: false",
               c.get("group") == "scraper" and c.get("cancel-in-progress") is False)
@@ -85,18 +93,32 @@ for name, (text, data) in docs.items():
         check(f"{name}: hər scraper işi sonda cache-i yadda saxlayır (if: always())",
               {jn for jn, _ in runs} == {jn for jn, s in saves if s.get("if") == "always()"})
 
-_, fast = docs["fast.yml"]
-check("fast.yml: hər 15 dəq, 23:xx UTC boş (nightly)", fast["on"]["schedule"][0]["cron"] == "*/15 0-22 * * *")
-check("fast.yml: timeout-minutes 15", fast["jobs"]["fast"]["timeout-minutes"] == 15)
+scheduled = sorted(n for n, (_, d) in docs.items() if n != "setup-scraper" and "schedule" in d["on"])
+check("cədvəl YALNIZ loop.yml-də", scheduled == ["loop.yml"], f"{scheduled}")
+for n in ("fast.yml", "nightly.yml"):
+    check(f"{n}: yalnız əl ilə (workflow_dispatch)", list(docs[n][1]["on"]) == ["workflow_dispatch"])
+_, lp = docs["loop.yml"]
+job = lp["jobs"]["loop"]
+check("loop.yml: ehtiyat cron hər 2 saatdan bir", lp["on"]["schedule"][0]["cron"] == "7 */2 * * *")
+check("loop.yml: timeout-minutes 350", job["timeout-minutes"] == 350)
+check("loop.yml: permissions actions: write", lp["permissions"].get("actions") == "write")
+inputs = lp["on"]["workflow_dispatch"]["inputs"]
+check("loop.yml: minutes parametri (default 340) və chain", inputs["minutes"]["default"] == 340 and "chain" in inputs)
+run_step = next(s_ for s_ in job["steps"] if "run-scraper.sh loop" in str(s_.get("run", "")))
+check("loop.yml: loop --minutes (inputs.minutes || 340), SCRAPER_ENABLED və GH_TOKEN env-də",
+      '--minutes "$LOOP_MINUTES"' in run_step["run"] and run_step["env"]["LOOP_MINUTES"] == "${{ inputs.minutes || 340 }}"
+      and run_step["env"]["SCRAPER_ENABLED"] == "${{ vars.SCRAPER_ENABLED }}"
+      and run_step["env"]["GH_TOKEN"] == "${{ github.token }}" and run_step.get("id") == "loop")
+check("loop.yml: söndürmə açarı — cədvəl və zəncirin işi yalnız SCRAPER_ENABLED=true, əl ilə (chain=false) həmişə",
+      job["if"] == "vars.SCRAPER_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && !inputs.chain)")
+fallback = [s_ for s_ in job["steps"] if "gh workflow run loop.yml" in str(s_.get("run", ""))]
+check("loop.yml: ehtiyat dispatch yalnız uğurda və loop özü işə sala bilmədisə",
+      len(fallback) == 1 and "success()" in fallback[0]["if"] and "steps.loop.outputs.dispatched != 'true'" in fallback[0]["if"]
+      and "chain=true" in fallback[0]["run"])
 _, night = docs["nightly.yml"]
-check("nightly.yml: 23:00 UTC (Bakı 03:00)", night["on"]["schedule"][0]["cron"] == "0 23 * * *")
-check("nightly.yml: hər işin timeout-u < 330 dəq",
-      all(j.get("timeout-minutes", 360) < 330 for j in night["jobs"].values()),
-      str({k: j.get("timeout-minutes") for k, j in night["jobs"].items()}))
-order = [night["jobs"]["sale-1"]["needs"], night["jobs"]["sale-2"]["needs"], night["jobs"]["sale-3"]["needs"]]
-check("nightly.yml: satış hissələri ardıcıl (needs) və --chunk 1/3, 2/3, 3/3",
-      order == [["plan", "rent"], "sale-1", "sale-2"]
-      and all(f"--chunk {i}/3" in str(night["jobs"][f"sale-{i}"]["steps"]) for i in (1, 2, 3)))
+check("nightly.yml: bir iş, --deadline-minutes 330 < timeout 350",
+      list(night["jobs"]) == ["nightly"] and "--deadline-minutes 330" in str(night["jobs"]["nightly"]["steps"])
+      and night["jobs"]["nightly"]["timeout-minutes"] == 350)
 _, base = docs["baseline.yml"]
 check("baseline.yml: yalnız əl ilə", list(base["on"]) == ["workflow_dispatch"])
 check("baseline.yml: bloklanma uğursuz sayılır (BLOCKED_OK yoxdur)", "BLOCKED_OK" not in docs["baseline.yml"][0])

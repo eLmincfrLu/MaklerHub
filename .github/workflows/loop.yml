@@ -1,0 +1,63 @@
+# Davamlı rejim: python -m scraper.auto loop — bir iş ~340 dəq ərzində hər 15 dəq fast dövrü işlədir; Bakı 03:00-dan
+# sonra (son TAM sayğıdan 20 saatdan çox keçibsə) tam sayğı (nightly) da bu işin içində gedir və vaxt bitəndə
+# növbəti işdə qaldığı yerdən davam edir (settings.nightly_progress).
+# Zəncir: ~330-cu dəqiqədə iş növbəti loop işini özü işə salır (gh workflow run loop.yml -f chain=true); o, eyni
+# concurrency qrupunda gözləyir və bu iş bitən kimi başlayır. Ehtiyat: hər 2 saatdan bir cron (zəncir qırılsa).
+# Söndürmə açarı: repo dəyişəni SCRAPER_ENABLED != true → cədvəl də, zəncirin növbəti işi də başlamır.
+# Əl ilə sınaq: Actions → loop → Run workflow, minutes=20 (SCRAPER_ENABLED true deyilsə zəncir davam etmir).
+name: loop
+
+on:
+  schedule:
+    - cron: "7 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "işin müddəti, dəqiqə (sınaq üçün 20)"
+        type: number
+        default: 340
+      chain:
+        description: "avtomatik (zəncirin növbəti işi) — əl ilə işə salanda seçməyin"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+# fast, nightly, baseline və loop eyni qrupdadır: eyni anda yalnız biri işləyir (saytlara paralel sorğu yoxdur).
+concurrency:
+  group: scraper
+  cancel-in-progress: false
+
+jobs:
+  loop:
+    # cədvəl və zəncir: yalnız SCRAPER_ENABLED=true; əl ilə (chain=false) həmişə
+    if: vars.SCRAPER_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && !inputs.chain)
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-scraper
+      - name: loop
+        id: loop
+        env:
+          PYTHONIOENCODING: utf-8
+          MAKLERHUB_NO_LOCK: "1"
+          BLOCKED_OK: "1"
+          LOOP_MINUTES: ${{ inputs.minutes || 340 }}
+          SCRAPER_ENABLED: ${{ vars.SCRAPER_ENABLED }}
+          GH_TOKEN: ${{ github.token }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: bash .github/scripts/run-scraper.sh loop --minutes "$LOOP_MINUTES"
+      - name: cooldown vəziyyəti (cache-ə)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: scraper/state
+          key: scraper-state-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+      - name: növbəti iş (ehtiyat — loop özü işə sala bilmədisə)
+        if: success() && vars.SCRAPER_ENABLED == 'true' && steps.loop.outputs.dispatched != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run loop.yml --ref "$GITHUB_REF_NAME" -f chain=true

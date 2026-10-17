@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: scraper
@@ -31,3 +32,8 @@ jobs:
         with:
           path: scraper/state
           key: scraper-state-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+      - name: loop zəncirini bərpa et
+        if: ${{ !cancelled() && vars.SCRAPER_ENABLED == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run loop.yml --ref "$GITHUB_REF_NAME" -f chain=true
