@@ -7,10 +7,12 @@ Qaydalar (Bina.az ilə eyni):
 - Rayon: başlıqda "X r." varsa X (yalnız tanınan rayon adı, "N.Nərimanov" → Nərimanov), əks halda
   metro/qəsəbə → district_map (adlar Bina.az yazılışına gətirilir). Mənbə district_src: title | map | None.
 - Qiymətlər AZN sayılır (Tap.az-da valyuta sahəsi yoxdur).
-- Sorğular arasında 3-5 saniyə fasilə. 401/403/429 və ya JSON olmayan cavabda DAYANIR.
+- Sorğular arasında 3-5 saniyə fasilə. 401/403/429 və ya JSON olmayan cavabda DAYANIR (təkrar cəhd yoxdur).
+- Timeout (45 san), bağlantı xətası və ya HTTP 5xx → hər sorğu üçün 3 cəhd (5 və 15 san gözləmə).
 - Satıcı / mağaza məlumatı və təsvir saxlanmır.
 """
 import json
+import logging
 import random
 import re
 import time
@@ -26,6 +28,10 @@ GRAPHQL = BASE + "/graphql"
 CATEGORY_ID = "Z2lkOi8vdGFwL0NhdGVnb3J5LzYzNQ"   # gid://tap/Category/635 = Mənzillər
 REGION_BAKU = "Z2lkOi8vdGFwL1JlZ2lvbi80MjA"      # gid://tap/Region/420 = Bakı
 PAGE_SIZE = 24
+TIMEOUT = 45                 # san (bir sorğunun cavab gözləmə həddi)
+RETRY_WAITS = (5, 15)        # təkrar cəhdlər arası gözləmə (san) → cəmi 3 cəhd
+
+log = logging.getLogger(__name__)
 
 # Filtr xüsusiyyətləri (saytın CategoryProperties sorğusundan)
 P_DEAL, DEAL_SALE, DEAL_RENT = 740, "3722", "3724"
@@ -79,12 +85,27 @@ class TapClient:
         self._last = time.time()
 
     def _post(self, body):
-        self._wait()
-        t0 = time.time()
-        r = self.s.post(GRAPHQL, data=body, timeout=30)
-        self.requests += 1
-        self.req_time += time.time() - t0
-        return r
+        """Bir sorğu. Timeout / bağlantı xətası / HTTP 5xx → 3 cəhd (5 və 15 san gözləmə); sonuncu xəta qalxır
+        (və ya 5xx cavabı qaytarılır). 401/403/429 və digər cavablar dərhal qaytarılır (search yoxlayır)."""
+        for attempt, pause in enumerate(RETRY_WAITS + (None,), 1):
+            self._wait()
+            t0 = time.time()
+            try:
+                r = self.s.post(GRAPHQL, data=body, timeout=TIMEOUT)
+            except (requests.Timeout, requests.ConnectionError) as e:
+                reason = f"{type(e).__name__}: {e}"
+                r = None
+                if pause is None:
+                    raise
+            finally:
+                self.requests += 1
+                self.req_time += time.time() - t0
+            if r is not None:
+                if r.status_code < 500 or pause is None:
+                    return r
+                reason = f"HTTP {r.status_code}"
+            log.warning("tap.az: %s-ci cəhd alınmadı (%s) — %s san sonra təkrar", attempt, reason[:200], pause)
+            time.sleep(pause)
 
     @staticmethod
     def _body(flt, after, first=PAGE_SIZE):
@@ -102,10 +123,6 @@ class TapClient:
         r = self._post(body)
         if r.status_code in (401, 403, 429):
             raise BlockedError(f"HTTP {r.status_code}: sayt sorğunu rədd etdi. Dayanılır.")
-        if r.status_code >= 500:
-            time.sleep(30)  # bir dəfə təkrar
-            self._last = time.time()
-            r = self._post(body)
         if r.status_code != 200:
             raise ScrapeError(f"HTTP {r.status_code}: {r.text[:200]}")
         if "json" not in (r.headers.get("content-type") or ""):

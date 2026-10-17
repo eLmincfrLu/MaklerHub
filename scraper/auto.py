@@ -22,6 +22,10 @@ Qaydalar:
   yaradır (settings; baseline əmri yazır). Baseline olmadan fast bildirişlə işləmir (--quiet lazımdır).
 - nightly: axın üzrə yazılır (hər axın ayrıca qısa bağlantı) və yoxa çıxanlar işarələnir; içində hər 15 dəq
   bir fast dövrü işləyir (sorğular yenə ardıcıl, 3-5 san fasilə ilə).
+- Bir axının xətası (timeout, HTTP 5xx, GraphQL xətası) digər axınları ləğv etmir: o axın "alınmadı" kimi loqa
+  yazılır (yoxa çıxanlar onda işarələnmir). Bir mənbədə ardıcıl SOURCE_FAIL_LIMIT axın alınmasa, həmin mənbənin
+  dövrdəki qalan axınları ötürülür (sayt əlçatmazdır, dövr uzanmasın). Bloklanma isə bütün toplamanı dayandırır.
+- Yazma fazalarının vaxtı (yükləmə / insert / təkrarlar / uyğunluq / bildiriş) loqa və logs.details-ə yazılır.
 - Loq: scraper/logs/auto.log (1 MB × 5, fırlanan). Hər dövr hər mənbə üçün sync_runs sətri yazır.
 """
 import argparse
@@ -31,6 +35,7 @@ import os
 import sys
 import time
 from argparse import Namespace
+from collections import Counter
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 
@@ -54,6 +59,7 @@ FAST_EVERY = 15 * 60                         # nightly içində fast dövrü (sa
 COOLDOWN_STEPS = (60, 120, 240, 360)         # dəq
 LOCK_MAX_AGE = 9 * 3600                      # bundan köhnə kilid ölü sayılır (bazar günü nightly ~6 saat)
 BASELINE_PAGES = 3
+SOURCE_FAIL_LIMIT = 2                        # bir mənbədə ardıcıl bu qədər axın alınmasa, qalanı ötürülür
 DEFAULT_MARGIN = {"bina": 800, "tap": 2000}  # ~6 saatlıq nömrə artımı (Bina ~3300/gün, Tap ~8000/gün)
 FMT = "%Y-%m-%d %H:%M:%S"
 
@@ -78,18 +84,20 @@ def parse(value):
 
 
 def setup_logging():
+    """Handler-lər "scraper" loggerindədir: scraper.auto və scraper.tap (təkrar cəhdlər) eyni fayla yazır."""
     os.makedirs(LOG_DIR, exist_ok=True)
-    log.setLevel(logging.INFO)
-    if log.handlers:
+    root = logging.getLogger("scraper")
+    root.setLevel(logging.INFO)
+    if root.handlers:
         return
     form = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     fh = RotatingFileHandler(os.path.join(LOG_DIR, "auto.log"), maxBytes=1_000_000, backupCount=5, encoding="utf-8")
     fh.setFormatter(form)
-    log.addHandler(fh)
+    root.addHandler(fh)
     if os.environ.get(LOG_QUIET_ENV) != "1":
         sh = logging.StreamHandler(sys.stdout)
         sh.setFormatter(form)
-        log.addHandler(sh)
+        root.addHandler(sh)
 
 
 # ---------------------------------------------------------------- kilid
@@ -281,29 +289,61 @@ def chunk(items, spec):
 
 
 def collect(streams, clients, pages, on_page=None):
-    """Axınları şəbəkədən oxuyur (bazaya toxunmur). → (rows {mənbə: [elan]}, done [(axın, tam oxundu)], xəta).
+    """Axınları şəbəkədən oxuyur (bazaya toxunmur).
+    → (rows {mənbə: [elan]}, done [(axın, tam oxundu)], xəta, failed {mənbə: [alınmayan axın etiketi]}).
 
-    Bloklanma / şəbəkə xətası olanda dayanır; o vaxta qədər toplananlar qaytarılır."""
+    Bloklanma (BlockedError) → toplama dayanır (xəta qaytarılır); o vaxta qədər toplananlar qalır.
+    Başqa xəta (timeout, HTTP 5xx, GraphQL) → yalnız həmin axın alınmır: o vaxta qədər oxunan səhifələri qalır,
+    "tam oxundu" sayılmır (yoxa çıxanlar işarələnmir), növbəti axına keçilir. Bir mənbədə ardıcıl
+    SOURCE_FAIL_LIMIT axın alınmasa, həmin mənbənin qalan axınları bu dövrdə ötürülür."""
     rows = {src: [] for src in {s["source"] for s in streams}}
     seen = {src: set() for src in rows}
+    failed = {src: [] for src in rows}
+    streak = Counter()
     done, error = [], None
-    try:
-        for st in streams:
-            complete = False
-            for _total, nodes, has_next in clients[st["source"]].pages(st["flt"], pages):
+    for st in streams:
+        src = st["source"]
+        if streak[src] >= SOURCE_FAIL_LIMIT:
+            failed[src].append(st["label"] + " (ötürüldü)")
+            done.append((st, False))
+            continue
+        complete = False
+        try:
+            for _total, nodes, has_next in clients[src].pages(st["flt"], pages):
                 for node in nodes:
                     row = st["normalize"](node)
-                    if row["external_id"] in seen[st["source"]]:
+                    if row["external_id"] in seen[src]:
                         continue
-                    seen[st["source"]].add(row["external_id"])
-                    rows[st["source"]].append(row)
+                    seen[src].add(row["external_id"])
+                    rows[src].append(row)
                 complete = not has_next
                 if on_page:
                     on_page()
-            done.append((st, complete))
-    except (ScrapeError, requests.RequestException) as e:
-        error = e
-    return rows, done, error
+        except BlockedError as e:
+            error = e
+            break
+        except (ScrapeError, requests.RequestException) as e:
+            streak[src] += 1
+            failed[src].append(st["label"])
+            done.append((st, False))
+            log.warning("axın alınmadı: %s — %s: %s", st["label"], type(e).__name__, str(e)[:300])
+            if streak[src] == SOURCE_FAIL_LIMIT:
+                log.warning("%s: ardıcıl %s axın alınmadı — bu dövrdə qalan %s axınları ötürülür",
+                            src, SOURCE_FAIL_LIMIT, src)
+            continue
+        streak[src] = 0
+        done.append((st, complete))
+    return rows, done, error, failed
+
+
+def source_error(error, failed, src, streams):
+    """Mənbənin dövr nəticəsi: bloklanma → xəta; bütün axınları alınmadısa → xəta; bəziləri → None (xəbərdarlıq)."""
+    if error is not None:
+        return error
+    total = sum(1 for st in streams if st["source"] == src)
+    if failed.get(src) and len(failed[src]) >= total:
+        return ScrapeError(f"bütün {total} axın alınmadı: {failed[src][0]}")
+    return None
 
 
 # ---------------------------------------------------------------- bildiriş qapısı
@@ -373,9 +413,11 @@ class NoBaseline(Exception):
     pass
 
 
-def write_burst(ctx, rows, label, error, notify, started, t0, removal=None, before=None, after=None):
+def write_burst(ctx, rows, label, error, notify, started, t0, removal=None, before=None, after=None, failed=None,
+                streams=()):
     """Toplananları BİR bağlantı ilə yazır; hər mənbə üçün sync_runs. → {mənbə: stats}, gate events.
 
+    failed: {mənbə: [alınmayan axınlar]} (collect) — mənbənin bütün axınları alınmayıbsa sync_runs ok=0.
     before(con): yazmadan əvvəl (vəziyyət / baseline yoxlaması); False → heç nə yazılmır, NoBaseline.
     after(con): bağlanmadan əvvəl (vəziyyəti eyni bağlantı ilə yazmaq üçün)."""
     from .store import Store
@@ -398,8 +440,10 @@ def write_burst(ctx, rows, label, error, notify, started, t0, removal=None, befo
                     store.mark_removed(**st["removal"])
             store.commit()
             events += store.gate_events
-            store.finish(ok=error is None, error=error, latency=_latency(ctx.clients[src]), label=label)
-            out[src] = dict(store.stats)
+            err = source_error(error, failed or {}, src, streams)
+            store.finish(ok=err is None, error=err, latency=_latency(ctx.clients[src]), label=label,
+                         failed=(failed or {}).get(src, ()))
+            out[src] = dict(store.stats, fazalar=store.phase_line())
         if events:
             from maklerhub.db import add_log
             add_log(con, "info", "Bildiriş qaydası",
@@ -442,14 +486,21 @@ def _finish_state(ctx, state, error, mode, con=None):
 def _summary(stats):
     return " | ".join(f"{src}: yoxlanan={s.get('checked', 0)} yeni={s.get('new', 0)} yenilənən={s.get('updated', 0)} "
                       f"silinən={s.get('removed', 0)} uyğunluq={s.get('matches', 0)} bildiriş={s.get('notifications', 0)}"
+                      + (f" [{s['fazalar']}]" if s.get("fazalar") else "")
                       for src, s in stats.items())
+
+
+def _failed_line(failed):
+    lines = [f"{src}: {len(f)} axın alınmadı ({', '.join(f)})" for src, f in (failed or {}).items() if f]
+    return (" | ALINMADI: " + "; ".join(lines)) if lines else ""
 
 
 # ---------------------------------------------------------------- əmrlər
 def fast_cycle(ctx, state, notify=True, update_state=True, mode="fast"):
     """Bütün axınların 1-ci səhifəsi: topla → bir yazma partlayışı. Xətanı qaytarır."""
     t0, started = time.time(), now()
-    rows, done, error = collect(all_streams(), ctx.clients, pages=1)
+    streams = all_streams()
+    rows, done, error, failed = collect(streams, ctx.clients, pages=1)
     collect_s = time.time() - t0
     label = f"{mode} collect={collect_s:.0f}s{'' if notify else ' quiet'}"
     tw = time.time()
@@ -468,18 +519,22 @@ def fast_cycle(ctx, state, notify=True, update_state=True, mode="fast"):
         _finish_state(ctx, state, error, mode, con=con)
 
     stats, _ = write_burst(ctx, rows, label, error, notify, started, t0,
-                           before=before if update_state else None, after=after if update_state else None)
-    log.info("%s: toplama %.0f san, yazma %.1f san, %s%s", mode, collect_s, time.time() - tw, _summary(stats),
-             f" | XƏTA: {error}" if error else "")
+                           before=before if update_state else None, after=after if update_state else None,
+                           failed=failed, streams=streams)
+    log.info("%s: toplama %.0f san, yazma %.1f san, %s%s%s", mode, collect_s, time.time() - tw, _summary(stats),
+             _failed_line(failed), f" | XƏTA: {error}" if error else "")
     return error
 
 
 def baseline(ctx, state):
     """Hər axından 3 səhifə, bildirişsiz; sonra hər mənbənin ən böyük ədədi external_id-si → notify_min_id."""
     t0, started = time.time(), now()
-    rows, _done, error = collect(all_streams(), ctx.clients, pages=BASELINE_PAGES)
+    streams = all_streams()
+    rows, _done, error, failed = collect(streams, ctx.clients, pages=BASELINE_PAGES)
+    if error is None and any(failed.values()):
+        error = ScrapeError("alınmayan axınlar var: " + "; ".join(x for f in failed.values() for x in f))
     stats, _ = write_burst(ctx, rows, f"baseline collect={time.time() - t0:.0f}s", error, False, started, t0)
-    log.info("baseline: %s", _summary(stats))
+    log.info("baseline: %s%s", _summary(stats), _failed_line(failed))
     if error is not None:
         log.error("baseline yarımçıq qaldı (%s): elanlar yazıldı, notify_min_id YAZILMADI — sonra təkrarla", error)
         _finish_state(ctx, state, error, "baseline")
@@ -519,6 +574,7 @@ def nightly(ctx, state, deal="auto", sources=SOURCES, chunk_spec=None):
     log.info("nightly: deal=%s mənbə=%s chunk=%s → %s axın", deal, ",".join(sources), chunk_spec or "—", len(streams))
     t0, started = time.time(), now()
     stores, error = {}, None
+    failed = {}
     last_fast = [time.time()]
 
     def on_page():
@@ -529,10 +585,9 @@ def nightly(ctx, state, deal="auto", sources=SOURCES, chunk_spec=None):
                 raise err
 
     for i, st in enumerate(streams, 1):
-        try:
-            rows, done, error = collect([st], ctx.clients, pages=100000, on_page=on_page)
-        except BlockedError as e:  # nightly içindəki fast dövrü bloklandı
-            rows, done, error = {}, [], e
+        rows, done, error, bad = collect([st], ctx.clients, pages=100000, on_page=on_page)
+        for src, labels in bad.items():
+            failed.setdefault(src, []).extend(labels)
         con = ctx.connect()
         try:
             src = st["source"]
@@ -553,19 +608,23 @@ def nightly(ctx, state, deal="auto", sources=SOURCES, chunk_spec=None):
         finally:
             con.close()
         log.info("nightly [%s/%s] %s: %s elan, %s, yoxa çıxan %s", i, len(streams), st["label"],
-                 len(rows.get(st["source"], [])), "tam oxundu" if done and done[0][1] else "TAM OXUNMADI", removed)
+                 len(rows.get(st["source"], [])),
+                 "ALINMADI" if bad.get(st["source"]) else ("tam oxundu" if done and done[0][1] else "TAM OXUNMADI"),
+                 removed)
         if error is not None:
             break
     con = ctx.connect()
     try:
         for src, store in stores.items():
             store.attach(con)
-            store.finish(ok=error is None, error=error, latency=_latency(ctx.clients[src]),
-                         label=f"nightly deal={deal} chunk={chunk_spec or '—'}")
+            err = source_error(error, failed, src, streams)
+            store.finish(ok=err is None, error=err, latency=_latency(ctx.clients[src]),
+                         label=f"nightly deal={deal} chunk={chunk_spec or '—'}", failed=failed.get(src, ()))
     finally:
         con.close()
-    log.info("nightly bitdi (%.0f dəq): %s%s", (time.time() - t0) / 60,
-             _summary({k: dict(v.stats) for k, v in stores.items()}), f" | XƏTA: {error}" if error else "")
+    log.info("nightly bitdi (%.0f dəq): %s%s%s", (time.time() - t0) / 60,
+             _summary({k: dict(v.stats, fazalar=v.phase_line()) for k, v in stores.items()}), _failed_line(failed),
+             f" | XƏTA: {error}" if error else "")
     _finish_state(ctx, state, error, "nightly")
     return error
 

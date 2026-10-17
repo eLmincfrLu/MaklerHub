@@ -191,22 +191,27 @@ def _partition_rows(con, deal_type, price_period, rooms):
 
 
 def _apply(con, rows, groups, inherit):
-    """Bazaya yazır. dup_group və ya rayonu dəyişən elanların id-lərini qaytarır."""
-    changed = set()
+    """Bazaya yazır (dəyişikliklər toplu, executemany). dup_group və ya rayonu dəyişən elanların id-lərini qaytarır."""
+    changed, set_group, set_district, clear = set(), [], [], []
     for r in rows:
         gid = groups.get(r["id"])
         if r["dup_group"] != gid:
-            con.execute("UPDATE listings SET dup_group = ? WHERE id = ?", (gid, r["id"]))
+            set_group.append((gid, r["id"]))
             changed.add(r["id"])
         if r["id"] in inherit:
             if (r["stored_district"], r["district_src"]) != (inherit[r["id"]], "dup"):
-                con.execute("UPDATE listings SET district = ?, district_src = 'dup' WHERE id = ?",
-                            (inherit[r["id"]], r["id"]))
+                set_district.append((inherit[r["id"]], r["id"]))
                 changed.add(r["id"])
         elif r["district_src"] == "dup":
             # artıq götürmək olmur (qrup dağıldı / qayda dəyişdi) → elanın öz rayonu boş idi
-            con.execute("UPDATE listings SET district = '', district_src = NULL WHERE id = ?", (r["id"],))
+            clear.append((r["id"],))
             changed.add(r["id"])
+    if set_group:
+        con.executemany("UPDATE listings SET dup_group = ? WHERE id = ?", set_group)
+    if set_district:
+        con.executemany("UPDATE listings SET district = ?, district_src = 'dup' WHERE id = ?", set_district)
+    if clear:
+        con.executemany("UPDATE listings SET district = '', district_src = NULL WHERE id = ?", clear)
     return changed
 
 
@@ -219,6 +224,29 @@ def refresh(con, listing, places=None):
     rows = _partition_rows(con, listing["deal_type"], listing["price_period"], listing["rooms"])
     groups, inherit, _ = group_rows(rows, bina_places(con) if places is None else places)
     return _apply(con, rows, groups, inherit)
+
+
+def refresh_many(con, keys, places):
+    """refresh()-in toplu variantı (scraper/store.py save_many): bir neçə hissə BİR sorğu ilə oxunur, hər hissə
+    bir dəfə qruplaşdırılır. keys: {(deal_type, price_period, rooms)}. Dəyişən id-lər."""
+    keys = {k for k in keys if k[2] is not None}
+    if not keys:
+        return set()
+    rows = con.execute(
+        f"SELECT {COLS} FROM listings l JOIN sources s ON s.id = l.source_id WHERE l.active = 1 "
+        "AND l.deal_type = ANY(?) AND l.rooms = ANY(?) ORDER BY l.id",
+        (sorted({k[0] for k in keys}), sorted({k[2] for k in keys}))).fetchall()
+    parts = defaultdict(list)
+    for r in rows:
+        key = (r["deal_type"], r["price_period"], r["rooms"])
+        if key in keys:
+            parts[key].append(r)
+    groups, inherit = {}, {}
+    for items in parts.values():
+        g, i, _ = group_rows(items, places)
+        groups.update(g)
+        inherit.update(i)
+    return _apply(con, [r for items in parts.values() for r in items], groups, inherit)
 
 
 def rebuild(con, save=True):

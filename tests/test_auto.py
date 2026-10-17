@@ -1,4 +1,5 @@
-"""scraper/auto.py testi: kilid, cooldown, "topla sonra yaz", baseline və notify_min_id qaydası, nightly.
+"""scraper/auto.py testi: kilid, cooldown, "topla sonra yaz", baseline və notify_min_id qaydası, nightly,
+Tap.az təkrar cəhdləri (timeout) və bir axının xətasının digər axınları ləğv etməməsi.
 
 Saytlara sorğu getmir (saxta klientlər). Real Neon bazasına qoşulur (DATABASE_URL .env-dən): hər şey bir
 tranzaksiyadadır (commit → SAVEPOINT), sonda ROLLBACK. Kilid / vəziyyət / loq faylları müvəqqəti qovluqdadır.
@@ -18,8 +19,9 @@ sys.path.insert(0, ROOT)
 from dotenv import load_dotenv
 load_dotenv(os.path.join(ROOT, ".env"))
 from maklerhub.db import connect
-from scraper import auto
-from scraper.common import BlockedError
+import requests
+from scraper import auto, tap
+from scraper.common import BlockedError, ScrapeError
 
 URL = os.environ["DATABASE_URL"]
 TMP = tempfile.mkdtemp(prefix="mh-auto-")
@@ -63,6 +65,117 @@ check("A9 nightly: bazar günü satış da, digər günlər kirayə",
 items = list(range(58))
 check("A10 --chunk i/n siyahını üst-üstə düşmədən bölür",
       sum((auto.chunk(items, f"{i}/3") for i in (1, 2, 3)), []) == items and len(auto.chunk(items, "1/3")) == 20)
+
+
+# ---------------------------------------------------------------- C: Tap.az təkrar cəhd və axın xətaları (bazasız)
+class Resp:
+    def __init__(self, status=200, ctype="application/json", data=None):
+        self.status_code, self.headers, self.text = status, {"content-type": ctype}, "x"
+        self._data = data if data is not None else {"data": {"adSearch": {"ads": {
+            "nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}}}}
+
+    def json(self):
+        if "json" not in self.headers["content-type"]:
+            raise ValueError("json deyil")
+        return self._data
+
+
+def tap_with(answers):
+    """answers: ardıcıl cavablar (Resp və ya xəta). → (klient, çağırış sayğacı, gözləmələr)."""
+    c = tap.TapClient(delay=(0, 0))
+    calls, sleeps = [], []
+    seq = list(answers)
+
+    def post(url, data=None, timeout=None):
+        calls.append(timeout)
+        a = seq.pop(0)
+        if isinstance(a, Exception):
+            raise a
+        return a
+    c.s.post = post
+    return c, calls, sleeps
+
+
+real_sleep = tap.time.sleep
+tap_sleeps = []
+tap.time.sleep = lambda sec: tap_sleeps.append(sec)
+try:
+    c, calls, _ = tap_with([requests.ReadTimeout("Read timed out"), requests.ReadTimeout("Read timed out"), Resp()])
+    tap_sleeps.clear()
+    ok = c.search(tap.stream_filter("rent", "month", "new"))
+    check("C1 Tap timeout: 3 cəhd (5 və 15 san gözləmə), 3-cü cəhd uğurlu; timeout 45 san",
+          ok["nodes"] == [] and len(calls) == 3 and tap_sleeps == [5, 15] and calls[0] == 45,
+          f"cəhd={len(calls)} gözləmə={tap_sleeps} timeout={calls[:1]}")
+    c, calls, _ = tap_with([requests.ReadTimeout("t1"), requests.ConnectionError("t2"), requests.ReadTimeout("t3")])
+    try:
+        c.search(tap.stream_filter("rent", "month", "new"))
+        raised = None
+    except requests.RequestException as e:
+        raised = e
+    check("C2 Tap: 3 cəhdin hamısı alınmasa xəta qalxır", isinstance(raised, requests.ReadTimeout) and len(calls) == 3)
+    for status, ctype, name in ((429, "application/json", "HTTP 429"), (403, "application/json", "HTTP 403"),
+                                (200, "text/html", "JSON olmayan cavab")):
+        c, calls, _ = tap_with([Resp(status, ctype), Resp()])
+        try:
+            c.search(tap.stream_filter("rent", "month", "new"))
+            raised = None
+        except BlockedError as e:
+            raised = e
+        check(f"C3 Tap {name}: BlockedError, təkrar cəhd YOX", raised is not None and len(calls) == 1)
+    c, calls, _ = tap_with([Resp(502), Resp(503), Resp()])
+    tap_sleeps.clear()
+    c.search(tap.stream_filter("rent", "month", "new"))
+    check("C4 Tap HTTP 5xx: təkrar cəhd (3-cü uğurlu)", len(calls) == 3 and tap_sleeps == [5, 15])
+finally:
+    tap.time.sleep = real_sleep
+
+
+class ListClient:
+    """pages(): flt → səhifələr; flt → xəta (ilk sorğuda qalxır)."""
+
+    def __init__(self, data, errors=None):
+        self.data, self.errors, self.asked = data, errors or {}, []
+        self.requests, self.req_time = 0, 0.0
+
+    def pages(self, flt, max_pages):
+        self.asked.append(flt)
+        if flt in self.errors:
+            raise self.errors[flt]
+        for i, nodes in enumerate(self.data.get(flt, [])[:max_pages]):
+            yield None, nodes, False
+
+
+def st(src, flt):
+    return {"source": src, "label": f"{src} {flt}", "flt": flt, "normalize": lambda n: n, "removal": {}}
+
+
+node = lambda ext: {"external_id": str(ext)}
+streams = [st("bina", "b1"), st("tap", "t1"), st("tap", "t2"), st("tap", "t3"), st("tap", "t4"), st("bina", "b2")]
+clients = {"bina": ListClient({"b1": [[node(1)]], "b2": [[node(2)]]}),
+           "tap": ListClient({"t2": [[node(20)]], "t4": [[node(40)]]},
+                             {"t1": requests.ReadTimeout("Read timed out (read timeout=45)"),
+                              "t3": ScrapeError("HTTP 502"), "t4": requests.ReadTimeout("x")})}
+rows, done, error, failed = auto.collect(streams, clients, pages=1)
+check("C5 bir axının timeout-u digər axınları ləğv etmir: Bina və Tap-ın sağlam axını yazılır",
+      error is None and [r["external_id"] for r in rows["bina"]] == ["1", "2"]
+      and [r["external_id"] for r in rows["tap"]] == ["20"] and failed["tap"] == ["tap t1", "tap t3", "tap t4"]
+      and not failed["bina"], f"failed={failed}")
+check("C6 alınmayan axın 'tam oxundu' sayılmır (yoxa çıxan işarələnmir)",
+      [c for s_, c in done if s_["flt"] in ("t1", "t3")] == [False, False])
+streams = [st("tap", "t1"), st("tap", "t3"), st("tap", "t2"), st("bina", "b1")]
+clients["tap"].asked.clear()
+rows, done, error, failed = auto.collect(streams, clients, pages=1)
+check(f"C7 ardıcıl {auto.SOURCE_FAIL_LIMIT} axın alınmasa mənbənin qalan axınları ötürülür, digər mənbə davam edir",
+      clients["tap"].asked == ["t1", "t3"] and failed["tap"][-1] == "tap t2 (ötürüldü)"
+      and [r["external_id"] for r in rows["bina"]] == ["1"], f"soruşulan={clients['tap'].asked}")
+check("C8 mənbənin bütün axınları alınmasa — mənbə xətası; bəziləri — xəbərdarlıq",
+      isinstance(auto.source_error(None, failed, "tap", streams), ScrapeError)
+      and auto.source_error(None, failed, "bina", streams) is None
+      and auto.source_error(None, {"tap": ["tap t1"]}, "tap", streams) is None)
+clients["tap"].errors["t2"] = BlockedError("HTTP 429")
+streams = [st("tap", "t2"), st("bina", "b1")]
+rows, done, error, failed = auto.collect(streams, clients, pages=1)
+check("C9 bloklanma isə bütün toplamanı dayandırır", isinstance(error, BlockedError) and not rows["bina"])
 
 
 # ---------------------------------------------------------------- B: bazada (SAVEPOINT, sonda ROLLBACK)
@@ -272,6 +385,31 @@ try:
           and get("tap", T + 200) is not None and bool(runs("nightly deal=rent")))
     check("B17 nightly içində fast dövrü işləyir", "fast(nightly)" in ran, f"{ran}")
     check("B18 kilid nightly bitəndə buraxılıb", not os.path.exists(auto.LOCK_PATH))
+
+    # B19: fast dövründə Tap axını timeout verir → Bina yazılır, Tap sync_runs ok=0, cooldown YOX, kod 0
+    reset_state()
+
+    class TimeoutClient(FakeClient):
+        def pages(self, flt, max_pages):
+            self.requests += 1
+            raise requests.ReadTimeout("HTTPSConnectionPool(host='tap.az'): Read timed out. (read timeout=45)")
+            yield
+
+    clients = {"bina": FakeClient("bina", {"b": [[row("bina", B + 300)]]}), "tap": TimeoutClient("tap", {})}
+    ctx = auto.Ctx(clients, fake_connect)
+    code = auto.main(["fast", "--quiet"], ctx=ctx)
+    last = {r["key"]: r["ok"] for r in con.execute(
+        "SELECT DISTINCT ON (s.key) s.key, r.ok FROM sync_runs r JOIN sources s ON s.id = r.source_id "
+        "ORDER BY s.key, r.id DESC")}
+    tap_log = con.execute("SELECT level, message, details FROM logs WHERE source = (SELECT name FROM sources "
+                          "WHERE key = 'tap') ORDER BY id DESC LIMIT 1").fetchone()
+    check("B19 Tap timeout: Bina yazıldı (ok=1), Tap ok=0 + 'alınmadı' loqda, cooldown yoxdur, kod 0",
+          code == 0 and get("bina", B + 300) is not None and last.get("bina") == 1 and last.get("tap") == 0
+          and "alınmadı" in tap_log["message"] + tap_log["details"] and auto.cooldown_until(auto._read_file()) is None,
+          f"kod={code} ok={last} loq={tap_log['message'] if tap_log else None}")
+    bina_log = con.execute("SELECT details FROM logs WHERE source = (SELECT name FROM sources WHERE key = 'bina') "
+                           "ORDER BY id DESC LIMIT 1").fetchone()
+    check("B20 yazma fazalarının vaxtı logs.details-də", "yazma fazaları: yükləmə=" in bina_log["details"])
 finally:
     real_rollback()
     real_close()
