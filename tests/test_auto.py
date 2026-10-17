@@ -336,6 +336,24 @@ try:
 except StuckError as e:
     raised = e
 check("C14 Tap klienti: endCursor dəyişmirsə StuckError", raised is not None)
+
+
+class PartialClient:
+    """Axın sonuna çatır (hasNextPage=false), amma totalCount-dan az elan verir."""
+
+    def __init__(self, n, total):
+        self.n, self.total, self.requests, self.req_time = n, total, 0, 0.0
+
+    def pages(self, flt, max_pages):
+        self.requests += 1
+        yield self.total, [node(500 + i) for i in range(self.n)], False
+
+
+rows, done, error, failed = auto.collect([st("bina", "p")], {"bina": PartialClient(7, 10)}, pages=100000)
+check("C16 axın sonu, amma unikal elan totalCount-un 70%-i → 'alınmadı' (tam oxunmuş sayılmır)",
+      failed["bina"] == ["bina p"] and done[0][1] is False and len(rows["bina"]) == 7, f"done={done[0][1]}")
+rows, done, error, failed = auto.collect([st("bina", "p")], {"bina": PartialClient(10, 10)}, pages=100000)
+check("C17 unikal elan = totalCount → tam oxundu", not failed["bina"] and done[0][1] is True)
 check("C15 Bina klienti kursoru 'cursor' dəyişəni ilə göndərir (SearchItems: after: $cursor)",
       json.loads(bina.BinaClient._params({}, "CUR", 16)["variables"]).get("cursor") == "CUR"
       and "after" not in json.loads(bina.BinaClient._params({}, "CUR", 16)["variables"]))
@@ -659,6 +677,39 @@ try:
           and any("silinmə-yoxlanışı=ötürüldü" in r["details"] for r in fin_logs)
           and con.execute("SELECT COUNT(*) FROM logs WHERE details LIKE '%nightly TAMAMLANDI%'").fetchone()[0]
           - runs_before == 2)
+
+    # D11: kütləvi silinmə qoruyucusu — Tap kirayə aktivlərinin ~30%-i namizəddirsə silinmə tətbiq olunmur
+    con.execute("DELETE FROM settings WHERE key IN (?, ?)", (auto.PROGRESS_KEY, auto.LAST_FULL_KEY))
+    STREAMS[:] = [stream("bina", "b"), stream("tap", "t")]
+    tap_filter = ("s.key = 'tap' AND l.active = 1 AND l.deal_type = 'rent' AND l.property_type = 'Yeni tikili' "
+                  "AND l.price_period = 'month'")
+    con.execute("UPDATE listings SET active = 0 WHERE id IN (SELECT l.id FROM listings l JOIN sources s ON "
+                "s.id = l.source_id WHERE s.key = 'tap' AND l.active = 1 AND l.deal_type = 'rent' AND NOT "
+                f"({tap_filter}))")
+    ids = [r["id"] for r in con.execute(f"SELECT l.id FROM listings l JOIN sources s ON s.id = l.source_id "
+                                        f"WHERE {tap_filter} ORDER BY l.id")]
+    k = -(-(len(ids) + 1) * 3 // 10)  # ~30% (+1: test elanı da aktiv olacaq)
+    victims = ids[:k]
+    con.execute("UPDATE listings SET last_seen_at = '2020-01-01 00:00:00' WHERE id = ANY(?)", (victims,))
+    con.execute("UPDATE listings SET last_seen_at = ? WHERE id = ANY(?)", (auto.fmt(auto.now()), ids[k:]))
+    clients = {"bina": FakeClient("bina", {"b": [[row("bina", B + 700)]]}),
+               "tap": FakeClient("tap", {"t": [[row("tap", T + 700)]]})}
+    ctx = auto.Ctx(clients, fake_connect)
+    err = auto.nightly(ctx, auto.load_state(con), deal="rent")
+    still = con.execute("SELECT COUNT(*) FROM listings WHERE id = ANY(?) AND active = 1", (victims,)).fetchone()[0]
+    warn = con.execute("SELECT level, message, details FROM logs WHERE message LIKE '%kütləvi silinmə dayandırıldı%' "
+                       "ORDER BY id DESC LIMIT 1").fetchone()
+    check(f"D11 namizədlər ({k}/{len(ids) + 1} ≈ 30%) > 25% → silinmə TƏTBİQ OLUNMADI, WARNING loqda, iş davam etdi",
+          err is None and auto.load_progress(con)["finished_at"] and still == len(victims) and warn is not None
+          and warn["level"] == "warn" and f"{k} namizəd / {len(ids) + 1} aktiv" in warn["message"]
+          and "run=#" in warn["details"], f"qalan={still}/{len(victims)} loq={warn['message'] if warn else None}")
+    con.execute("UPDATE listings SET last_seen_at = '2020-01-01 00:00:00' WHERE id = ANY(?)", (victims[:1],))
+    con.execute("UPDATE listings SET last_seen_at = ? WHERE id = ANY(?)", (auto.fmt(auto.now()), victims[1:]))
+    con.execute("DELETE FROM settings WHERE key IN (?, ?)", (auto.PROGRESS_KEY, auto.LAST_FULL_KEY))
+    err = auto.nightly(ctx, auto.load_state(con), deal="rent")
+    check("D12 namizəd az olanda (25%-dən aşağı) silinmə normal işləyir",
+          active(victims[0]) == 0 and con.execute("SELECT COUNT(*) FROM listings WHERE id = ANY(?) AND active = 1",
+                                                  (victims[1:],)).fetchone()[0] == len(victims) - 1)
     STREAMS[:] = [stream("bina", "b"), stream("tap", "t")]
 finally:
     real_rollback()

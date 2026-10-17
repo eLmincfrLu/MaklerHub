@@ -364,14 +364,8 @@ class Store:
         return self.con.execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
 
     # ------------------------------------------------------------ yoxa çıxanlar
-    def mark_removed(self, deal_type, property_type, district=None, price_period=None):
-        """Sonuna qədər oxunmuş axında görünməyən köhnə elanları deaktiv edir. Sayı qaytarır.
-
-        Axın = sorğunun filtri: Bina.az üçün rayon + tip + əməliyyat (district verilir),
-        Tap.az üçün tip + əməliyyat + kirayə müddəti (price_period verilir; rayon filtri yoxdur).
-        """
+    def _removal_where(self, deal_type, property_type, district=None, price_period=None):
         cutoff = ts(self.started - REMOVE_AFTER)
-        stamp = ts()
         where, args = ["source_id = ?", "active = 1", "deal_type = ?", "property_type = ?", "last_seen_at < ?"], \
             [self.source["id"], deal_type, property_type, cutoff]
         if district is not None:
@@ -380,9 +374,27 @@ class Store:
         if price_period is not None:
             where.append("price_period = ?")
             args.append(price_period)
+        return " AND ".join(where), args
+
+    def removal_candidates(self, deal_type, property_type, district=None, price_period=None):
+        """mark_removed() neçə elanı deaktiv edərdi (heç nə dəyişmir) — kütləvi silinmə qoruyucusu üçün."""
+        where, args = self._removal_where(deal_type, property_type, district, price_period)
+        return self.con.execute(f"SELECT COUNT(*) FROM listings WHERE {where}", args).fetchone()[0]
+
+    def active_count(self, deal_type):
+        return self.con.execute("SELECT COUNT(*) FROM listings WHERE source_id = ? AND active = 1 AND deal_type = ?",
+                                (self.source["id"], deal_type)).fetchone()[0]
+
+    def mark_removed(self, deal_type, property_type, district=None, price_period=None):
+        """Sonuna qədər oxunmuş axında görünməyən köhnə elanları deaktiv edir. Sayı qaytarır.
+
+        Axın = sorğunun filtri: Bina.az üçün rayon + tip + əməliyyat (district verilir),
+        Tap.az üçün tip + əməliyyat + kirayə müddəti (price_period verilir; rayon filtri yoxdur).
+        """
+        where, args = self._removal_where(deal_type, property_type, district, price_period)
+        stamp = ts()
         cur = self.con.execute(
-            f"UPDATE listings SET active = 0, removed_at = ?, updated_at = ? WHERE {' AND '.join(where)} "
-            "RETURNING dup_group",
+            f"UPDATE listings SET active = 0, removed_at = ?, updated_at = ? WHERE {where} RETURNING dup_group",
             [stamp, stamp] + args,
         )
         groups = {r["dup_group"] for r in cur.fetchall() if r["dup_group"] is not None}
@@ -400,10 +412,11 @@ class Store:
         self.con.commit()
 
     # ------------------------------------------------------------ yekun
-    def finish(self, ok, error=None, latency=0.0, label="", failed=()):
+    def finish(self, ok, error=None, latency=0.0, label="", failed=(), warning=None):
         """sync_runs, logs və sources-u yeniləyir, commit edir.
 
-        failed: alınmayan axınların etiketləri (timeout və s.; digər axınlar yazılıb) → loqda xəbərdarlıq."""
+        failed: alınmayan axınların etiketləri (timeout və s.; digər axınlar yazılıb) → loqda xəbərdarlıq.
+        warning: əlavə xəbərdarlıq (məs. kütləvi silinmə dayandırıldı) → logs-da WARNING (run=#sync_runs.id)."""
         con, s = self.con, self.stats
         try:
             con.rollback()  # yarımçıq axının yazılmamış dəyişiklikləri (bloklanma/xəta anında)
@@ -421,9 +434,12 @@ class Store:
                    f"şübhəli={s['suspicious']} atlanan={s['skipped']} uyğunluq={s['matches']} "
                    f"bildiriş={s['notifications']}{' (quiet)' if not self.notify else ''}\n"
                    f"yazma fazaları: {self.phase_line()}"
-                   + (f"\nalınmayan axınlar: {', '.join(failed)}" if failed else ""))
+                   + (f"\nalınmayan axınlar: {', '.join(failed)}" if failed else "")
+                   + (f"\nXƏBƏRDARLIQ: {warning}" if warning else ""))
         name = self.source["name"]
-        if ok and failed:
+        if ok and warning:
+            add_log(con, "warn", name, f"Scraper tamamlandı — {warning}", details)
+        elif ok and failed:
             add_log(con, "warn", name, f"Scraper tamamlandı, amma {len(failed)} axın alınmadı — {s['checked']} elan "
                                        f"yoxlandı, {s['new']} yeni tapıldı", details)
         elif ok:
