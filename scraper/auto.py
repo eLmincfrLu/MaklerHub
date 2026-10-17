@@ -630,7 +630,7 @@ def nightly_due(con, at=None):
     return at.hour >= NIGHTLY_HOUR and (last is None or at - last > NIGHTLY_GAP)
 
 
-def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, last_fast=None):
+def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, last_fast=None, fast_count=None):
     """Tam sayğı (davam edən): hansı axınların bitdiyi settings.nightly_progress-dədir; vaxt bitəndə (deadline,
     siqnal) və ya bloklanmada növbəti iş qaldığı yerdən davam edir. Silinmiş elanlar yalnız BÜTÜN axınlar
     bitəndən sonra, toplu işarələnir; sonra sync_runs və "nightly TAMAMLANDI". İçində hər 15 dəq fast dövrü.
@@ -681,6 +681,8 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
         if time.time() - last_fast[0] >= FAST_EVERY:
             last_fast[0] = time.time()
             err = fast_cycle(ctx, state, update_state=False, mode="fast(nightly)")
+            if fast_count is not None:  # loop-un yekun sətri fast(nightly) dövrlərini də sayır
+                fast_count[0] += 1
             if isinstance(err, (BlockedError, Deadline)):
                 raise err
 
@@ -776,15 +778,18 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
 
 
 # ---------------------------------------------------------------- loop: davamlı rejim (GitHub Actions)
+DISPATCHED = "işə salındı"
+
+
 def dispatch_next(run=subprocess.run):
     """Növbəti loop işini işə salır (gh workflow run loop.yml). SCRAPER_ENABLED != true → başlamır (söndürmə açarı).
-    → True (göndərildi) / False."""
+    → nəticə mətni (yekun loq sətri üçün): DISPATCHED və ya səbəbi ilə "başladılmadı (...)"."""
     if os.environ.get("SCRAPER_ENABLED") != "true":
         log.info("loop: SCRAPER_ENABLED != true — növbəti iş başladılmır (zəncir dayanır)")
-        return False
+        return "başladılmadı (söndürmə açarı)"
     if not (os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GH_TOKEN")):
         log.info("loop: GitHub Actions mühiti deyil — növbəti iş başladılmır")
-        return False
+        return "başladılmadı (GitHub Actions mühiti deyil)"
     ref = os.environ.get("GITHUB_REF_NAME") or "main"
     try:
         p = run(["gh", "workflow", "run", "loop.yml", "--ref", ref, "-f", "chain=true"],
@@ -801,7 +806,7 @@ def dispatch_next(run=subprocess.run):
                 fh.write("dispatched=true\n")
     else:
         log.error("loop: növbəti iş işə salınmadı (%s) — ehtiyat: workflow-un son addımı və 2 saatlıq cron", info)
-    return ok
+    return DISPATCHED if ok else "İŞƏ SALINMADI (gh xətası)"
 
 
 def _due(ctx):
@@ -819,13 +824,13 @@ def loop(ctx, state, minutes, dispatch_at=None, every=FAST_EVERY, dispatch=dispa
     t0 = time.time()
     end = t0 + minutes * 60
     dispatch_t = t0 + (max(minutes - 10, 0) if dispatch_at is None else dispatch_at) * 60
-    sent = [False]
+    sent = [None]   # dispatch() nəticəsi (None: hələ vaxtı çatmayıb)
     last_fast = [0.0]
 
     def tick():
-        if not sent[0] and time.time() >= dispatch_t:
-            sent[0] = True
-            dispatch()
+        if sent[0] is None and time.time() >= dispatch_t:
+            sent[0] = "?"
+            sent[0] = dispatch() or "?"
 
     def wait_until(t):
         while time.time() < t:
@@ -835,7 +840,7 @@ def loop(ctx, state, minutes, dispatch_at=None, every=FAST_EVERY, dispatch=dispa
 
     log.info("loop: %s dəq, fast hər %s dəq, növbəti iş %s-cı dəqiqədə", minutes, every // 60,
              round((dispatch_t - t0) / 60))
-    cycles = 0
+    cycles = [0]    # fast dövrləri, nightly içindəki fast(nightly) da daxil
     try:
         while True:
             tick()
@@ -850,11 +855,11 @@ def loop(ctx, state, minutes, dispatch_at=None, every=FAST_EVERY, dispatch=dispa
             if time.time() - last_fast[0] >= every:
                 last_fast[0] = time.time()
                 err = fast_cycle(ctx, state, notify=True)
-                cycles += 1
+                cycles[0] += 1
                 if isinstance(err, Deadline):
                     raise err
                 if err is None and _due(ctx):
-                    nightly(ctx, state, deadline=end, tick=tick, last_fast=last_fast)
+                    nightly(ctx, state, deadline=end, tick=tick, last_fast=last_fast, fast_count=cycles)
                 continue
             wait_until(min(last_fast[0] + every, end))
     except Deadline as e:
@@ -862,8 +867,8 @@ def loop(ctx, state, minutes, dispatch_at=None, every=FAST_EVERY, dispatch=dispa
     except NoBaseline:
         return 2
     tick()
-    log.info("loop bitdi: %.0f dəq, %s fast dövrü, növbəti iş %s", (time.time() - t0) / 60, cycles,
-             "işə salındı" if sent[0] else "İŞƏ SALINMADI")
+    log.info("loop bitdi: %.0f dəq, %s fast dövrü, növbəti iş %s", (time.time() - t0) / 60, cycles[0],
+             sent[0] or "başladılmadı (iş vaxtından əvvəl dayandı)")
     return 0
 
 

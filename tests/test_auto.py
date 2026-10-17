@@ -8,6 +8,7 @@ Bazada aktiv kirayə profili olmalıdır. İşlətmək (layihə kökündən):
     PYTHONIOENCODING=utf-8 python tests/test_auto.py
 """
 import json
+import logging
 import os
 import signal
 import subprocess
@@ -81,16 +82,17 @@ for k in env_keys:
 out_file = os.path.join(TMP, "gh_output")
 os.environ.update(GITHUB_ACTIONS="true", GH_TOKEN="x", GITHUB_OUTPUT=out_file, GITHUB_REF_NAME="main")
 check("E1 söndürmə açarı: SCRAPER_ENABLED yoxdur → növbəti iş başladılmır",
-      auto.dispatch_next(run=fake_run) is False and not calls)
+      auto.dispatch_next(run=fake_run) == "başladılmadı (söndürmə açarı)" and not calls)
 os.environ["SCRAPER_ENABLED"] = "false"
-check("E2 SCRAPER_ENABLED=false → növbəti iş başladılmır", auto.dispatch_next(run=fake_run) is False and not calls)
+check("E2 SCRAPER_ENABLED=false → növbəti iş başladılmır",
+      auto.dispatch_next(run=fake_run) == "başladılmadı (söndürmə açarı)" and not calls)
 os.environ["SCRAPER_ENABLED"] = "true"
 ok = auto.dispatch_next(run=fake_run)
 check("E3 SCRAPER_ENABLED=true → gh workflow run loop.yml -f chain=true, GITHUB_OUTPUT dispatched=true",
-      ok and calls == [["gh", "workflow", "run", "loop.yml", "--ref", "main", "-f", "chain=true"]]
+      ok == auto.DISPATCHED and calls == [["gh", "workflow", "run", "loop.yml", "--ref", "main", "-f", "chain=true"]]
       and "dispatched=true" in open(out_file, encoding="utf-8").read(), f"{calls}")
 check("E4 gh xətası → False (workflow-un ehtiyat addımı işə düşür)",
-      auto.dispatch_next(run=lambda a, **kw: Proc(1)) is False)
+      auto.dispatch_next(run=lambda a, **kw: Proc(1)) == "İŞƏ SALINMADI (gh xətası)")
 
 real_fast, real_due, real_left = auto.fast_cycle, auto._due, auto.LOOP_MIN_LEFT
 fast_calls, sent = [], []
@@ -134,6 +136,41 @@ check("E8 SIGTERM main-də: kod 0, vəziyyət faylı itməyib, kilid buraxılıb
       code == 0 and auto._read_file().get("marker") == "sigterm" and not os.path.exists(auto.LOCK_PATH))
 signal.signal(signal.SIGTERM, signal.SIG_DFL)
 signal.signal(signal.SIGINT, signal.default_int_handler)
+
+# E9-E10: yekun sətir reallığı göstərir; nightly içindəki fast(nightly) dövrləri də sayılır
+class Grab(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.lines = []
+
+    def emit(self, record):
+        self.lines.append(record.getMessage())
+
+
+grab = Grab()
+auto.log.addHandler(grab)
+auto.fast_cycle = lambda ctx, state, **kw: None
+os.environ.pop("SCRAPER_ENABLED", None)
+auto.loop(None, {}, minutes=0.02, dispatch_at=0, every=60)
+os.environ["SCRAPER_ENABLED"] = "false"
+check("E9 söndürmə açarında yekun sətir: 'növbəti iş başladılmadı (söndürmə açarı)'",
+      any(l.startswith("loop bitdi") and l.endswith("növbəti iş başladılmadı (söndürmə açarı)") for l in grab.lines),
+      f"{[l for l in grab.lines if l.startswith('loop bitdi')]}")
+
+
+def fake_nightly(ctx, state, fast_count=None, **kw):
+    fast_count[0] += 2  # içində 2 fast(nightly) dövrü
+
+
+real_nightly = auto.nightly
+auto.nightly, auto._due = fake_nightly, lambda ctx: True
+grab.lines.clear()
+auto.loop(None, {}, minutes=0.02, dispatch_at=0, every=60, dispatch=lambda: auto.DISPATCHED)
+auto.nightly = real_nightly
+auto.log.removeHandler(grab)
+check("E10 fast sayğacı nightly içindəki dövrləri də sayır (1 + 2 = 3), 'növbəti iş işə salındı'",
+      any(l.startswith("loop bitdi") and "3 fast dövrü" in l and l.endswith("növbəti iş işə salındı")
+          for l in grab.lines), f"{[l for l in grab.lines if l.startswith('loop bitdi')]}")
 auto.fast_cycle, auto._due, auto.LOOP_MIN_LEFT = real_fast, real_due, real_left
 os.remove(auto.STATE_PATH)
 
@@ -443,6 +480,8 @@ try:
                                                       (auto.fmt(auto.now() - timedelta(minutes=10)),)).fetchone()[0] >= 2)
 
     # B16-B18: nightly (axın üzrə yazılır, tam oxunan axında yoxa çıxanlar, içində fast dövrü)
+    # real bazada yarımçıq sayğı ola bilər (loop işləyib) — test öz sayğısını başlatsın (SAVEPOINT içində)
+    con.execute("DELETE FROM settings WHERE key IN (?, ?)", (auto.PROGRESS_KEY, auto.LAST_FULL_KEY))
     ran = []
     real_fast = auto.fast_cycle
     auto.fast_cycle = lambda *a, **kw: ran.append(kw.get("mode")) or None
