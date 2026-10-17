@@ -1,6 +1,6 @@
 """Yoxa çıxan elan məntiqinin testi. Bir tranzaksiya, sonda ROLLBACK. Heç nə commit olunmur.
 
-Real Neon bazasına qoşulur (DATABASE_URL .env-dən), Bina.az-a sorğu göndərmir.
+Test bazasına qoşulur (YALNIZ TEST_DATABASE_URL — Neon test branch-i, tests/testdb.py), Bina.az-a sorğu göndərmir.
 Bazada Nərimanov kirayə elanları olmalıdır. İşlətmək (layihə kökündən):
     PYTHONIOENCODING=utf-8 python tests/test_removed.py
 """
@@ -8,14 +8,15 @@ import os, sys, tempfile
 from datetime import timedelta
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from dotenv import load_dotenv
-load_dotenv(os.path.join(ROOT, ".env"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import testdb
+TEST_URL = testdb.url()  # yalnız TEST_DATABASE_URL (qoruyucu: tests/testdb.py)
 from maklerhub.db import connect
 from maklerhub.helpers import now, ts
 from scraper import run, bina
 from scraper.store import Store
 
-URL = os.environ["DATABASE_URL"]
+URL = TEST_URL
 SP = tempfile.mkdtemp(prefix="maklerhub_test_")  # run.py-ın JSON çıxışı layihəyə düşməsin
 
 def snapshot():
@@ -65,6 +66,14 @@ def check(name, ok, info=""):
     results.append(("✓" if ok else "✗") + " " + name + (f"  [{info}]" if info else ""))
 
 try:
+    # test qısa olsun: Nərimanov kirayə axınlarından kiçik dəst aktiv qalır, qalan aktiv elanlar tranzaksiya
+    # daxilində active=0 (sonda ROLLBACK). run.py elanları sətir-sətir yazır — minlərlə elan dəqiqələr çəkərdi.
+    keep = [r["id"] for r in con.execute("""SELECT l.id FROM listings l WHERE district='Nərimanov'
+        AND property_type='Yeni tikili' AND deal_type='rent' AND active=1
+        ORDER BY (SELECT COUNT(*) FROM matches m WHERE m.listing_id=l.id) DESC, id LIMIT 30""")]
+    keep += [r["id"] for r in con.execute("""SELECT id FROM listings WHERE district='Nərimanov'
+        AND property_type='Köhnə tikili' AND deal_type='rent' AND active=1 ORDER BY id LIMIT 5""")]
+    con.execute("UPDATE listings SET active = 0 WHERE active = 1 AND id <> ALL(?)", (keep,))
     old = ts(now() - timedelta(hours=48))
     recent = ts(now() - timedelta(hours=2))
     # Nərimanov | Yeni tikili | kirayə axını: X matching-li elan (a, d üçün), Y (c üçün)

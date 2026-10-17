@@ -704,6 +704,7 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
     stores, error, stop = {}, None, None
     done_here = 0
     cur = {"label": "", "i": 0, "t0": time.time(), "logged": time.time()}
+    pending = []   # yazma hissələri arasında fast dövründən gələn bloklanma (növbəti on_page-də qaldırılır)
 
     def on_page(page=0, n=0, total_count=None):
         check()
@@ -715,13 +716,29 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
                 eta = f", ETA axın {_hm(per_page * max(-(-total_count // max(n // page, 1)) - page, 0))}"
             log.info("nightly axın %s/%s [%s] səhifə %s, elan %s%s%s", cur["i"], total, cur["label"], page, n,
                      f"/{total_count}" if total_count else "", eta)
-        if time.time() - last_fast[0] >= FAST_EVERY:
-            last_fast[0] = time.time()
-            err = fast_cycle(ctx, state, update_state=False, mode="fast(nightly)")
-            if fast_count is not None:  # loop-un yekun sətri fast(nightly) dövrlərini də sayır
-                fast_count[0] += 1
-            if isinstance(err, (BlockedError, Deadline)):
-                raise err
+        if pending:
+            raise pending.pop()
+        err = maybe_fast()
+        if err is not None:
+            raise err
+
+    def maybe_fast():
+        """Vaxtı çatıbsa fast(nightly) dövrü; bloklanma / siqnal xətasını qaytarır."""
+        if time.time() - last_fast[0] < FAST_EVERY:
+            return None
+        last_fast[0] = time.time()
+        err = fast_cycle(ctx, state, update_state=False, mode="fast(nightly)")
+        if fast_count is not None:  # loop-un yekun sətri fast(nightly) dövrlərini də sayır
+            fast_count[0] += 1
+        return err if isinstance(err, (BlockedError, Deadline)) else None
+
+    def between_chunks():
+        """Böyük axının yazılışı (100-lük hissələr) arasında: fast 15 dəqiqədən çox gecikməsin. Yazma yarıda
+        kəsilmir — bloklanma növbəti səhifədən əvvəl (on_page) qaldırılır."""
+        tick()
+        err = maybe_fast()
+        if err is not None:
+            pending.append(err)
 
     def store_for(con, src):
         if src not in stores:
@@ -750,7 +767,7 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
         try:
             store = store_for(con, src)
             if rows.get(src):
-                store.save_many(rows[src])
+                store.save_many(rows[src], between=between_chunks)
             if finished:
                 prog["done"][key] = bool(done and done[0][1])
                 if bad.get(src):
@@ -774,6 +791,8 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
         if stop is not None or error is not None:
             break
 
+    if pending and error is None and stop is None:  # son axının yazılışı zamanı fast bloklandı
+        error = pending.pop()
     complete = len([k for k in prog["streams"] if k in prog["done"] or k not in by_key]) == total
     if not complete:
         why = f"bloklanma: {error}" if error is not None else f"{stop}"
@@ -833,8 +852,8 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
              prog["finished_at"], total, len(prog["failed"]), prog["deal"],
              f", silinmə yoxlanışı ötürüldü: {', '.join(skipped)}" if skipped else "",
              _summary({k: dict(v.stats) for k, v in stores.items()}), _failed_line(failed))
-    _finish_state(ctx, state, None, "nightly")
-    return None
+    _finish_state(ctx, state, error, "nightly")
+    return error
 
 
 # ---------------------------------------------------------------- loop: davamlı rejim (GitHub Actions)

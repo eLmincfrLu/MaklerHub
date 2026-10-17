@@ -63,13 +63,14 @@ class Store:
             self.stats["suspicious"] += 1
         return old["id"]
 
-    def save_many(self, rows, chunk=CHUNK):
+    def save_many(self, rows, chunk=CHUNK, between=None):
         """Bir neçə elanı TOPLU yazır (save() ilə eyni nəticə). Nəticələrin sayını qaytarır.
 
         Mövcud elanlar bir sorğu ilə oxunur, dəyişməyənlərin last_seen_at-ı bir UPDATE ilə yenilənir. Yeni / dəyişmiş
         elanlar `chunk`-lıq hissələrlə: çoxsətirli INSERT, executemany, təkrar qrupları hissə üzrə bir dəfə
         (dups.refresh_many), uyğunluq və bildiriş bir dəfə (matching.match_many); hər hissədən sonra commit
-        (iş yarıda kəsilsə yazılan hissə itmir). Fazaların vaxtı self.timing-dədir."""
+        (iş yarıda kəsilsə yazılan hissə itmir). Fazaların vaxtı self.timing-dədir.
+        between(): hissələr arasında (commit-dən sonra) çağırılır — nightly orada vaxtı çatmış fast dövrünü işlədir."""
         result = Counter()
         t = time.time()
         olds = self._olds(rows)
@@ -89,6 +90,8 @@ class Store:
         for i in range(0, len(todo), chunk):
             result.update(self._save_part(todo[i:i + chunk]))
             self.commit()
+            if between is not None and i + chunk < len(todo):
+                between()
         return result
 
     def save_many_rowwise(self, rows):

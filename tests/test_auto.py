@@ -2,7 +2,7 @@
 Tap.az təkrar cəhdləri (timeout), bir axının xətasının digər axınları ləğv etməməsi, davam edən tam sayğı
 (deadline → növbəti iş qaldığı yerdən), loop (növbəti işin işə salınması, söndürmə açarı, cooldown, SIGTERM).
 
-Saytlara sorğu getmir (saxta klientlər). Real Neon bazasına qoşulur (DATABASE_URL .env-dən): hər şey bir
+Saytlara sorğu getmir (saxta klientlər). Test bazasına qoşulur (YALNIZ TEST_DATABASE_URL — Neon test branch-i, tests/testdb.py): hər şey bir
 tranzaksiyadadır (commit → SAVEPOINT), sonda ROLLBACK. Kilid / vəziyyət / loq faylları müvəqqəti qovluqdadır.
 Bazada aktiv kirayə profili olmalıdır. İşlətmək (layihə kökündən):
     PYTHONIOENCODING=utf-8 python tests/test_auto.py
@@ -20,14 +20,15 @@ from datetime import timedelta
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from dotenv import load_dotenv
-load_dotenv(os.path.join(ROOT, ".env"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import testdb
+TEST_URL = testdb.url()  # yalnız TEST_DATABASE_URL (qoruyucu: tests/testdb.py)
 from maklerhub.db import connect
 import requests
 from scraper import auto, bina, tap
 from scraper.common import BlockedError, ScrapeError, StuckError
 
-URL = os.environ["DATABASE_URL"]
+URL = TEST_URL
 TMP = tempfile.mkdtemp(prefix="mh-auto-")
 auto.STATE_DIR, auto.LOG_DIR = TMP, TMP
 auto.LOCK_PATH, auto.STATE_PATH = os.path.join(TMP, "auto.lock"), os.path.join(TMP, "cooldown.json")
@@ -710,6 +711,44 @@ try:
     check("D12 namizəd az olanda (25%-dən aşağı) silinmə normal işləyir",
           active(victims[0]) == 0 and con.execute("SELECT COUNT(*) FROM listings WHERE id = ANY(?) AND active = 1",
                                                   (victims[1:],)).fetchone()[0] == len(victims) - 1)
+
+    # D13-D14: böyük axının yazılışı (250 elan → 3 hissə) arasında fast dövrü işləyir
+    from scraper import store as store_mod
+    con.execute("DELETE FROM settings WHERE key IN (?, ?)", (auto.PROGRESS_KEY, auto.LAST_FULL_KEY))
+    STREAMS[:] = [stream("bina", "big")]
+    seq = []
+    real_part, real_fast2, real_every = store_mod.Store._save_part, auto.fast_cycle, auto.FAST_EVERY
+    store_mod.Store._save_part = lambda self, part: seq.append("hissə") or real_part(self, part)
+    auto.fast_cycle = lambda *a, **kw: seq.append("fast") or None
+    auto.FAST_EVERY = 0
+    big = [row("bina", B + 800 + i) for i in range(250)]
+    clients = {"bina": FakeClient("bina", {"big": [big]}), "tap": FakeClient("tap", {})}
+    ctx = auto.Ctx(clients, fake_connect)
+    try:
+        err = auto.nightly(ctx, auto.load_state(con), deal="rent")
+        check("D13 yavaş yazma: fast dövrü 100-lük hissələr ARASINDA işləyir (hissə, fast, hissə, fast, hissə)",
+              err is None and seq == ["fast", "hissə", "fast", "hissə", "fast", "hissə"]
+              and get("bina", B + 1049) is not None, f"{seq}")
+        con.execute("DELETE FROM settings WHERE key IN (?, ?)", (auto.PROGRESS_KEY, auto.LAST_FULL_KEY))
+        seq.clear()
+        calls = [0]
+
+        def blocked_fast(*a, **kw):
+            calls[0] += 1
+            seq.append("fast")
+            return BlockedError("HTTP 429 (test)") if calls[0] == 2 else None
+        auto.fast_cycle = blocked_fast
+        big = [row("bina", B + 1100 + i) for i in range(250)]
+        clients["bina"].data["big"] = [big]
+        st_ = auto.load_state(con)
+        err = auto.nightly(ctx, st_, deal="rent")
+        check("D14 hissələr arasında fast bloklanır: yazma yarıda kəsilmir (250 elan yazılır), nightly bloklanma "
+              "qaytarır, cooldown başlayır",
+              isinstance(err, BlockedError) and get("bina", B + 1349) is not None
+              and seq.count("hissə") == 3 and auto.cooldown_until(st_) is not None, f"{seq} err={err}")
+        auto.save_state({}, con)
+    finally:
+        store_mod.Store._save_part, auto.fast_cycle, auto.FAST_EVERY = real_part, real_fast2, real_every
     STREAMS[:] = [stream("bina", "b"), stream("tap", "t")]
 finally:
     real_rollback()

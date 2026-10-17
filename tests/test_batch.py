@@ -7,8 +7,9 @@ A: eyni məlumat iki dəfə yazılır — köhnə yol və yeni yol (hər biri SA
    quiet rejimi.
 B: hər sorğuya süni 80 ms gecikmə (ABŞ → Frankfurt) ilə 500 yeni elan < 60 san; sorğu sayı; köhnə yolun
    20 elanla ölçülüb 500-ə hesablanmış vaxtı.
+C: ≥5000 elanlıq bölmə (kirayə, aylıq, 2 otaq), 80 ms gecikmə ilə 3000 yeni elan < 3 dəq; köhnə/yeni group_rows.
 
-Saytlara sorğu getmir. Real Neon bazasına qoşulur (DATABASE_URL .env-dən), sonda ROLLBACK — heç nə qalmır.
+Saytlara sorğu getmir. Test bazasına qoşulur (YALNIZ TEST_DATABASE_URL — Neon test branch-i, tests/testdb.py), sonda ROLLBACK — heç nə qalmır.
 Bazada aktiv kirayə profili olmalıdır. İşlətmək (layihə kökündən):
     PYTHONIOENCODING=utf-8 python tests/test_batch.py
 """
@@ -19,12 +20,13 @@ from collections import Counter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from dotenv import load_dotenv
-load_dotenv(os.path.join(ROOT, ".env"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import testdb
+TEST_URL = testdb.url()  # yalnız TEST_DATABASE_URL (qoruyucu: tests/testdb.py)
 from maklerhub.db import connect
 from scraper.store import Store
 
-URL = os.environ["DATABASE_URL"]
+URL = TEST_URL
 DELAY = 0.08
 
 results = []
@@ -133,9 +135,15 @@ try:
     KEYS = ("checked", "new", "updated", "skipped", "suspicious", "reactivated", "district_changed", "matches",
             "notifications")
 
+    def isolate():
+        """A və B real elanlara ehtiyac duymur: real aktiv elanlar tranzaksiya daxilində active=0 (ROLLBACK olunur),
+        test qısa qalır (test branch-i real bazanın surətidir). C isə real ölçülü bölmədə ölçür."""
+        con.execute("UPDATE listings SET active = 0 WHERE active = 1")
+
     def scenario(batch, notify=True):
         real_execute("ROLLBACK TO SAVEPOINT base")
         real_execute("SAVEPOINT c")
+        isolate()
         for src, rows in (("bina", pre_bina), ("tap", pre_tap)):
             Store(con, src, notify=False).save_many_rowwise(rows)
         con.execute("UPDATE listings SET active = 0, removed_at = '2026-01-01 00:00:00' WHERE external_id = ? "
@@ -184,6 +192,7 @@ try:
 
     real_execute("ROLLBACK TO SAVEPOINT base")
     real_execute("SAVEPOINT c")
+    isolate()
     delay[0] = DELAY
     sample = bulk(20, 2000, "bina")
     queries.clear()
@@ -192,6 +201,7 @@ try:
     old_s, old_q = time.time() - t, queries["n"]
     real_execute("ROLLBACK TO SAVEPOINT base")
     real_execute("SAVEPOINT c")
+    isolate()
     rows_b, rows_t = bulk(400, 3000, "bina"), bulk(100, 4000, "tap")
     queries.clear()
     t = time.time()
@@ -207,6 +217,40 @@ try:
     check(f"B köhnə yol: 20 elan {old_s:.1f} san, {old_q} sorğu ({old_q / 20:.1f} sorğu/elan) → 500 elan ≈ "
           f"{old_s * 25:.0f} san", True)
     check("B hər 100 elandan sonra commit olunur (400 → 4, 100 → 1)", queries["commit"] == 5, f"commit={queries['commit']}")
+
+    # ---------------------------------------------------------------- C: böyük bölmə (≥5000), 3000 yeni, 80 ms
+    from maklerhub import dups
+    from dups_ref import group_rows_ref
+    real_execute("ROLLBACK TO SAVEPOINT base")
+    real_execute("SAVEPOINT c")
+    part_sql = ("SELECT COUNT(*) FROM listings WHERE active = 1 AND deal_type = 'rent' AND price_period = 'month' "
+                "AND rooms = 2")
+    have = con.execute(part_sql).fetchone()[0]
+    if have < 5000:  # test bazasında bölmə kiçikdirsə doldurulur (gecikməsiz)
+        Store(con, "bina", notify=False).save_many(
+            [dict(r, rooms=2) for r in bulk(5000 - have, 10000, "bina")])
+    size = con.execute(part_sql).fetchone()[0]
+    new_rows = [dict(r, rooms=2) for r in bulk(3000, 20000, "bina")]
+    delay[0] = DELAY
+    queries.clear()
+    t = time.time()
+    sbig = Store(con, "bina", gate=gate)
+    res = sbig.save_many(new_rows)
+    big_s = time.time() - t
+    delay[0] = 0.0
+    check(f"C bölmə {size} elan, 3000 yeni elan (80 ms gecikmə) < 180 san: {big_s:.0f} san, {queries['n']} sorğu, "
+          f"{queries['commit']} commit", big_s < 180 and res["new"] == 3000, sbig.phase_line())
+    rows_p = con.execute(f"SELECT {dups.COLS} FROM listings l JOIN sources s ON s.id = l.source_id WHERE l.active = 1 "
+                         "AND l.deal_type = 'rent' AND l.price_period = 'month' AND l.rooms = 2 ORDER BY l.id").fetchall()
+    places = dups.bina_places(con)
+    t = time.time()
+    ref = group_rows_ref(rows_p, places)
+    t_ref = time.time() - t
+    t = time.time()
+    new = dups.group_rows(rows_p, places)
+    t_new = time.time() - t
+    check(f"C son bölmə ({len(rows_p)} elan): group_rows köhnə {t_ref:.1f}s → yeni {t_new:.2f}s, nəticə eyni; köhnə ilə "
+          f"30 hissə ≈ {t_ref * 30 / 60:.0f}+ dəq yalnız qruplaşdırma", ref == new)
 finally:
     real_rollback()
     real_close()

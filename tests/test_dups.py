@@ -1,19 +1,20 @@
 """Təkrar elanların (dup_group) testi. A hissəsi bazasızdır; B hissəsi bir tranzaksiyadadır, sonda ROLLBACK.
 
-Real Neon bazasına qoşulur (DATABASE_URL .env-dən), saytlara sorğu göndərmir.
+Test bazasına qoşulur (YALNIZ TEST_DATABASE_URL — Neon test branch-i, tests/testdb.py), saytlara sorğu göndərmir.
 Bazada aktiv kirayə profili olmalıdır. İşlətmək (layihə kökündən):
     PYTHONIOENCODING=utf-8 python tests/test_dups.py
 """
 import os, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from dotenv import load_dotenv
-load_dotenv(os.path.join(ROOT, ".env"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import testdb
+TEST_URL = testdb.url()  # yalnız TEST_DATABASE_URL (qoruyucu: tests/testdb.py)
 from maklerhub import dups
 from maklerhub.db import connect
 from scraper.store import Store
 
-URL = os.environ["DATABASE_URL"]
+URL = TEST_URL
 results = []
 def check(name, ok, info=""):
     results.append(("✓" if ok else "✗") + " " + name + (f"  [{info}]" if info else ""))
@@ -93,6 +94,9 @@ con = connect(URL)
 con.commit = lambda: (_ for _ in ()).throw(RuntimeError("commit qadağandır"))
 real_close = con.close
 try:
+    # test qısa olsun: real aktiv elanlar tranzaksiya daxilində active=0 (sonda ROLLBACK) — rematch_profile və
+    # qruplaşdırma yalnız test elanları ilə işləyir (test branch-i real bazanın surətidir, ~15 000 elan)
+    con.execute("UPDATE listings SET active = 0 WHERE active = 1")
     p = con.execute("SELECT * FROM profiles WHERE status = 'active' AND deal_type = 'rent' ORDER BY id LIMIT 1").fetchone()
     price = (p["price_min"] + p["price_max"]) // 2
     district = p["district"] if p["district"] != "Bakı, mərkəz" else "Nəsimi"

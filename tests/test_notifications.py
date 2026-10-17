@@ -1,6 +1,6 @@
 """Bildiriş məntiqinin testi. Bir tranzaksiya, sonda ROLLBACK. Heç nə commit olunmur.
 
-Real Neon bazasına qoşulur (DATABASE_URL .env-dən), Bina.az-a sorğu göndərmir.
+Test bazasına qoşulur (YALNIZ TEST_DATABASE_URL — Neon test branch-i, tests/testdb.py), Bina.az-a sorğu göndərmir.
 Bazada aktiv kirayə profili olmalıdır. İşlətmək (layihə kökündən):
     PYTHONIOENCODING=utf-8 python tests/test_notifications.py
 """
@@ -8,13 +8,14 @@ import os, sys
 from datetime import timedelta
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from dotenv import load_dotenv
-load_dotenv(os.path.join(ROOT, ".env"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import testdb
+TEST_URL = testdb.url()  # yalnız TEST_DATABASE_URL (qoruyucu: tests/testdb.py)
 from maklerhub.db import connect
 from maklerhub.helpers import now, ts
 from scraper.store import Store
 
-URL = os.environ["DATABASE_URL"]
+URL = TEST_URL
 
 
 def snapshot():

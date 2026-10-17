@@ -21,6 +21,7 @@ Qaydalar (Gün 13):
 
 Hesablama (əməliyyat, kirayə müddəti, otaq) hissəsi üzrə aparılır: təkrar yalnız bu hissənin daxilində ola bilər.
 """
+from bisect import bisect_left, bisect_right
 from collections import defaultdict
 
 AREA_TOL = 3        # m²
@@ -28,6 +29,7 @@ PRICE_TOL = 0.05    # 5%
 # Tap elanında metro/qəsəbə yoxdursa rayon Bina nüsxəsindən yalnız bu daha sıx hədlərlə götürülür
 INHERIT_AREA_TOL = 2        # m²
 INHERIT_PRICE_TOL = 0.03    # 3%
+_EPS = 1e-6                 # sahə pəncərəsi üçün ehtiyat (üzən nöqtə); son qərar yenə _cross-dadır
 
 # Bina nüsxəsindən götürülmüş rayon (district_src='dup') qruplaşdırmada boş sayılır və hər dəfə yenidən yoxlanır
 COLS = ("l.id, l.source_id, s.key AS skey, l.external_id, l.url, "
@@ -75,6 +77,13 @@ def _repost(a, b):
     return all(a[k] == b[k] for k in _SAME)
 
 
+def _repost_key(r):
+    """_repost() üçün açar: iki Bina elanı yalnız açarları eyni olanda təkrar yerləşdirmədir (None → heç vaxt)."""
+    if r["skey"] != "bina" or not r["district"] or r["area"] is None or r["floor"] is None or r["floors"] is None:
+        return None
+    return tuple(r[k] for k in _SAME)
+
+
 def _pair_ok(a, b, places):
     if a["skey"] == b["skey"]:
         return _repost(a, b)
@@ -112,14 +121,26 @@ def group_rows(rows, places=None):
     tap = [r for r in rows if r["skey"] == "tap"]
     for r in rows:
         rep.find(r["id"])
-    for i, a in enumerate(bina):
-        for b in bina[i + 1:]:
-            if _repost(a, b):
-                rep.join(a["id"], b["id"])
-    # Bina ↔ Tap: qarşılıqlı tək namizəd (Bina qrupları səviyyəsində)
+    # cüt-cüt müqayisə əvəzinə açar üzrə: _repost tam bərabərlikdir → eyni açarlı elanlar bir qrupdur
+    same = defaultdict(list)
+    for b in bina:
+        key = _repost_key(b)
+        if key is not None:
+            same[key].append(b["id"])
+    for ids in same.values():
+        for other in ids[1:]:
+            rep.join(ids[0], other)
+    # Bina ↔ Tap: qarşılıqlı tək namizəd (Bina qrupları səviyyəsində). _cross |Δsahə| ≤ AREA_TOL tələb edir →
+    # hər Tap elanı üçün yalnız sahəyə görə sıralanmış Bina siyahısının bu pəncərəsi yoxlanır (bisect)
     t2b, b2t = defaultdict(set), defaultdict(set)
+    sized = sorted((b for b in bina if b["area"] is not None), key=lambda b: b["area"])
+    areas = [b["area"] for b in sized]
     for t in tap:
-        for b in bina:
+        if t["area"] is None:
+            continue
+        lo = bisect_left(areas, t["area"] - AREA_TOL - _EPS)
+        hi = bisect_right(areas, t["area"] + AREA_TOL + _EPS)
+        for b in sized[lo:hi]:
             if _cross(t, b, places):
                 t2b[t["id"]].add(rep.find(b["id"]))
                 b2t[rep.find(b["id"])].add(t["id"])
