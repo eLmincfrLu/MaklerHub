@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import Counter
 from datetime import timedelta
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -23,8 +24,8 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(ROOT, ".env"))
 from maklerhub.db import connect
 import requests
-from scraper import auto, tap
-from scraper.common import BlockedError, ScrapeError
+from scraper import auto, bina, tap
+from scraper.common import BlockedError, ScrapeError, StuckError
 
 URL = os.environ["DATABASE_URL"]
 TMP = tempfile.mkdtemp(prefix="mh-auto-")
@@ -284,6 +285,57 @@ clients["tap"].errors["t2"] = BlockedError("HTTP 429")
 streams = [st("tap", "t2"), st("bina", "b1")]
 rows, done, error, failed = auto.collect(streams, clients, pages=1)
 check("C9 bloklanma isə bütün toplamanı dayandırır", isinstance(error, BlockedError) and not rows["bina"])
+
+
+class RepeatClient:
+    """Bina.az-ın indiki xətası kimi: hər səhifədə eyni elanlar, hasNextPage həmişə True (sonsuz)."""
+
+    def __init__(self, data, total=None):
+        self.data, self.total, self.asked = data, total, Counter()
+        self.requests, self.req_time = 0, 0.0
+
+    def pages(self, flt, max_pages):
+        for i in range(max_pages):
+            self.asked[flt] += 1
+            self.requests += 1
+            if callable(self.data[flt]):
+                yield self.total, self.data[flt](i), True
+            else:
+                yield self.total, self.data[flt], flt == "loop"
+
+
+rc = RepeatClient({"loop": [node(1), node(2)], "ok": [node(3)]})
+pages_seen = []
+rows, done, error, failed = auto.collect([st("bina", "loop"), st("bina", "ok")], {"bina": rc}, pages=100000,
+                                         on_page=lambda *a: pages_seen.append(a))
+check("C10 eyni səhifə təkrarlanır → axın 'alınmadı' (kursor irəliləmir), növbəti axın davam edir, sonsuz dövrə yox",
+      error is None and failed["bina"] == ["bina loop"] and rc.asked["loop"] == 1 + auto.STALL_PAGES
+      and [r["external_id"] for r in rows["bina"]] == ["1", "2", "3"] and dict((s_["flt"], c) for s_, c in done)
+      == {"loop": False, "ok": True}, f"sorğu={dict(rc.asked)} failed={failed}")
+check("C11 on_page(səhifə, elan, totalCount) proqres üçün çağırılır", pages_seen[:1] == [(1, 2, None)], f"{pages_seen[:2]}")
+rc = RepeatClient({"loop": lambda i: [node(100 + i * 2), node(101 + i * 2)]}, total=10)
+rows, done, error, failed = auto.collect([st("bina", "loop")], {"bina": rc}, pages=100000)
+check("C12 oxunan elan totalCount + 10%-i keçir → axın 'alınmadı'",
+      failed["bina"] == ["bina loop"] and len(rows["bina"]) <= 10 + 16 + 2, f"sorğu={dict(rc.asked)}")
+
+# real BinaClient / TapClient: endCursor dəyişmirsə StuckError (sayta sorğu getmir)
+bc = bina.BinaClient(delay=(0, 0))
+bc.search = lambda flt, after=None, first=16: {"totalCount": 199, "edges": [{"node": {"id": "1"}}],
+                                               "pageInfo": {"hasNextPage": True, "endCursor": "SAME"}}
+try:
+    list(bc.pages({}, 10))
+    raised = None
+except StuckError as e:
+    raised = e
+check("C13 Bina klienti: endCursor dəyişmirsə StuckError (2-ci səhifədə)", raised is not None, str(raised))
+tc = tap.TapClient(delay=(0, 0))
+tc.search = lambda flt, after=None: {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": "SAME"}}
+try:
+    list(tc.pages({}, 10))
+    raised = None
+except StuckError as e:
+    raised = e
+check("C14 Tap klienti: endCursor dəyişmirsə StuckError", raised is not None)
 
 
 # ---------------------------------------------------------------- B: bazada (SAVEPOINT, sonda ROLLBACK)
@@ -566,13 +618,44 @@ try:
     fin = auto.parse(prog["finished_at"])
     check("D6 nightly_due: tam sayğıdan sonra 20 saat keçməyibsə yox; >20 saat və Bakı ≥03:00 → bəli; 03:00-dan əvvəl yox",
           auto.nightly_due(con, at=fin + timedelta(hours=1)) is False
-          and auto.nightly_due(con, at=(fin + timedelta(days=1)).replace(hour=12)) is True
+          and auto.nightly_due(con, at=(fin + timedelta(days=2)).replace(hour=12)) is True
           and auto.nightly_due(con, at=(fin + timedelta(days=2)).replace(hour=2)) is False)
     req_b = clients["bina"].requests
     code = auto.main(["nightly", "--restart", "--deadline-minutes", "0.0001"], ctx=ctx)
     prog = auto.load_progress(con)
     check("D7 --deadline-minutes: vaxt bitibsə heç bir axın başlamır, yeni sayğı yarımçıq saxlanır (kod 0)",
           code == 0 and clients["bina"].requests == req_b and prog["done"] == {} and not prog["finished_at"])
+
+    # D8: Bina axını ilişib qalır (eyni səhifə), Tap tam bitir → yalnız Tap-da silinmə yoxlanışı
+    con.execute("DELETE FROM settings WHERE key IN (?, ?)", (auto.PROGRESS_KEY, auto.LAST_FULL_KEY))
+    STREAMS[:] = [stream("bina", "bs"), stream("tap", "t")]
+    stale_tap = con.execute("SELECT l.id FROM listings l JOIN sources s ON s.id = l.source_id WHERE s.key = 'tap' "
+                            "AND l.active = 1 AND l.deal_type = 'rent' AND l.property_type = 'Yeni tikili' "
+                            "AND l.price_period = 'month' ORDER BY l.id LIMIT 1").fetchone()["id"]
+    stale_bina = con.execute("SELECT l.id FROM listings l JOIN sources s ON s.id = l.source_id WHERE s.key = 'bina' "
+                             "AND l.active = 1 AND l.district = ? AND l.deal_type = 'rent' "
+                             "AND l.property_type = 'Yeni tikili' ORDER BY l.id LIMIT 1", (district,)).fetchone()["id"]
+    con.execute("UPDATE listings SET last_seen_at = '2020-01-01 00:00:00' WHERE id IN (?, ?)", (stale_tap, stale_bina))
+    stuck_page = [row("bina", B + 600), row("bina", B + 601)]
+    clients = {"bina": FakeClient("bina", {"bs": [stuck_page] * 6}),
+               "tap": FakeClient("tap", {"t": [[row("tap", T + 600)]]})}
+    ctx = auto.Ctx(clients, fake_connect)
+    runs_before = con.execute("SELECT COUNT(*) FROM logs WHERE details LIKE '%nightly TAMAMLANDI%'").fetchone()[0]
+    err = auto.nightly(ctx, auto.load_state(con), deal="rent")
+    prog = auto.load_progress(con)
+    fin_logs = con.execute("SELECT details FROM logs WHERE details LIKE '%nightly TAMAMLANDI%' ORDER BY id DESC "
+                           "LIMIT 2").fetchall()
+    check("D8 Bina axını 'kursor irəliləmir' ilə alınmadı, sayğı bitdi, Bina sorğuları dayandı (sonsuz dövrə yox)",
+          err is None and prog["finished_at"] and prog["failed"] == ["bina: test bina bs"]
+          and clients["bina"].requests == 1 + auto.STALL_PAGES and get("bina", B + 601) is not None,
+          f"sorğu={clients['bina'].requests} failed={prog['failed']}")
+    check("D9 silinmə MƏNBƏ üzrə: Tap tam bitdi → köhnə Tap elanı silindi, Bina-ya toxunulmadı",
+          active(stale_tap) == 0 and active(stale_bina) == 1, f"tap={active(stale_tap)} bina={active(stale_bina)}")
+    check("D10 'nightly TAMAMLANDI' sətrində alınmayan axın sayı və ötürülən silinmə",
+          len(fin_logs) == 2 and all("alınmayan=1" in r["details"] for r in fin_logs)
+          and any("silinmə-yoxlanışı=ötürüldü" in r["details"] for r in fin_logs)
+          and con.execute("SELECT COUNT(*) FROM logs WHERE details LIKE '%nightly TAMAMLANDI%'").fetchone()[0]
+          - runs_before == 2)
     STREAMS[:] = [stream("bina", "b"), stream("tap", "t")]
 finally:
     real_rollback()

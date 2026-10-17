@@ -13,7 +13,7 @@ import time
 
 import requests
 
-from .common import BlockedError, ScrapeError, price_flags
+from .common import BlockedError, ScrapeError, StuckError, price_flags
 
 BASE = "https://bina.az"
 GRAPHQL = BASE + "/graphql"
@@ -116,7 +116,10 @@ class BinaClient:
             yield conn["totalCount"], [e["node"] for e in conn["edges"]], has_next
             if not has_next:
                 return
-            after = conn["pageInfo"]["endCursor"]
+            nxt = conn["pageInfo"]["endCursor"]
+            if has_next and (not nxt or nxt == after):
+                raise StuckError(f"endCursor dəyişmir ({str(nxt)[:40]})")
+            after = nxt
 
 
 def normalize(node, district, property_type):

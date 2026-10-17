@@ -9,6 +9,10 @@ class BlockedError(ScrapeError):
     """Sayt sorğunu rədd etdi (401/403/429/JSON olmayan cavab). Davam etmək olmaz."""
 
 
+class StuckError(ScrapeError):
+    """Səhifələmə irəliləmir (eyni kursor / eyni elanlar / totalCount-dan çox elan): axın "alınmadı" sayılır."""
+
+
 # "Şübhəli" qiymət hədləri (AZN). İstədikdə dəyişdirilə bilər.
 RENT_MIN_TOTAL = 100        # aylıq kirayə bundan azdırsa
 RENT_MIN_PER_M2 = 3         # aylıq kirayə 1 m²-ə bundan azdırsa

@@ -51,7 +51,7 @@ from logging.handlers import RotatingFileHandler
 import requests
 
 from . import bina, run, tap
-from .common import BlockedError, ScrapeError
+from .common import BlockedError, ScrapeError, StuckError
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -69,6 +69,9 @@ COOLDOWN_STEPS = (60, 120, 240, 360)         # dəq
 LOCK_MAX_AGE = 9 * 3600                      # bundan köhnə kilid ölü sayılır (bazar günü nightly ~6 saat)
 BASELINE_PAGES = 3
 SOURCE_FAIL_LIMIT = 2                        # bir mənbədə ardıcıl bu qədər axın alınmasa, qalanı ötürülür
+STALL_PAGES = 2                              # ardıcıl bu qədər səhifədə yeni elan yoxdursa → kursor irəliləmir
+TOTAL_SLACK = 0.10                           # oxunan elan > totalCount × 1,1 (və +16-dan çox) → kursor irəliləmir
+PROGRESS_EVERY = 5 * 60                      # nightly: axın daxilində proqres loqu (san)
 DEFAULT_MARGIN = {"bina": 800, "tap": 2000}  # ~6 saatlıq nömrə artımı (Bina ~3300/gün, Tap ~8000/gün)
 FMT = "%Y-%m-%d %H:%M:%S"
 PROGRESS_KEY = "nightly_progress"            # settings: davam edən tam sayğının irəliləyişi (JSON)
@@ -297,6 +300,9 @@ def collect(streams, clients, pages, on_page=None):
     → (rows {mənbə: [elan]}, done [(axın, tam oxundu)], xəta, failed {mənbə: [alınmayan axın etiketi]}).
 
     Bloklanma (BlockedError) → toplama dayanır (xəta qaytarılır); o vaxta qədər toplananlar qalır.
+    Sonsuz dövrəyə qoruyucu: endCursor dəyişmir (klient), ardıcıl STALL_PAGES səhifədə yeni ID yoxdur və ya oxunan
+    elan sayı totalCount-u 10%-dən çox keçir → StuckError, axın "alınmadı" (kursor irəliləmir).
+    on_page(səhifə, elan, totalCount): növbəti səhifədən əvvəl çağırılır (son səhifədən sonra yox).
     Başqa xəta (timeout, HTTP 5xx, GraphQL) → yalnız həmin axın alınmır: o vaxta qədər oxunan səhifələri qalır,
     "tam oxundu" sayılmır (yoxa çıxanlar işarələnmir), növbəti axına keçilir. Bir mənbədə ardıcıl
     SOURCE_FAIL_LIMIT axın alınmasa, həmin mənbənin qalan axınları bu dövrdə ötürülür."""
@@ -312,17 +318,29 @@ def collect(streams, clients, pages, on_page=None):
             done.append((st, False))
             continue
         complete = False
+        own, page, read, stall = set(), 0, 0, 0   # bu axının ID-ləri, səhifə, oxunan elan, yenisiz səhifələr
         try:
-            for _total, nodes, has_next in clients[src].pages(st["flt"], pages):
+            for total, nodes, has_next in clients[src].pages(st["flt"], pages):
+                page += 1
+                read += len(nodes)
+                fresh = 0
                 for node in nodes:
                     row = st["normalize"](node)
+                    if row["external_id"] not in own:
+                        own.add(row["external_id"])
+                        fresh += 1
                     if row["external_id"] in seen[src]:
                         continue
                     seen[src].add(row["external_id"])
                     rows[src].append(row)
                 complete = not has_next
+                stall = stall + 1 if nodes and not fresh else 0
+                if has_next and stall >= STALL_PAGES:
+                    raise StuckError(f"ardıcıl {stall} səhifədə yeni elan yoxdur (səhifə {page})")
+                if has_next and total and read > total * (1 + TOTAL_SLACK) and read > total + 16:
+                    raise StuckError(f"oxunan {read} elan > totalCount {total} + 10%")
                 if on_page and has_next:  # son səhifədən sonra yox: axın tam oxunubsa yarımçıq sayılmasın
-                    on_page()
+                    on_page(page, len(own), total)
         except (BlockedError, Deadline) as e:
             error = e
             break
@@ -330,7 +348,10 @@ def collect(streams, clients, pages, on_page=None):
             streak[src] += 1
             failed[src].append(st["label"])
             done.append((st, False))
-            log.warning("axın alınmadı: %s — %s: %s", st["label"], type(e).__name__, str(e)[:300])
+            if isinstance(e, StuckError):
+                log.warning("axın alınmadı: kursor irəliləmir — %s: %s", st["label"], e)
+            else:
+                log.warning("axın alınmadı: %s — %s: %s", st["label"], type(e).__name__, str(e)[:300])
             if streak[src] == SOURCE_FAIL_LIMIT:
                 log.warning("%s: ardıcıl %s axın alınmadı — bu dövrdə qalan %s axınları ötürülür",
                             src, SOURCE_FAIL_LIMIT, src)
@@ -633,7 +654,9 @@ def nightly_due(con, at=None):
 def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, last_fast=None, fast_count=None):
     """Tam sayğı (davam edən): hansı axınların bitdiyi settings.nightly_progress-dədir; vaxt bitəndə (deadline,
     siqnal) və ya bloklanmada növbəti iş qaldığı yerdən davam edir. Silinmiş elanlar yalnız BÜTÜN axınlar
-    bitəndən sonra, toplu işarələnir; sonra sync_runs və "nightly TAMAMLANDI". İçində hər 15 dəq fast dövrü.
+    bitəndən sonra, toplu və MƏNBƏ üzrə işarələnir: mənbənin bütün axınları tam oxunubsa; alınmayan axını olan
+    mənbənin elanlarına toxunulmur. Sonra sync_runs və "nightly TAMAMLANDI". İçində hər 15 dəq fast dövrü.
+    Axın daxilində hər ~5 dəq proqres loqu (səhifə, elan, totalCount varsa ETA).
 
     → xəta (BlockedError) və ya None; Deadline qalxmır (irəliləyiş yazılır, None qaytarılır)."""
     from .store import Store
@@ -675,9 +698,18 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
     t_count = time.time() - (now() - started).total_seconds()   # sayğının başlanğıcı (epoch)
     stores, error, stop = {}, None, None
     done_here = 0
+    cur = {"label": "", "i": 0, "t0": time.time(), "logged": time.time()}
 
-    def on_page():
+    def on_page(page=0, n=0, total_count=None):
         check()
+        if page and time.time() - cur["logged"] >= PROGRESS_EVERY:
+            cur["logged"] = time.time()
+            eta = ""
+            if total_count:
+                per_page = (time.time() - cur["t0"]) / page
+                eta = f", ETA axın {_hm(per_page * max(-(-total_count // max(n // page, 1)) - page, 0))}"
+            log.info("nightly axın %s/%s [%s] səhifə %s, elan %s%s%s", cur["i"], total, cur["label"], page, n,
+                     f"/{total_count}" if total_count else "", eta)
         if time.time() - last_fast[0] >= FAST_EVERY:
             last_fast[0] = time.time()
             err = fast_cycle(ctx, state, update_state=False, mode="fast(nightly)")
@@ -703,6 +735,7 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
         except BlockedError as e:
             error = e
             break
+        cur.update(label=st["label"], i=len(prog["done"]) + 1, t0=time.time(), logged=time.time())
         rows, done, error, bad = collect([st], ctx.clients, pages=100000, on_page=on_page)
         if isinstance(error, Deadline):
             stop, error = error, None
@@ -744,15 +777,21 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
         _finish_state(ctx, state, error, "nightly")
         return error
 
-    # bütün axınlar bitdi: yoxa çıxanlar TOPLU, sonra sync_runs + "nightly TAMAMLANDI"
+    # bütün axınlar bitdi: yoxa çıxanlar TOPLU və MƏNBƏ üzrə, sonra sync_runs + "nightly TAMAMLANDI"
     con = ctx.connect()
+    skipped = []
     try:
         for src in SOURCES:
             store_for(con, src)
-        for key in prog["streams"]:
-            if prog["done"].get(key) and key in by_key:
-                st = by_key[key]
-                stores[st["source"]].mark_removed(**st["removal"])
+            keys = [k for k in prog["streams"] if k in by_key and by_key[k]["source"] == src]
+            bad = [k for k in keys if not prog["done"].get(k)]
+            if bad:
+                skipped.append(src)
+                log.warning("nightly: %s — %s axın alınmadı / tam oxunmadı, %s elanları üçün silinmə yoxlanışı "
+                            "ÖTÜRÜLDÜ", src, len(bad), src)
+                continue
+            for key in keys:
+                stores[src].mark_removed(**by_key[key]["removal"])
         prog["finished_at"] = fmt(now())
         for src, store in stores.items():
             prog["stats"][src] = dict(store.stats)
@@ -767,12 +806,16 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
         for src, store in stores.items():
             err = source_error(None, failed, src, all_streams_)
             store.finish(ok=err is None, error=err, latency=_latency(ctx.clients[src]),
-                         label=f"nightly TAMAMLANDI deal={prog['deal']} başlayıb={prog['started_at']}",
+                         label=f"nightly TAMAMLANDI deal={prog['deal']} başlayıb={prog['started_at']} "
+                               f"alınmayan={len(prog['failed'])}"
+                               + (" silinmə-yoxlanışı=ötürüldü" if src in skipped else ""),
                          failed=failed.get(src, ()))
     finally:
         con.close()
-    log.info("nightly TAMAMLANDI (%s → %s, %s axın, deal=%s): %s%s", prog["started_at"], prog["finished_at"], total,
-             prog["deal"], _summary({k: dict(v.stats) for k, v in stores.items()}), _failed_line(failed))
+    log.info("nightly TAMAMLANDI (%s → %s, %s axın, alınmayan %s, deal=%s%s): %s%s", prog["started_at"],
+             prog["finished_at"], total, len(prog["failed"]), prog["deal"],
+             f", silinmə yoxlanışı ötürüldü: {', '.join(skipped)}" if skipped else "",
+             _summary({k: dict(v.stats) for k, v in stores.items()}), _failed_line(failed))
     _finish_state(ctx, state, None, "nightly")
     return None
 

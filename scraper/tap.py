@@ -21,7 +21,7 @@ import requests
 
 from . import district_map
 from .bina import DISTRICTS as KNOWN_DISTRICTS
-from .common import BlockedError, ScrapeError, price_flags
+from .common import BlockedError, ScrapeError, StuckError, price_flags
 
 BASE = "https://tap.az"
 GRAPHQL = BASE + "/graphql"
@@ -144,7 +144,10 @@ class TapClient:
             yield None, conn["nodes"], has_next
             if not has_next:
                 return
-            after = conn["pageInfo"]["endCursor"]
+            nxt = conn["pageInfo"]["endCursor"]
+            if has_next and (not nxt or nxt == after):
+                raise StuckError(f"endCursor dəyişmir ({str(nxt)[:40]})")
+            after = nxt
 
 
 # ---------------------------------------------------------------- başlıqdan oxuma
