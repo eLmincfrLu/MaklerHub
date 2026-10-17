@@ -336,6 +336,9 @@ try:
 except StuckError as e:
     raised = e
 check("C14 Tap klienti: endCursor dəyişmirsə StuckError", raised is not None)
+check("C15 Bina klienti kursoru 'cursor' dəyişəni ilə göndərir (SearchItems: after: $cursor)",
+      json.loads(bina.BinaClient._params({}, "CUR", 16)["variables"]).get("cursor") == "CUR"
+      and "after" not in json.loads(bina.BinaClient._params({}, "CUR", 16)["variables"]))
 
 
 # ---------------------------------------------------------------- B: bazada (SAVEPOINT, sonda ROLLBACK)

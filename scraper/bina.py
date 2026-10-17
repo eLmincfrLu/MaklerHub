@@ -64,7 +64,7 @@ class BinaClient:
     def _params(flt, after, first):
         variables = {"first": first, "filter": flt, "sort": "BUMPED_AT_DESC"}
         if after:
-            variables["after"] = after
+            variables["cursor"] = after  # SearchItems: after: $cursor ("after" adı səssizcə nəzərə alınmır)
         return {
             "operationName": "SearchItems",
             "variables": json.dumps(variables, separators=(",", ":")),
