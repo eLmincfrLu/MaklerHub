@@ -133,7 +133,7 @@ def bina_streams(args):
                     "flt": {"cityId": bina.CITY_BAKU, "categoryId": cat_id, "leased": leased,
                             "locationIds": [bina.DISTRICTS[d]]},
                     "normalize": lambda node, d=d, cat_name=cat_name: bina.normalize(node, d, cat_name),
-                    "removal": {"deal_type": deal, "property_type": cat_name, "district": d},
+                    "removal": {"deal_type": deal, "property_type": cat_name, "district": d, "category": "menzil"},
                 })
     return streams, f"district={district}"
 
@@ -154,7 +154,8 @@ def tap_streams(args):
                     "flt": tap.stream_filter(deal, period, c),
                     "normalize": lambda node, deal=deal, period=period, cat_name=cat_name:
                         tap.normalize(node, deal, period, cat_name),
-                    "removal": {"deal_type": deal, "property_type": cat_name, "price_period": period},
+                    "removal": {"deal_type": deal, "property_type": cat_name, "price_period": period,
+                                "category": "menzil"},
                 })
     return streams, "district=—"
 

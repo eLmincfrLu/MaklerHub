@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   price_max      INTEGER NOT NULL,
   deal_type      TEXT NOT NULL DEFAULT 'sale',           -- sale | rent
   property_type  TEXT NOT NULL DEFAULT '',               -- '' | Yeni tikili | Köhnə tikili | Studiya | Ofis | Həyət evi
+  category       TEXT NOT NULL DEFAULT 'menzil',         -- menzil | ev | torpaq | kommersiya | qaraj (elanla eyni olmalıdır)
   status         TEXT NOT NULL DEFAULT 'active',         -- active | paused | closed
   last_checked   TEXT,
   paused_at      TEXT,
@@ -140,6 +141,8 @@ CREATE TABLE IF NOT EXISTS listings (
   quality      INTEGER,                                  -- keyfiyyət balı (sahələrin tamlığına görə)
   suspicious   INTEGER NOT NULL DEFAULT 0,               -- məntiqsiz qiymət → uyğunluğa girmir
   fresh        INTEGER NOT NULL DEFAULT 1,               -- 1 = təzə nömrə (bildiriş qapısı ilk yazılışda), B bölməsi
+  category     TEXT NOT NULL DEFAULT 'menzil',           -- menzil | ev | torpaq | kommersiya | qaraj; alt növ property_type-dadır
+  area_unit    TEXT NOT NULL DEFAULT 'm2',               -- m2 | sot (torpaq)
   dup_group    INTEGER,                                  -- duplikat qrupu (birləşmiş kart)
   active       INTEGER NOT NULL DEFAULT 1,
   posted_at    TEXT NOT NULL,
@@ -155,6 +158,10 @@ ALTER TABLE listings ADD COLUMN IF NOT EXISTS settlement TEXT;
 ALTER TABLE listings ADD COLUMN IF NOT EXISTS district_src TEXT;
 -- B bölməsi: təzə nömrə (scraper/store.py _fresh); köhnə sətirlər üçün UPDATE ayrıca, əl ilə işlədilir
 ALTER TABLE listings ADD COLUMN IF NOT EXISTS fresh INTEGER NOT NULL DEFAULT 1;
+-- kateqoriyalar (Mərhələ 0): mövcud elanlar və profillər mənzildir
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'menzil';
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS area_unit TEXT NOT NULL DEFAULT 'm2';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'menzil';
 
 CREATE TABLE IF NOT EXISTS price_history (
   id           SERIAL PRIMARY KEY,

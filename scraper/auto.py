@@ -74,6 +74,7 @@ TOTAL_SLACK = 0.10                           # oxunan elan > totalCount × 1,1 (
 PROGRESS_EVERY = 5 * 60                      # nightly: axın daxilində proqres loqu (san)
 COMPLETE_MIN = 0.95                          # axın "tam oxunub": unikal elan ≥ totalCount × 0,95
 MASS_REMOVAL_MAX = 0.25                      # silinmə namizədləri > aktiv elanların 25%-i → silinmə dayandırılır
+MENZIL = "menzil"                            # mövcud axınların kateqoriyası (store.MENZIL ilə eyni)
 DEFAULT_MARGIN = {"bina": 800, "tap": 2000}  # ~6 saatlıq nömrə artımı (Bina ~3300/gün, Tap ~8000/gün)
 FMT = "%Y-%m-%d %H:%M:%S"
 PROGRESS_KEY = "nightly_progress"            # settings: davam edən tam sayğının irəliləyişi (JSON)
@@ -814,15 +815,20 @@ def nightly(ctx, state, deal="auto", deadline=None, restart=False, tick=None, la
                 log.warning("nightly: %s — %s axın alınmadı / tam oxunmadı, %s elanları üçün silinmə yoxlanışı "
                             "ÖTÜRÜLDÜ", src, len(bad), src)
                 continue
-            # kütləvi silinmə qoruyucusu: əməliyyat növü üzrə namizədlər > aktivlərin 25%-i → tətbiq olunmur
-            for d in sorted({by_key[k]["removal"]["deal_type"] for k in keys}):
-                part = [k for k in keys if by_key[k]["removal"]["deal_type"] == d]
+            # kütləvi silinmə qoruyucusu: (əməliyyat növü, kateqoriya) üzrə namizədlər > aktivlərin 25%-i → tətbiq
+            # olunmur (kateqoriyalar bir-birinin həddini "sulandırmasın")
+            def group(k):
+                rm = by_key[k]["removal"]
+                return rm["deal_type"], rm.get("category", MENZIL)
+            for d, cat in sorted({group(k) for k in keys}):
+                part = [k for k in keys if group(k) == (d, cat)]
                 n = sum(store.removal_candidates(**by_key[k]["removal"]) for k in part)
-                m = store.active_count(d)
+                m = store.active_count(d, cat)
                 if m and n > m * MASS_REMOVAL_MAX:
-                    msg = f"təhlükəsizlik: kütləvi silinmə dayandırıldı, {n} namizəd / {m} aktiv ({d})"
+                    where = d if cat == MENZIL else f"{d}/{cat}"
+                    msg = f"təhlükəsizlik: kütləvi silinmə dayandırıldı, {n} namizəd / {m} aktiv ({where})"
                     warnings.setdefault(src, []).append(msg)
-                    skipped.append(f"{src}/{d}")
+                    skipped.append(f"{src}/{where}")
                     log.warning("nightly: %s — %s", src, msg)
                     continue
                 for key in part:

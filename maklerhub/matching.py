@@ -23,8 +23,16 @@ def district_ok(profile_district, listing_district):
     return profile_district == "Bakı, mərkəz" and listing_district in CENTER
 
 
+def same_category(p, l):
+    """Profil və elan eyni kateqoriyadadır (menzil | ev | torpaq | kommersiya | qaraj; boş = mənzil)."""
+    return (p.get("category") or "menzil") == (l.get("category") or "menzil")
+
+
 def evaluate(p, l):
     """(bal, səbəblər) və ya None. Səbəb: [növ ('ok'|'warn'), qısa, uzun]."""
+    # mənzil profili heç vaxt başqa kateqoriyanın elanına (və əksinə) uyğun gəlmir
+    if not same_category(p, l):
+        return None
     if p["deal_type"] != l["deal_type"]:
         return None
     # Şübhəli qiymətli (o cümlədən AZN olmayan) elan uyğunluğa girmir
@@ -461,7 +469,8 @@ def rematch_profile(con, profile_id):
         return 0
     stamp = ts()
     count = 0
-    for l in con.execute("SELECT * FROM listings WHERE active = 1 AND deal_type = ?", (p["deal_type"],)):
+    for l in con.execute("SELECT * FROM listings WHERE active = 1 AND deal_type = ? AND category = ?",
+                         (p["deal_type"], p.get("category") or "menzil")):
         key = l["id"]
         if l["id"] in group_of:
             key = ("g", group_of[l["id"]])

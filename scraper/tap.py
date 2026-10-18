@@ -210,7 +210,9 @@ def normalize(node, deal, period, property_type):
         "url": BASE + (node.get("path") or f"/elanlar/dasinmaz-emlak/menziller/{node['legacyResourceId']}"),
         "title": title,
         "deal_type": deal,
+        "category": "menzil",          # Mərhələ 0: yalnız Mənzillər (Category/635)
         "property_type": property_type,
+        "area_unit": "m2",
         "district": district or "",
         "district_src": src,
         "metro_name": metro,

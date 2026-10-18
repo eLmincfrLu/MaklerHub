@@ -157,7 +157,9 @@ def normalize(node, district, property_type):
         "url": BASE + (node.get("path") or f"/items/{node['id']}"),
         "title": title,
         "deal_type": deal,
+        "category": "menzil",          # Mərhələ 0: yalnız mənzil axınları (categoryId 2/3)
         "property_type": property_type,
+        "area_unit": "m2",
         "district": district,
         "district_src": "bina" if district else None,   # rayon sorğunun filtrindəndir
         "metro_name": metro,

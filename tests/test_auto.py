@@ -704,6 +704,29 @@ try:
           err is None and auto.load_progress(con)["finished_at"] and still == len(victims) and warn is not None
           and warn["level"] == "warn" and f"{k} namizəd / {len(ids) + 1} aktiv" in warn["message"]
           and "run=#" in warn["details"], f"qalan={still}/{len(victims)} loq={warn['message'] if warn else None}")
+    # D11b: qoruyucu kateqoriya üzrədir — başqa kateqoriyanın ('ev') aktiv kirayə elanları həddi "sulandırmır"
+    others = [r["id"] for r in con.execute(
+        "SELECT l.id FROM listings l JOIN sources s ON s.id = l.source_id WHERE s.key = 'tap' AND l.active = 0 "
+        "AND l.deal_type = 'rent' AND NOT (l.property_type = 'Yeni tikili' AND l.price_period = 'month')")]
+    con.execute("UPDATE listings SET active = 1, category = 'ev', last_seen_at = ? WHERE id = ANY(?)",
+                (auto.fmt(auto.now()), others))
+    diluted = k / (len(ids) + 1 + len(others))  # köhnə qayda (bütün kateqoriyalar) ilə nisbət
+    warns0 = con.execute("SELECT COUNT(*) FROM logs WHERE message LIKE '%kütləvi silinmə dayandırıldı%'").fetchone()[0]
+    con.execute("DELETE FROM settings WHERE key IN (?, ?)", (auto.PROGRESS_KEY, auto.LAST_FULL_KEY))
+    err = auto.nightly(ctx, auto.load_state(con), deal="rent")
+    still = con.execute("SELECT COUNT(*) FROM listings WHERE id = ANY(?) AND active = 1", (victims,)).fetchone()[0]
+    warn = con.execute("SELECT message FROM logs WHERE message LIKE '%kütləvi silinmə dayandırıldı%' "
+                       "ORDER BY id DESC LIMIT 1").fetchone()
+    check(f"D11b +{len(others)} aktiv 'ev' elanı (bütün kateqoriyalarla nisbət {diluted:.0%} < 25%) → qoruyucu yenə "
+          f"mənzil üzrə işləyir, silinmə tətbiq olunmadı",
+          diluted < auto.MASS_REMOVAL_MAX and err is None and still == len(victims)
+          and f"{k} namizəd / {len(ids) + 1} aktiv (rent)" in warn["message"]
+          and con.execute("SELECT COUNT(*) FROM logs WHERE message LIKE '%kütləvi silinmə dayandırıldı%'")
+          .fetchone()[0] == warns0 + 1
+          and con.execute("SELECT COUNT(*) FROM listings WHERE id = ANY(?) AND active = 1",
+                          (others,)).fetchone()[0] == len(others),
+          f"qalan={still}/{len(victims)} loq={warn['message']}")
+    con.execute("UPDATE listings SET active = 0, category = 'menzil' WHERE id = ANY(?)", (others,))
     con.execute("UPDATE listings SET last_seen_at = '2020-01-01 00:00:00' WHERE id = ANY(?)", (victims[:1],))
     con.execute("UPDATE listings SET last_seen_at = ? WHERE id = ANY(?)", (auto.fmt(auto.now()), victims[1:]))
     con.execute("DELETE FROM settings WHERE key IN (?, ?)", (auto.PROGRESS_KEY, auto.LAST_FULL_KEY))

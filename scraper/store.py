@@ -4,7 +4,11 @@ Qaydalar (Gün 10 planı):
 - Yeni elan → listings + price_history, sonra uyğunlaşdırma (günlük kirayə istisna).
 - Görülən elan → last_seen_at yenilənir; qiymət dəyişibsə price_history-yə yeni sətir.
 - Yoxa çıxan elan → yalnız axın sonuna qədər oxunubsa (hasNextPage=false) VƏ elan
-  sayğı başlanğıcından ən azı 24 saat əvvəl görülübsə: active=0, removed_at=indi.
+  sayğı başlanğıcından ən azı 24 saat əvvəl görülübsə: active=0, removed_at=indi. Silinmə axının kateqoriyası
+  (listings.category) daxilindədir: başqa kateqoriyanın elanlarına toxunmur.
+- Kateqoriya / alt növ (property_type) dəyişibsə (məs. Tap-da mənzil → həyət evi): yeni dəyərlər yazılır, elan
+  "yenilənən" sayılır, yenidən qruplaşdırılır və uyğunlaşdırılır (silinmiş elan da beləcə geri qayıdır). URL dəyişibsə
+  yalnız URL yenilənir.
 - Hər axından sonra commit olunur, ona görə bloklanma olsa da toplanan məlumat itmir.
 - save_many(): toplu yazma (scraper/auto.py): mövcud elanlar bir sorğu ilə oxunur, dəyişməyənlərin last_seen_at-ı
   bir UPDATE ilə yenilənir, tam emal (qruplaşdırma, matching, bildiriş) yalnız yeni / dəyişmiş elanlar üçündür və
@@ -26,7 +30,8 @@ from maklerhub.helpers import now, ts
 REMOVE_AFTER = timedelta(hours=24)
 _MISSING = object()
 OLD_COLS = ("id, external_id, price, active, suspicious, district, district_src, metro_name, settlement, images, "
-            "deal_type, price_period, rooms")
+            "deal_type, price_period, rooms, category, property_type, area_unit, url")
+MENZIL = "menzil"  # mövcud axınların hamısı mənzildir (bina.py, tap.py normalize)
 CHUNK = 100  # save_many: hər bu qədər yeni / dəyişmiş elandan sonra commit
 
 
@@ -118,7 +123,7 @@ class Store:
         t = time.time()
         stamp = ts()
         targets, new = [], []  # targets: emal sırası ilə {row, lid, first_seen, key}; yenilərin lid-i INSERT-dən sonra
-        touch, place_upd, price_upd, history, react = [], [], [], [], []
+        touch, place_upd, price_upd, history, react, kind_upd, url_upd = [], [], [], [], [], [], []
         for row, old in part:
             self.stats["checked"] += 1
             if row["price"] is None or row["price"] <= 0:
@@ -139,7 +144,13 @@ class Store:
             price_changed = old["price"] != price
             reactivated = not old["active"]
             suspicious_changed = old["suspicious"] != row["suspicious"]
+            kind_changed = self._kind(row) != self._kind(old)
             touch.append((stamp, images, row["suspicious"], lid))
+            if kind_changed:
+                kind_upd.append(self._kind(row) + (row["property_type"], row["title"], stamp, lid))
+                self.stats["kind_changed"] += 1
+            if row["url"] and row["url"] != old["url"]:
+                url_upd.append((row["url"], lid))
             place = self._place(row, old)
             district_changed = old["district"] != place[0]
             if place != (old["district"], old["district_src"], old["metro_name"], old["settlement"]):
@@ -152,7 +163,7 @@ class Store:
             if reactivated:
                 react.append((stamp, lid))
                 self.stats["reactivated"] += 1
-            if not (price_changed or reactivated or suspicious_changed or district_changed):
+            if not (price_changed or reactivated or suspicious_changed or district_changed or kind_changed):
                 result["seen"] += 1
                 continue
             self.stats["updated"] += 1
@@ -167,13 +178,14 @@ class Store:
                            "kirayə" if row["deal_type"] == "rent" else "", row["district"], row["rooms"], row["area"],
                            row["floor"], row["floors"], price, row["price_period"], row["deal_type"],
                            row["property_type"], row["property_type"], "", row["metro_name"], row.get("settlement"),
-                           self._src(row), images, row["suspicious"], self._fresh(row), stamp, stamp, stamp, stamp]
+                           self._src(row), images, row["suspicious"], self._fresh(row), self._kind(row)[0],
+                           self._kind(row)[2], stamp, stamp, stamp, stamp]
             ids = {r["external_id"]: r["id"] for r in con.execute(
                 """INSERT INTO listings(source_id, external_id, url, title, suffix, district, rooms, area, floor,
                        floors, price, price_period, deal_type, property_type, building, renovation, metro_name,
-                       settlement, district_src, images, suspicious, fresh, active, posted_at, created_at,
-                       updated_at, last_seen_at)
-                   VALUES """ + ",".join(["(" + ",".join("?" * 22) + ",1,?,?,?,?)"] * len(new))
+                       settlement, district_src, images, suspicious, fresh, category, area_unit, active, posted_at,
+                       created_at, updated_at, last_seen_at)
+                   VALUES """ + ",".join(["(" + ",".join("?" * 24) + ",1,?,?,?,?)"] * len(new))
                 + " RETURNING id, external_id", values).fetchall()}
             for x, price, _ in new:
                 x["lid"] = ids[x["row"]["external_id"]]
@@ -189,6 +201,11 @@ class Store:
             con.executemany("UPDATE listings SET price = ?, updated_at = ? WHERE id = ?", price_upd)
         if react:
             con.executemany("UPDATE listings SET active = 1, removed_at = NULL, updated_at = ? WHERE id = ?", react)
+        if kind_upd:
+            con.executemany("UPDATE listings SET category = ?, property_type = ?, area_unit = ?, building = ?, title = ?, "
+                            "updated_at = ? WHERE id = ?", kind_upd)
+        if url_upd:
+            con.executemany("UPDATE listings SET url = ? WHERE id = ?", url_upd)
         if history:
             con.execute("INSERT INTO price_history(listing_id, price, recorded_at) VALUES "
                         + ",".join(["(?, ?, ?)"] * len(history)) + " RETURNING id",
@@ -253,10 +270,16 @@ class Store:
             district, src = old["district"], "dup"
         return district, src, row["metro_name"], row.get("settlement")
 
+    @staticmethod
+    def _kind(r):
+        """(kateqoriya, alt növ, sahə vahidi) — gələn sətir və ya bazadakı köhnə sətir üçün."""
+        return r.get("category") or MENZIL, r.get("property_type"), r.get("area_unit") or "m2"
+
     def _unchanged(self, row, old):
         if row["price"] is None or row["price"] <= 0:
             return False
         return (old["active"] and old["price"] == int(round(row["price"])) and old["suspicious"] == row["suspicious"]
+                and self._kind(row) == self._kind(old) and (not row["url"] or row["url"] == old["url"])
                 and old["images"] == json.dumps(row["images"] or [], ensure_ascii=False)
                 and self._place(row, old) == (old["district"], old["district_src"], old["metro_name"],
                                               old["settlement"]))
@@ -285,14 +308,14 @@ class Store:
             cur = con.execute(
                 """INSERT INTO listings(source_id, external_id, url, title, suffix, district, rooms, area, floor,
                        floors, price, price_period, deal_type, property_type, building, renovation, metro_name,
-                       settlement, district_src, images, suspicious, fresh, active, posted_at, created_at,
-                       updated_at, last_seen_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)""",
+                       settlement, district_src, images, suspicious, fresh, category, area_unit, active, posted_at,
+                       created_at, updated_at, last_seen_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)""",
                 (sid, row["external_id"], row["url"], row["title"], "kirayə" if row["deal_type"] == "rent" else "",
                  row["district"], row["rooms"], row["area"], row["floor"], row["floors"], price,
                  row["price_period"], row["deal_type"], row["property_type"], row["property_type"], "",
                  row["metro_name"], row.get("settlement"), src, images, row["suspicious"], self._fresh(row),
-                 stamp, stamp, stamp, stamp),
+                 self._kind(row)[0], self._kind(row)[2], stamp, stamp, stamp, stamp),
             )
             lid = cur.lastrowid
             con.execute("INSERT INTO price_history(listing_id, price, recorded_at) VALUES (?, ?, ?)",
@@ -305,8 +328,16 @@ class Store:
         price_changed = old["price"] != price
         reactivated = not old["active"]
         suspicious_changed = old["suspicious"] != row["suspicious"]
+        kind_changed = self._kind(row) != self._kind(old)
         con.execute("UPDATE listings SET last_seen_at = ?, images = ?, suspicious = ? WHERE id = ?",
                     (stamp, images, row["suspicious"], lid))
+        if kind_changed:
+            con.execute("UPDATE listings SET category = ?, property_type = ?, area_unit = ?, building = ?, title = ?, "
+                        "updated_at = ? WHERE id = ?",
+                        self._kind(row) + (row["property_type"], row["title"], stamp, lid))
+            self.stats["kind_changed"] += 1
+        if row["url"] and row["url"] != old["url"]:
+            con.execute("UPDATE listings SET url = ? WHERE id = ?", (row["url"], lid))
         place = self._place(row, old)
         district_changed = old["district"] != place[0]
         if place != (old["district"], old["district_src"], old["metro_name"], old["settlement"]):
@@ -322,7 +353,7 @@ class Store:
             con.execute("UPDATE listings SET active = 1, removed_at = NULL, updated_at = ? WHERE id = ?",
                         (stamp, lid))
             self.stats["reactivated"] += 1
-        if not (price_changed or reactivated or suspicious_changed or district_changed):
+        if not (price_changed or reactivated or suspicious_changed or district_changed or kind_changed):
             return "seen"
         self.stats["updated"] += 1
         self._group_and_match(lid, matchable, row=row)
@@ -372,10 +403,10 @@ class Store:
         return self.con.execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
 
     # ------------------------------------------------------------ yoxa çıxanlar
-    def _removal_where(self, deal_type, property_type, district=None, price_period=None):
+    def _removal_where(self, deal_type, property_type, district=None, price_period=None, category=MENZIL):
         cutoff = ts(self.started - REMOVE_AFTER)
-        where, args = ["source_id = ?", "active = 1", "deal_type = ?", "property_type = ?", "last_seen_at < ?"], \
-            [self.source["id"], deal_type, property_type, cutoff]
+        where, args = ["source_id = ?", "active = 1", "category = ?", "deal_type = ?", "property_type = ?",
+                       "last_seen_at < ?"], [self.source["id"], category, deal_type, property_type, cutoff]
         if district is not None:
             where.append("district = ?")
             args.append(district)
@@ -384,22 +415,23 @@ class Store:
             args.append(price_period)
         return " AND ".join(where), args
 
-    def removal_candidates(self, deal_type, property_type, district=None, price_period=None):
+    def removal_candidates(self, deal_type, property_type, district=None, price_period=None, category=MENZIL):
         """mark_removed() neçə elanı deaktiv edərdi (heç nə dəyişmir) — kütləvi silinmə qoruyucusu üçün."""
-        where, args = self._removal_where(deal_type, property_type, district, price_period)
+        where, args = self._removal_where(deal_type, property_type, district, price_period, category)
         return self.con.execute(f"SELECT COUNT(*) FROM listings WHERE {where}", args).fetchone()[0]
 
-    def active_count(self, deal_type):
-        return self.con.execute("SELECT COUNT(*) FROM listings WHERE source_id = ? AND active = 1 AND deal_type = ?",
-                                (self.source["id"], deal_type)).fetchone()[0]
+    def active_count(self, deal_type, category=MENZIL):
+        return self.con.execute("SELECT COUNT(*) FROM listings WHERE source_id = ? AND active = 1 AND deal_type = ? "
+                                "AND category = ?", (self.source["id"], deal_type, category)).fetchone()[0]
 
-    def mark_removed(self, deal_type, property_type, district=None, price_period=None):
+    def mark_removed(self, deal_type, property_type, district=None, price_period=None, category=MENZIL):
         """Sonuna qədər oxunmuş axında görünməyən köhnə elanları deaktiv edir. Sayı qaytarır.
 
         Axın = sorğunun filtri: Bina.az üçün rayon + tip + əməliyyat (district verilir),
-        Tap.az üçün tip + əməliyyat + kirayə müddəti (price_period verilir; rayon filtri yoxdur).
+        Tap.az üçün tip + əməliyyat + kirayə müddəti (price_period verilir; rayon filtri yoxdur); hər ikisində
+        kateqoriya daxilində (category).
         """
-        where, args = self._removal_where(deal_type, property_type, district, price_period)
+        where, args = self._removal_where(deal_type, property_type, district, price_period, category)
         stamp = ts()
         cur = self.con.execute(
             f"UPDATE listings SET active = 0, removed_at = ?, updated_at = ? WHERE {where} RETURNING dup_group",
