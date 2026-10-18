@@ -461,8 +461,8 @@ def write_burst(ctx, rows, label, error, notify, started, t0, removal=None, befo
         for src in SOURCES:
             if src not in rows:
                 continue
-            gate = make_gate(con, src) if notify else None
-            store = Store(con, src, notify=notify, gate=gate, started=started, t0=t0)
+            # qapı --quiet-də də verilir: bildiriş olmasa da listings.fresh onun qərarıdır
+            store = Store(con, src, notify=notify, gate=make_gate(con, src), started=started, t0=t0)
             if rows[src]:
                 store.save_many(rows[src])
             for st, complete in (removal or []):

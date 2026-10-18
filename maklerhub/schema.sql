@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS listings (
   phone        TEXT,                                     -- yalnız uyğunluğu 70%+ olan elanlar üçün
   quality      INTEGER,                                  -- keyfiyyət balı (sahələrin tamlığına görə)
   suspicious   INTEGER NOT NULL DEFAULT 0,               -- məntiqsiz qiymət → uyğunluğa girmir
+  fresh        INTEGER NOT NULL DEFAULT 1,               -- 1 = təzə nömrə (bildiriş qapısı ilk yazılışda), B bölməsi
   dup_group    INTEGER,                                  -- duplikat qrupu (birləşmiş kart)
   active       INTEGER NOT NULL DEFAULT 1,
   posted_at    TEXT NOT NULL,
@@ -152,6 +153,8 @@ CREATE INDEX IF NOT EXISTS ix_listings_active ON listings(active, deal_type, dis
 -- köhnə bazalar üçün (Gün 11): qəsəbə sütunu
 ALTER TABLE listings ADD COLUMN IF NOT EXISTS settlement TEXT;
 ALTER TABLE listings ADD COLUMN IF NOT EXISTS district_src TEXT;
+-- B bölməsi: təzə nömrə (scraper/store.py _fresh); köhnə sətirlər üçün UPDATE ayrıca, əl ilə işlədilir
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS fresh INTEGER NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS price_history (
   id           SERIAL PRIMARY KEY,

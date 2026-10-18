@@ -178,6 +178,12 @@ def notify_new_match(con, p, listing, score, when=None):
     )
 
 
+def is_new(listing, profile):
+    """Elan profil üçün "yeni"dir (bildiriş, profil səhifəsinin B bölməsi, "Yeni" nişanı): profildən SONRA bazaya
+    düşüb VƏ təzə nömrəlidir (listings.fresh = bildiriş qapısının ilk yazılışdakı qərarı)."""
+    return listing["created_at"] > profile["created_at"] and bool(listing.get("fresh", 1))
+
+
 def _notified(con, profile_id, listing_ids):
     marks = ",".join("?" * len(listing_ids))
     return con.execute(f"SELECT 1 FROM notifications WHERE profile_id = ? AND listing_id IN ({marks}) LIMIT 1",
@@ -251,7 +257,7 @@ def _match_group(con, gid, profiles, when, notify):
             con.execute("INSERT INTO matches(profile_id, listing_id, score, reasons, created_at) "
                         "VALUES (?, ?, ?, ?, ?)", (p["id"], main["id"], score, reasons, when or ts()))
             created += 1
-            if notify and main["created_at"] > p["created_at"] and not _notified(con, p["id"], ids):
+            if notify and is_new(main, p) and not _notified(con, p["id"], ids):
                 notify_new_match(con, p, main, score, when)
         _retarget_notifications(con, p["id"], main["id"], ids)
     return created
@@ -260,7 +266,7 @@ def _match_group(con, gid, profiles, when, notify):
 def match_listing(con, listing, profiles=None, when=None, notify=False):
     """Yeni və ya dəyişmiş elanı aktiv profillərlə yoxlayır. Yeni uyğunluq sayını qaytarır.
 
-    notify=True: YENİ uyğunluq yarananda və elan profildən SONRA bazaya düşübsə bildiriş yazılır.
+    notify=True: YENİ uyğunluq yarananda və elan profil üçün yenidirsə (is_new) bildiriş yazılır.
     Təkrar qrupundakı elan (dup_group) qrupun əsas nüsxəsi üzərindən yoxlanır.
     """
     profiles = _active_profiles(con) if profiles is None else profiles
@@ -286,7 +292,7 @@ def match_listing(con, listing, profiles=None, when=None, notify=False):
                 (p["id"], listing["id"], score, json.dumps(reasons, ensure_ascii=False), when or ts()),
             )
             created += 1
-            if notify and listing["created_at"] > p["created_at"] and not _notified(con, p["id"], [listing["id"]]):
+            if notify and is_new(listing, p) and not _notified(con, p["id"], [listing["id"]]):
                 notify_new_match(con, p, listing, score, when)
     return created
 
@@ -366,7 +372,7 @@ def match_many(con, targets, profiles, notify=None, when=None, timing=None):
                     continue
                 ins.append((p["id"], l["id"], score, reasons, stamp))
                 created += 1
-                if want and l["created_at"] > p["created_at"] and (p["id"], l["id"]) not in notified:
+                if want and is_new(l, p) and (p["id"], l["id"]) not in notified:
                     note(p, l, score)
                     sent += 1
             out[l["id"]] = (created, sent)
@@ -398,7 +404,7 @@ def match_many(con, targets, profiles, notify=None, when=None, timing=None):
             else:
                 ins.append((p["id"], main["id"], score, reasons, stamp))
                 created += 1
-                if (want and main["created_at"] > p["created_at"]
+                if (want and is_new(main, p)
                         and not any((p["id"], i) in notified for i in ids_)):
                     note(p, main, score)
                     sent += 1

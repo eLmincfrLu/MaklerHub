@@ -50,7 +50,7 @@ SELECT m.id AS mid, m.score, m.reasons, m.created_at AS matched_at,
        l.building, l.renovation, l.metro_m, l.url, l.posted_at, l.created_at AS listing_created,
        s.key AS skey, s.name AS sname, s.logo AS slogo,
        c.id AS cid, c.name AS client_name, c.number AS client_no, c.phone AS client_phone, p.id AS pid,
-       p.created_at AS profile_created, l.dup_group,
+       p.created_at AS profile_created, l.dup_group, l.fresh,
        (SELECT COUNT(DISTINCT d.source_id) FROM listings d WHERE d.dup_group = l.dup_group AND d.active = 1
         AND d.source_id IN ({ids})) AS nsrc
 FROM matches m
@@ -60,9 +60,11 @@ JOIN listings l ON l.id = m.listing_id
 JOIN sources s ON s.id = l.source_id
 WHERE p.user_id = ? AND l.active = 1 AND p.status = 'active' AND l.source_id IN ({ids})
 """
-# B: profil yaradılandan SONRA bazaya düşən elanlar ("Yeni gələnlər"); A: o vaxt artıq mövcud olanlar
-NEW_ONLY = " AND l.created_at > p.created_at"
-OLD_ONLY = " AND l.created_at <= p.created_at"
+# B ("Yeni gələnlər"): profil yaradılandan SONRA bazaya düşən VƏ təzə nömrəli elanlar (matching.is_new, bildirişlə
+# eyni qayda; təkrar qrupunda uyğunluq əsas nüsxədədir → onun fresh-i). A ("Mövcud və köhnə elanlar"): qalanı —
+# profildən əvvəl olanlar, həmçinin sonra yazılan köhnə nömrəlilər (qaldırılan elanlar, tam sayğı).
+NEW_ONLY = " AND l.created_at > p.created_at AND l.fresh = 1"
+OLD_ONLY = " AND (l.created_at <= p.created_at OR l.fresh = 0)"
 SECTIONS = {"new": NEW_ONLY, "old": OLD_ONLY}
 
 
@@ -83,7 +85,7 @@ def match_view(db, r):
         "client": r["client_name"], "client_no": f"{r['client_no']:03d}", "client_phone": r["client_phone"],
         "logo": url_for("static", filename="img/" + r["slogo"]), "source": r["sname"],
         "url": r["url"], "matched": r["matched_at"], "posted": r["posted_at"], "lid": r["lid"],
-        "new": r["listing_created"] > r["profile_created"], "arrived": rel(r["listing_created"]),
+        "new": r["listing_created"] > r["profile_created"] and bool(r["fresh"]), "arrived": rel(r["listing_created"]),
         "nsrc": r["nsrc"] or 1,
     }
 
@@ -176,6 +178,12 @@ def query_matches(db, user, src="all", sort="match", offset=0, profile_id=None, 
     return [match_view(db, r) for r in rows], total
 
 
+def today_count(db, user, ids):
+    """"Bu gün yeni": bu gün yaranan uyğunluqlar, yalnız təzə nömrəli elanlar (listings.fresh = 1)."""
+    return db.execute(f"SELECT COUNT(*) FROM ({MATCH_SQL.format(ids=_in(ids))} AND l.fresh = 1 AND m.created_at >= ?)",
+                      (user["id"], ts(day_start()))).fetchone()[0]
+
+
 @bp.route("/elanlar")
 @member_required
 def elanlar():
@@ -183,7 +191,7 @@ def elanlar():
     src = request.args.get("src", "all")
     sort = request.args.get("sort", "match")
     profile_id = request.args.get("profile", type=int)
-    # Profil səhifəsi: B ("Yeni gələnlər", ən təzə yuxarıda) + A ("mövcud olanlar", səhifələnir)
+    # Profil səhifəsi: B ("Yeni gələnlər", ən təzə yuxarıda) + A ("Mövcud və köhnə elanlar", səhifələnir)
     section = "old" if profile_id else None
     items, total = query_matches(db, u, src, sort, 0, profile_id, section)
     new_items, new_total = ([], 0)
@@ -194,8 +202,7 @@ def elanlar():
     visible = MATCH_SQL.format(ids=_in(ids))
     stats = {
         "tracked": db.execute(f"SELECT COUNT(*) FROM listings WHERE active = 1 AND source_id IN ({_in(ids)})").fetchone()[0],
-        "today": db.execute(f"SELECT COUNT(*) FROM ({visible} AND m.created_at >= ?)",
-                            (u["id"], ts(day_start()))).fetchone()[0],
+        "today": today_count(db, u, ids),
         "hi": db.execute(f"SELECT COUNT(*) FROM ({visible} AND m.score >= 90)", (u["id"],)).fetchone()[0],
         "dropped": db.execute(
             f"SELECT COUNT(*) FROM listings l WHERE l.active = 1 AND l.source_id IN ({_in(ids)}) AND EXISTS "

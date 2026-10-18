@@ -11,7 +11,8 @@ Qaydalar (Gün 10 planı):
   100-lük hissələrlə QRUP halında gedir (hər hissə ~15-20 sorğu, elan sayından asılı deyil; sonra commit).
   save() (sətir-sətir, run.py) ilə eyni nəticə: tests/test_batch.py.
 - gate(row) → (icazə, məlumat): bildiriş qapısı (notify_min_id qaydası, scraper/auto.py). Yeni və uyğun elan
-  üçün qərar gate_events-ə yazılır.
+  üçün qərar gate_events-ə yazılır. Qapının ilk yazılışdakı qərarı listings.fresh-ə düşür (1 = təzə nömrə; qapı
+  yoxdursa və ya nömrə ədəd deyilsə 1): profil səhifəsinin B bölməsi və "Yeni" nişanı buna baxır.
 """
 import json
 import time
@@ -166,13 +167,13 @@ class Store:
                            "kirayə" if row["deal_type"] == "rent" else "", row["district"], row["rooms"], row["area"],
                            row["floor"], row["floors"], price, row["price_period"], row["deal_type"],
                            row["property_type"], row["property_type"], "", row["metro_name"], row.get("settlement"),
-                           self._src(row), images, row["suspicious"], stamp, stamp, stamp, stamp]
+                           self._src(row), images, row["suspicious"], self._fresh(row), stamp, stamp, stamp, stamp]
             ids = {r["external_id"]: r["id"] for r in con.execute(
                 """INSERT INTO listings(source_id, external_id, url, title, suffix, district, rooms, area, floor,
                        floors, price, price_period, deal_type, property_type, building, renovation, metro_name,
-                       settlement, district_src, images, suspicious, active, posted_at, created_at, updated_at,
-                       last_seen_at)
-                   VALUES """ + ",".join(["(" + ",".join("?" * 21) + ",1,?,?,?,?)"] * len(new))
+                       settlement, district_src, images, suspicious, fresh, active, posted_at, created_at,
+                       updated_at, last_seen_at)
+                   VALUES """ + ",".join(["(" + ",".join("?" * 22) + ",1,?,?,?,?)"] * len(new))
                 + " RETURNING id, external_id", values).fetchall()}
             for x, price, _ in new:
                 x["lid"] = ids[x["row"]["external_id"]]
@@ -284,13 +285,13 @@ class Store:
             cur = con.execute(
                 """INSERT INTO listings(source_id, external_id, url, title, suffix, district, rooms, area, floor,
                        floors, price, price_period, deal_type, property_type, building, renovation, metro_name,
-                       settlement, district_src, images, suspicious, active, posted_at, created_at, updated_at,
-                       last_seen_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)""",
+                       settlement, district_src, images, suspicious, fresh, active, posted_at, created_at,
+                       updated_at, last_seen_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)""",
                 (sid, row["external_id"], row["url"], row["title"], "kirayə" if row["deal_type"] == "rent" else "",
                  row["district"], row["rooms"], row["area"], row["floor"], row["floors"], price,
                  row["price_period"], row["deal_type"], row["property_type"], row["property_type"], "",
-                 row["metro_name"], row.get("settlement"), src, images, row["suspicious"],
+                 row["metro_name"], row.get("settlement"), src, images, row["suspicious"], self._fresh(row),
                  stamp, stamp, stamp, stamp),
             )
             lid = cur.lastrowid
@@ -332,6 +333,10 @@ class Store:
         if self.gate is None or row is None:
             return True, None
         return self.gate(row)
+
+    def _fresh(self, row):
+        """listings.fresh ilk yazılışda: qapının qərarı (1/0); qapı yoxdursa və ya nömrə ədəd deyilsə 1."""
+        return 1 if self._allowed(row)[0] else 0
 
     def _group_and_match(self, listing_id, matchable, row=None, first_seen=False):
         """Əvvəl təkrar qrupları yenilənir (dups.py), sonra elan və qrupu dəyişən qonşuları uyğunlaşdırılır."""
