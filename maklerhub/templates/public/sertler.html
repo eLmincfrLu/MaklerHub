@@ -1,0 +1,46 @@
+{% extends 'teleb/_layout.html' %}
+{% block title %}İstifadə şərtləri{% endblock %}
+{% block showcase %}
+      <div class="eyebrow">MaklerHub</div>
+      <h1>
+        <span class="line"><span>Sadə qaydalar,</span></span>
+        <span class="line line2"><span>hamı üçün aydın.</span></span>
+      </h1>
+{% endblock %}
+{% block card %}
+      <div class="kicker">Hüquqi məlumat</div>
+      <h1>İstifadə <i>şərtləri</i></h1>
+      <div class="underline"></div>
+      <div class="doc">
+        <h2>Platforma nə edir</h2>
+        <p>MaklerHub Bakıda ev axtaran müştərilərlə daşınmaz əmlak maklerlərini birləşdirir. Müştəri qeydiyyatsız
+        tələb yazır (kirayə və ya alış, rayon, otaq sayı, büdcə). Həmin rayonda işləyən maklerlər tələbi görür və
+        müştəriyə təklif göndərir. Müştəri bəyəndiyi təklifi qəbul edəndə əlaqə qurulur.</p>
+        <p>MaklerHub əmlakın sahibi və ya vasitəçisi deyil, sövdələşmənin tərəfi olmur və təkliflərdəki məlumatın
+        doğruluğuna zəmanət vermir.</p>
+
+        <h2>Müştəri üçün</h2>
+        <ul>
+          <li>Telefon nömrən maklerlərə göstərilmir. O, <b>yalnız qəbul etdiyin təklifin maklerinə</b> açılır.</li>
+          <li>Tələbin 30 gün aktiv qalır, sonra avtomatik bağlanır.</li>
+          <li>Tələbinə yalnız sənə verilən gizli linklə daxil olmaq olar — linki başqası ilə paylaşma.</li>
+          <li>Eyni nömrə ilə eyni vaxtda ən çox 2 aktiv tələb ola bilər.</li>
+        </ul>
+
+        <h2>Makler üçün öhdəliklər</h2>
+        <ul>
+          <li>Platformaya yalnız administratorun verdiyi lisenziya kodu ilə qoşulmaq olar; lisenziya bitəndə kabinet bağlanır.</li>
+          <li>Yalnız <b>real, mövcud və təklif anında əlçatan</b> evləri təklif etmək; saxta qiymət, saxta şəkil və “yem” elanlar qadağandır.</li>
+          <li>Spam qadağandır: tələbə uyğun olmayan və ya kütləvi eyni təkliflər göndərilməməlidir.</li>
+          <li>Açılan müştəri nömrəsini <b>yalnız həmin tələb üzrə əlaqə üçün</b> istifadə etmək; reklam, siyahılara əlavə etmə,
+          başqasına ötürmə qadağandır.</li>
+          <li>Hesab ən çox 2 cihazda istifadə oluna bilər; hesabı başqasına vermək olmaz.</li>
+        </ul>
+        <p>Qaydaları pozan makler xəbərdarlıqsız dayandırıla və lisenziyası ləğv edilə bilər.</p>
+
+        <h2>Əlaqə</h2>
+        <p>Sual, şikayət və məlumatların silinməsi üçün: <a href="mailto:{{ contact }}">{{ contact }}</a>.
+        Ətraflı: <a href="{{ url_for('public.mexfilik') }}">Məxfilik siyasəti</a>.</p>
+        <p class="upd">Son yenilənmə: noyabr 2026</p>
+      </div>
+{% endblock %}

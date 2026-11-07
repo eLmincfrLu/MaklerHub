@@ -3,6 +3,7 @@ import logging
 import os
 
 from flask import Blueprint, Flask, g, render_template, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import auth, db as dbmod, helpers
 from .config import Config
@@ -13,6 +14,16 @@ public = Blueprint("public", __name__)
 @public.route("/")
 def landing():
     return render_template("landing.html")
+
+
+@public.route("/sertler")
+def sertler():
+    return render_template("public/sertler.html", contact=dbmod.get_setting(dbmod.get_db(), "notify_email"))
+
+
+@public.route("/mexfilik")
+def mexfilik():
+    return render_template("public/mexfilik.html", contact=dbmod.get_setting(dbmod.get_db(), "notify_email"))
 
 
 @public.route("/saglamliq")
@@ -29,6 +40,8 @@ def avatar(filename):
 
 def create_app(overrides=None):
     app = Flask(__name__)
+    # Render bir proxy arxasındadır: X-Forwarded-For/Proto-nun yalnız son (proxy-nin yazdığı) dəyəri etibarlıdır
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
     app.config.from_object(Config)
     if overrides:
         app.config.update(overrides)

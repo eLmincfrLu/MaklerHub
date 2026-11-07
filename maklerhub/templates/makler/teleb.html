@@ -1,0 +1,89 @@
+{% extends 'makler/base.html' %}
+{% set page_css = 'teleblist.css' %}
+{% block title %}Tələb #{{ req.id }}{% endblock %}
+{% block main %}
+  <a class="back" href="{{ url_for('makler.kabinet') }}">← Tələblər</a>
+  <div class="head reveal" style="animation-delay:.05s">
+    <h1>{{ req.deal }} · {{ req.rooms }} otaq</h1>
+    <p>{{ req.districts|join(', ') }} · {{ req.ago }}</p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="mh-flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+  {% if errors %}<div class="mh-flash err">{% for e in errors %}{{ e }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>{% endif %}
+
+  <div class="dgrid">
+    <div class="box reveal" style="animation-delay:.1s">
+      <div class="dtop">
+        {% if score is not none %}
+        <div class="match"><svg width="56" height="56"><circle cx="28" cy="28" r="24" stroke="var(--line)" stroke-width="4" fill="none"/><circle cx="28" cy="28" r="24" stroke="{{ 'var(--gold-dim)' if score < 80 else 'var(--ok)' }}" stroke-width="4" fill="none" stroke-dasharray="151" stroke-dashoffset="{{ ring }}"/></svg><div class="pct">{{ score }}%</div></div>
+        {% endif %}
+        <div><h2 style="margin:0">Tələb #{{ req.id }}</h2><div class="muted" style="margin:2px 0 0">Müştəri: {{ req.first_name }} · nömrə yalnız təklif qəbul olunanda açılır</div></div>
+      </div>
+      <div class="rows">
+        <div class="row"><span>Əməliyyat</span><span>{{ req.deal }}</span></div>
+        <div class="row"><span>Rayon</span><span>{{ req.districts|join(', ') }}</span></div>
+        <div class="row"><span>Otaq sayı</span><span>{{ req.rooms }}</span></div>
+        <div class="row"><span>Büdcə</span><span>{{ req.budget }}</span></div>
+        <div class="row"><span>Nə vaxt</span><span>{{ req.urgency }}</span></div>
+        <div class="row"><span>Göndərilib</span><span>{{ req.created }}, {{ req.created_time }}</span></div>
+        <div class="row"><span>Təkliflər</span><span>{{ n_offers }}/{{ limit }}</span></div>
+        <div class="row"><span>Status</span><span>{{ req.status_label if alive else 'Bağlanıb' }}</span></div>
+      </div>
+      {% if req.note %}<div class="note">{{ req.note }}</div>{% endif %}
+      {% if reasons %}
+      <ul class="reasons">{% for kind, text in reasons %}<li class="{{ kind }}">{{ text }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+
+    <div class="box reveal" style="animation-delay:.16s">
+      {% if mine %}
+      <h2>Sizin təklifiniz <span class="tag st-{{ mine.status }}">{{ my_label }}</span></h2>
+      {% if mine.image_url %}<img class="ofr-img" src="{{ mine.image_url }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.outerHTML='<div class=&quot;ofr-ph&quot;>Şəkil yüklənmədi</div>'">{% else %}<div class="ofr-ph">Şəkil yoxdur</div>{% endif %}
+      <div class="rows">
+        <div class="row"><span>Başlıq</span><span>{{ mine.title }}</span></div>
+        <div class="row"><span>Qiymət</span><span>{{ '{:,}'.format(mine.price) if mine.price else '—' }} {{ 'AZN/ay' if req.deal_type == 'rent' else 'AZN' }}</span></div>
+        <div class="row"><span>Rayon</span><span>{{ mine.district or '—' }}</span></div>
+        <div class="row"><span>Otaq</span><span>{{ rooms.get(mine.rooms, '—') }}</span></div>
+        {% if mine.area %}<div class="row"><span>Sahə</span><span>{{ '%g'|format(mine.area) }} m²</span></div>{% endif %}
+      </div>
+      {% if mine.description %}<div class="note">{{ mine.description }}</div>{% endif %}
+      {% if mine.status == 'sent' %}
+      <form class="inline-form" method="post" action="{{ url_for('makler.teklif_geri_cek', oid=mine.id) }}" onsubmit="return confirm('Təklif geri çəkilsin? Bu tələbə yenidən təklif göndərə bilməyəcəksiniz.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <p class="muted">Geri çəkilən təklif müştəriyə görünmür və 5 təklif limitinə sayılmır. <b>Eyni tələbə yenidən təklif göndərmək olmur.</b></p>
+        <button class="linkbtn" type="submit">Təklifi geri çək</button>
+      </form>
+      {% elif mine.status == 'withdrawn' %}
+      <p class="muted">Bu təklifi geri çəkmisiniz. Eyni tələbə yenidən təklif göndərmək olmur.</p>
+      {% endif %}
+
+      {% elif not alive %}
+      <h2>Təklif</h2>
+      <div class="closed">Bu tələb bağlanıb — təklif göndərmək olmur.</div>
+
+      {% elif not can_offer %}
+      <h2>Təklif</h2>
+      <div class="closed">Bu tələbə artıq {{ limit }} təklif göndərilib — limit dolub.</div>
+
+      {% else %}
+      <h2>Təklif göndər</h2>
+      <form method="post" action="{{ url_for('makler.teklif_gonder', rid=req.id) }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mh-field"><label for="title">Başlıq</label><input id="title" name="title" maxlength="{{ title_max }}" value="{{ form.title }}" placeholder="Məs.: Təmirli 2 otaqlı, metroya 5 dəq" required></div>
+        <div class="mh-two">
+          <div class="mh-field"><label for="price">Qiymət ({{ 'AZN/ay' if req.deal_type == 'rent' else 'AZN' }})</label><input id="price" name="price" inputmode="numeric" value="{{ form.price }}" required></div>
+          <div class="mh-field"><label for="area">Sahə, m² <span style="color:#B7AE93">(istəyə bağlı)</span></label><input id="area" name="area" inputmode="decimal" value="{{ form.area }}"></div>
+        </div>
+        <div class="mh-two">
+          <div class="mh-field"><label for="district">Rayon</label><select id="district" name="district"><option value="">Seçin</option>{% for d in districts %}<option{% if form.district == d %} selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
+          <div class="mh-field"><label for="rooms">Otaq sayı</label><select id="rooms" name="rooms"><option value="">Seçin</option>{% for n, l in rooms.items() %}<option value="{{ n }}"{% if form.rooms == n|string %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+        </div>
+        <div class="mh-field"><label for="image_url">Şəkil linki <span style="color:#B7AE93">(istəyə bağlı, yalnız https://)</span></label><input id="image_url" name="image_url" type="url" maxlength="{{ url_max }}" value="{{ form.image_url }}" placeholder="https://..."></div>
+        <div class="mh-field"><label for="description">Təsvir <span style="color:#B7AE93">(max {{ desc_max }})</span></label><textarea id="description" name="description" maxlength="{{ desc_max }}" rows="4">{{ form.description }}</textarea></div>
+        <button class="mh-btn" type="submit">Təklifi göndər</button>
+        <p class="muted">Bir tələbə yalnız bir dəfə təklif göndərmək olar. Müştəri qəbul edəndə nömrəsi sizə açılacaq.</p>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

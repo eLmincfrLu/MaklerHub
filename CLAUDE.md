@@ -13,10 +13,13 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 - Gün 1 BİTDİ: köhnə məntiq silindi, yeni sxem (13 cədvəl), sayt işə düşür; kabinet/panel "Tezliklə" placeholder.
 - Gün 2 BİTDİ: lisenziya kodu ilə qeydiyyat, admin "Lisenziyalar" bölməsi, cihaz limiti + tək sessiya, makler xidmət
   sahəsi (Ayarlar), müştəri tələb forması `/teleb` və "Mənim tələbim" `/teleb/<token>`, landing yeni modelə keçdi.
-- Sonrakı: kabinetdə tələblər + təklif göndərmə, Gün 4: qəbul/rədd, kontakt açılması, tam admin panel (cihaz sıfırlama
-  UI, şikayətlər). Gün 5: demo məlumatlar (`seed()` hələlik `seed_minimal` ilə eynidir).
-- Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək); IP `X-Forwarded-For`-un ilk dəyərindən
-  götürülür (saxtalaşdırıla bilər) — Render-də real başlığa baxıb yekunlaşdır.
+- Gün 3 BİTDİ: ProxyFix + `client_ip()`, `/teleb` CSRF xətası formanı saxlayır, `/sertler` və `/mexfilik`, tələb
+  müddəti (lazy), `matching.py`, kabinet tələb siyahısı (filtr, sıralama, 20-lik səhifə), tələb detalı + təklif,
+  geri çəkmə, Təkliflərim, müştəri səhifəsində təkliflər. pytest: `tests/` (25 test).
+- Sonrakı (Gün 4): müştəri qəbul/rədd, kontakt açılması (`contacts`), müştəri bildirişlərinin göstərilməsi, tam admin
+  panel (cihaz sıfırlama UI, şikayətlər). Gün 5: demo məlumatlar (`seed()` hələlik `seed_minimal` ilə eynidir).
+- Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək); ProxyFix x_for=1 Render-də bir proxy
+  fərziyyəsinə əsaslanır — deploydan sonra real IP-nin gəldiyini loqda yoxla.
 
 ## Qaydalar (pozma)
 - `maklerhub/static/` içindəki MÖVCUD fayllara toxunma (CSS, JS, şəkillər, loqo). Lazım olsa YENİ fayl əlavə et
@@ -34,7 +37,8 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 - Telefonlar `+994XXXXXXXXX` saxlanılır (`helpers.normalize_phone`, operatorlar 10/50/51/55/60/70/77/99).
 
 ## Struktur
-- `maklerhub/__init__.py` — `create_app`, public blueprint (`/`, `/saglamliq` — bazaya toxunmur, UptimeRobot üçün).
+- `maklerhub/__init__.py` — `create_app` (ProxyFix x_for=1, x_proto=1), public blueprint (`/`, `/sertler`,
+  `/mexfilik` — əlaqə e-poçtu `settings.notify_email`; `/saglamliq` — bazaya toxunmur, UptimeRobot üçün).
 - `auth.py` — giriş/çıxış, şifrə bərpası (SMTP yoxdursa link konsola), CSRF, dekoratorlar; `/qeydiyyat` lisenziya
   kodu ilə (bir tranzaksiya, `FOR UPDATE`; IP başına 15 dəq-də 10 səhv kod → blok, `login_attempts.email='#license'`).
   Makler: `mh_device` cookie (httponly, 1 il; bazada `sha256(user_id:cookie)`), limit `settings.max_devices`=2,
@@ -42,10 +46,18 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   `auth/lisenziya.html` (makler blueprint-i və /api/password bağlı). Admin: köhnə timeout, cihaz limiti yoxdur.
 - `licenses.py` — kod yaratma/normallaşdırma (MH-XXXX-XXXX-XXXX), `activate`, `revoke`, `license_problem`,
   `reset_devices` (admin UI Gün 4-də).
-- `teleb.py` — `/teleb` (honeypot `website`, IP başına 24 saatda 3, nömrə başına 2 aktiv tələb, 1-3 rayon, razılıq),
-  `/teleb/<token>` (noindex, Referrer-Policy: no-referrer).
-- `makler.py` — kabinet (xidmət sahəsi boşdursa xəbərdarlıq), `/ayarlar` (profil, xidmət sahəsi → `agent_areas`,
-  lisenziya, şifrə; JS `makler-ayarlar.js`), API `/api/me/profile`, `/api/me/areas`, `/api/notifications`.
+- `teleb.py` — `/teleb` (honeypot `website`, IP başına 24 saatda 3, nömrə başına 2 aktiv tələb, 1-3 rayon, razılıq;
+  CSRF uğursuzsa `g.csrf_failed` → forma dəyərlərlə yenidən), `/teleb/<token>` (noindex, Referrer-Policy: no-referrer,
+  təkliflər — geri çəkilənlər yox, makler "Ad S."). `expire_requests(db)`: lazy — `settings.request_ttl_days`=30-dan
+  sonra 'expired'; bağlanan/bitən tələbin ad/telefon/qeyd/IP-si 90 gün sonra silinir. `request_summary` = telefonsuz.
+- `matching.py` — təmiz funksiyalar: qapı (deal_type sahədə var), rayon 55 + büdcə 45 × kəsişmə nisbəti
+  (budget_min yoxdursa [max×0.7, max]); `GOOD_SCORE`=50; səbəblər ("ok"|"partial"|"no", mətn).
+- `offers.py` — təklif yoxlaması (başlıq 80, qiymət aralığı, rayon, otaq, sahə, yalnız https şəkil ≤500, təsvir 500),
+  `send_offer` (tələb sətri `FOR UPDATE`, 5 aktiv təklif limiti, `UNIQUE(request_id, agent_id)` — geri çəkən yenidən
+  göndərə bilməz, müştəri üçün `notifications` kind='new_offer'), `load_ranked` (bir sorğu, N+1 yox), `apply_filters`.
+- `makler.py` — menyu: Tələblər (`/kabinet`), Təkliflərim (`/kabinet/teklifler`), Ayarlar. `/kabinet/teleb/<id>`
+  (detal + forma), `/kabinet/teleb/<id>/teklif`, `/kabinet/teklif/<id>/geri-cek`. Makler tərəfinə tələbin telefonu
+  HEÇ VAXT seçilmir (`offers.REQ_COLS`), ad yalnız ilk ad. `/ayarlar`, API `/api/me/*`, `/api/notifications`.
   `/axtarislar`, `/elanlar`, `/musteriler`, `/analitika` — köhnə fayllar, placeholder, naviqasiyada yoxdur.
 - `admin.py` — `/admin/lisenziyalar` (yaratma 1-20, ləğv), loglar (`/admin/api/logs`); panel, maklerlər, ayarlar,
   `/admin/menbe` — placeholder.
@@ -68,6 +80,8 @@ Vaxtlar TEXT "YYYY-MM-DD HH:MM:SS" (Asia/Baku, `helpers.ts()`).
 ## İşə salma
 - Windows-da Python əmrlərini `PYTHONIOENCODING=utf-8` ilə işlət, yoxsa Azərbaycan hərfləri xəta verir.
 - `python run.py [--debug] [--port N]` — server (waitress; `--debug` Flask serveri).
+- Testlər: `PYTHONIOENCODING=utf-8 python -m pytest tests -q` (pytest `requirements-dev.txt`-dədir). Axın testləri
+  .env-dəki bazada işləyir və sonda öz sətirlərini silir (id nişanı ilə); `test_matching.py` bazasızdır.
 - `flask --app run init-db --yes [--demo]` — bazanı SIFIRDAN yaradır (hər şey silinir), admin və kodları konsola yazır.
   Boş bazada sxem və `seed_minimal` ilk işə salınmada avtomatik yaradılır.
 - Render (pulsuz): 15 dəq boş qalanda yatır, ayda 750 saat; Neon pulsuz limiti.

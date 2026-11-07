@@ -1,21 +1,82 @@
 {% extends 'makler/base.html' %}
-{% set page_css = 'kabinet.css' %}
-{% block title %}Kabinet{% endblock %}
+{% set page_css = 'teleblist.css' %}
+{% block title %}Tələblər{% endblock %}
 {% block main %}
   <div class="head reveal" style="animation-delay:.05s">
-    <div><h1>Xoş gəldiniz, {{ current_user.first_name }}</h1><p>{{ today_long }}{% if lic %} · lisenziya {{ lic.days_left }} gün qalıb{% endif %}</p></div>
+    <h1>Müştəri tələbləri</h1>
+    <p>{{ today_long }}{% if lic %} · lisenziya {{ lic.days_left }} gün qalıb{% endif %}</p>
+  </div>
+
+  <div class="stats three reveal" style="animation-delay:.1s">
+    <div class="stat"><div class="n">{{ good }}</div><div class="l">Uyğun aktiv tələb</div></div>
+    <div class="stat"><div class="n">{{ sent }}</div><div class="l">Göndərdiyim təklif</div></div>
+    <div class="stat"><div class="n">{{ accepted }}</div><div class="l">Qəbul olunan</div></div>
   </div>
 
   {% if not has_area %}
-  <div class="section reveal" style="animation-delay:.1s">
-    <div class="mh-empty" style="border-left:3px solid var(--gold);text-align:left">
-      <b>Tələbləri görmək üçün xidmət sahənizi doldurun.</b><br>
-      Kirayə və/və ya satış, qiymət aralığı və rayonları seçin — <a href="{{ url_for('makler.ayarlar') }}#saha" style="color:var(--gold-dim);font-weight:600">Ayarlar → Xidmət sahəsi</a>.
+  <div class="warnbox reveal" style="animation-delay:.14s">
+    <b>Tələbləri görmək üçün xidmət sahənizi doldurun.</b><br>
+    Kirayə və/və ya satış, qiymət aralığı və rayonları seçin — <a href="{{ url_for('makler.ayarlar') }}#saha">Ayarlar → Xidmət sahəsi</a>.
+  </div>
+  {% else %}
+  <div class="toolbar reveal" style="animation-delay:.14s">
+    <div class="filters">
+      <a class="fchip{% if f.view == 'good' %} active{% endif %}" href="{{ url_for('makler.kabinet', **dict(args, view='good')) }}">Uyğun olanlar ({{ good_score }}%+)</a>
+      <a class="fchip{% if f.view == 'all' %} active{% endif %}" href="{{ url_for('makler.kabinet', **dict(args, view='all')) }}">Hamısı</a>
     </div>
   </div>
-  {% endif %}
 
-  <div class="section reveal" style="animation-delay:.16s">
-    <div class="mh-empty">Tezliklə: burada xidmət sahənizə uyğun müştəri tələblərini görüb təklif göndərə biləcəksiniz.</div>
+  <form class="fbar reveal" style="animation-delay:.18s" method="get" action="{{ url_for('makler.kabinet') }}">
+    <input type="hidden" name="view" value="{{ f.view }}">
+    {% if deals_served|length > 1 %}
+    <label>Əməliyyat
+      <select name="deal"><option value="">Hamısı</option>{% for k, v in deals.items() %}<option value="{{ k }}"{% if f.deal == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+    </label>
+    {% endif %}
+    <label>Rayon
+      <select name="district"><option value="">Hamısı</option>{% for d in districts %}<option{% if f.district == d %} selected{% endif %}>{{ d }}</option>{% endfor %}</select>
+    </label>
+    <label>Otaq
+      <select name="rooms"><option value="">Hamısı</option>{% for n, l in rooms.items() %}<option value="{{ n }}"{% if f.rooms == n %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+    </label>
+    <label>Büdcə min<input type="text" inputmode="numeric" name="bmin" value="{{ f.bmin if f.bmin is not none else '' }}" placeholder="AZN"></label>
+    <label>Büdcə max<input type="text" inputmode="numeric" name="bmax" value="{{ f.bmax if f.bmax is not none else '' }}" placeholder="AZN"></label>
+    <label>Sıralama
+      <select name="sort">{% for k, v in sorts.items() %}<option value="{{ k }}"{% if f.sort == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+    </label>
+    <button class="go" type="submit">Tətbiq et</button>
+    <a class="reset" href="{{ url_for('makler.kabinet', view=f.view) }}">Sıfırla</a>
+  </form>
+
+  <div class="count">{{ total }} tələb</div>
+  <div class="list">
+    {%- for m in items %}
+    <a class="card{% if m.mid %} mid{% endif %}" href="{{ url_for('makler.teleb_detal', rid=m.id) }}" style="animation-delay:{{ '%.2f'|format(0.2 + loop.index0 * 0.04) }}s">
+      <div class="match"><svg width="52" height="52"><circle cx="26" cy="26" r="22" stroke="var(--line)" stroke-width="4" fill="none"/><circle cx="26" cy="26" r="22" stroke="{{ 'var(--gold-dim)' if m.mid else 'var(--ok)' }}" stroke-width="4" fill="none" stroke-dasharray="138" stroke-dashoffset="{{ m.ring }}"/></svg><div class="pct">{{ m.score }}%</div></div>
+      <div class="info">
+        <div class="top-row"><div class="title">{{ m.deal }} · {{ m.rooms }} otaq · {{ m.districts|join(', ') }}</div></div>
+        <div class="meta">{{ m.budget }} · {{ m.ago }}</div>
+        <div class="why">{{ m.why }}</div>
+        <div class="chipline">
+          <span class="tag{% if m.urgency_key == 'urgent' %} urgent{% endif %}">{{ m.urgency }}</span>
+          <span class="tag">{{ m.n_offers }}/{{ m.limit }} təklif</span>
+          {% if m.my_status %}<span class="tag mine">Təklifiniz: {{ m.my_label|lower }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="pricebox"><div class="now">{{ m.budget }}</div></div>
+      <div class="client"><div class="name">{{ m.first_name }}</div><div class="to">{{ m.n_offers }}/{{ m.limit }} təklif</div></div>
+    </a>
+    {%- else %}
+    <div class="mh-empty">{% if f.view == 'good' %}Hazırda filtrə uyğun tələb yoxdur. <a href="{{ url_for('makler.kabinet', **dict(args, view='all')) }}" style="color:var(--gold-dim);font-weight:600">Hamısına baxın</a> və ya xidmət sahənizi genişləndirin.{% else %}Hazırda filtrə uyğun aktiv tələb yoxdur.{% endif %}</div>
+    {%- endfor %}
   </div>
+
+  {% if pages > 1 %}
+  <div class="pager">
+    {%- for p in range(1, pages + 1) %}
+    {% if p == page %}<span class="on">{{ p }}</span>{% else %}<a href="{{ url_for('makler.kabinet', page=p, **args) }}">{{ p }}</a>{% endif %}
+    {%- endfor %}
+  </div>
+  {% endif %}
+  {% endif %}
 {% endblock %}

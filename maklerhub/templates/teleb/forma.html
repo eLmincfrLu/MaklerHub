@@ -112,7 +112,7 @@
 
         <label class="terms">
           <input type="checkbox" name="consent"{% if form.consent %} checked{% endif %} required>
-          <span>{{ consent_text }}</span>
+          <span>{{ consent_text }} <a href="{{ url_for('public.sertler') }}" target="_blank">Şərtlər</a> · <a href="{{ url_for('public.mexfilik') }}" target="_blank">Məxfilik</a></span>
         </label>
 
         <button class="btn" type="submit">Tələbi göndər</button>

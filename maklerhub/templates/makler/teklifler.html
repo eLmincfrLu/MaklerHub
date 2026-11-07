@@ -1,0 +1,37 @@
+{% extends 'makler/base.html' %}
+{% set page_css = 'teleblist.css' %}
+{% block title %}Təkliflərim{% endblock %}
+{% block main %}
+  <div class="head reveal" style="animation-delay:.05s">
+    <h1>Təkliflərim</h1>
+    <p>Göndərdiyiniz bütün təkliflər və onların vəziyyəti</p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="mh-flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+
+  <div class="toolbar reveal" style="animation-delay:.1s">
+    <div class="filters">
+      <a class="fchip{% if not status %} active{% endif %}" href="{{ url_for('makler.teklifler') }}">Hamısı ({{ total }})</a>
+      {%- for k, v in labels.items() %}
+      <a class="fchip{% if status == k %} active{% endif %}" href="{{ url_for('makler.teklifler', status=k) }}">{{ v }} ({{ counts.get(k, 0) }})</a>
+      {%- endfor %}
+    </div>
+  </div>
+
+  <div class="list">
+    {%- for it in items %}
+    <a class="card ocard{% if it.o.status != 'sent' and it.o.status != 'accepted' %} mid{% endif %}" href="{{ url_for('makler.teleb_detal', rid=it.o.request_id) }}" style="animation-delay:{{ '%.2f'|format(0.14 + loop.index0 * 0.04) }}s">
+      {% if it.o.image_url %}<img class="othumb" src="{{ it.o.image_url }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.removeAttribute('src')">{% else %}<div class="othumb"></div>{% endif %}
+      <div class="info">
+        <div class="top-row"><div class="title">{{ it.o.title }}</div></div>
+        <div class="meta">{{ it.price }} · {{ it.o.district or '—' }} · {{ it.rooms }} otaq · {{ it.when }}</div>
+        <div class="why" style="color:#8A8372">Tələb: {{ it.req.deal }}, {{ it.req.districts|join(', ') }}, {{ it.req.rooms }} otaq, {{ it.req.budget }}{% if it.req.status != 'active' %} · tələb {{ it.req.status_label|lower }}{% endif %}</div>
+        <div class="chipline"><span class="tag st-{{ it.o.status }}">{{ it.label }}</span></div>
+      </div>
+      <div class="pricebox"><div class="now">{{ it.price }}</div></div>
+    </a>
+    {%- else %}
+    <div class="mh-empty">{% if status %}Bu statusda təklif yoxdur.{% else %}Hələ təklif göndərməmisiniz. <a href="{{ url_for('makler.kabinet') }}" style="color:var(--gold-dim);font-weight:600">Tələblərə baxın</a>.{% endif %}</div>
+    {%- endfor %}
+  </div>
+{% endblock %}

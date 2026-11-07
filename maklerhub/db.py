@@ -24,6 +24,7 @@ DEFAULT_SETTINGS = {
     "session_timeout": "120",      # dəqiqə (admin sessiyası)
     "login_fail_limit": "5",
     "max_devices": "2",            # makler başına cihaz limiti
+    "request_ttl_days": "30",      # aktiv müştəri tələbi bu qədər gündən sonra 'expired' olur
 }
 
 

@@ -3,11 +3,11 @@ import json
 import secrets
 from datetime import timedelta
 
-from flask import Blueprint, abort, make_response, redirect, render_template, request, url_for
+from flask import Blueprint, abort, g, make_response, redirect, render_template, request, url_for
 
 from .auth import client_ip
-from .db import add_log, get_db
-from .helpers import BAKU_DISTRICTS, date_short, money, normalize_phone, now, phone_display, ts
+from .db import add_log, get_db, get_setting
+from .helpers import BAKU_DISTRICTS, date_short, money, normalize_phone, now, phone_display, rel, ts
 
 bp = Blueprint("teleb", __name__)
 
@@ -24,6 +24,26 @@ BUDGET = {"rent": (50, 100_000), "sale": (5_000, 50_000_000)}  # AZN/ay və AZN
 CONSENT_TEXT = ("Nömrəm yalnız qəbul etdiyim təklifin maklerinə göstəriləcək. "
                 "Məlumatlarımın bu məqsədlə emalına razıyam.")
 HONEYPOT = "website"
+ANON_DAYS = 90           # bağlanan/bitən tələbin şəxsi məlumatları bu qədər gündən sonra silinir
+OFFER_LIMIT = 5          # bir tələbə aktiv (geri çəkilməmiş) təklif limiti
+
+
+def expire_requests(db):
+    """Lazy yeniləmə (cron yoxdur): müddəti keçən aktiv tələblər 'expired' olur; bağlanandan/bitəndən
+    ANON_DAYS gün sonra ad, telefon, qeyd və IP silinir. Çağıran tərəf commit etməlidir."""
+    ttl = int(get_setting(db, "request_ttl_days") or 30)
+    stamp = now()
+    db.execute("UPDATE customer_requests SET status = 'expired', closed_at = ? WHERE status = 'active' AND created_at < ?",
+               (ts(stamp), ts(stamp - timedelta(days=ttl))))
+    db.execute("UPDATE customer_requests SET name = '', phone = '', note = '', ip = '' "
+               "WHERE status IN ('closed', 'expired') AND closed_at < ? AND phone != ''",
+               (ts(stamp - timedelta(days=ANON_DAYS)),))
+
+
+def request_alive(db, req):
+    """Tələb aktivdir və müddəti keçməyib (lazy yeniləmə hələ işləməsə də)."""
+    ttl = int(get_setting(db, "request_ttl_days") or 30)
+    return req["status"] == "active" and req["created_at"] >= ts(now() - timedelta(days=ttl))
 
 
 def _budget(value):
@@ -90,13 +110,17 @@ def forma():
         form["consent"] = request.form.get("consent") == "on"
         db = get_db()
         ip = client_ip()
-        if request.form.get(HONEYPOT):
+        if g.get("csrf_failed"):
+            # sessiya/token köhnəlib: yönləndirmə yox, dəyərlər qalır, yeni token formada gedir
+            errors = ["Zəhmət olmasa yenidən göndərin — təhlükəsizlik tokeni yeniləndi."]
+        elif request.form.get(HONEYPOT):
             add_log(db, "warn", "Müştəri", "Tələb rədd edildi (honeypot)", f"IP={ip}")
             db.commit()
             errors = ["Tələb qəbul olunmadı. Səhifəni yeniləyib yenidən cəhd edin."]
         else:
             clean, errors = validate(form)
             if not errors:
+                expire_requests(db)
                 since = ts(now() - timedelta(hours=24))
                 if db.execute("SELECT COUNT(*) FROM customer_requests WHERE ip = ? AND created_at >= ?",
                               (ip, since)).fetchone()[0] >= IP_DAILY_LIMIT:
@@ -124,25 +148,68 @@ def forma():
                            consent_text=CONSENT_TEXT, honeypot=HONEYPOT, budget=BUDGET)
 
 
+URGENCY_ORDER = {"urgent": 0, "month": 1, "flexible": 2}
+
+
+def budget_str(deal_type, lo, hi):
+    unit = " AZN/ay" if deal_type == "rent" else " AZN"
+    if not hi:
+        return "—"
+    return (f"{money(lo)} – {money(hi)}" if lo else f"{money(hi)}-dək") + unit
+
+
+def request_summary(r):
+    """Telefonsuz və adsız xülasə (makler tərəfi də bunu istifadə edir)."""
+    return {"deal": DEALS.get(r["deal_type"], r["deal_type"]), "deal_type": r["deal_type"],
+            "districts": json.loads(r["districts"] or "[]"),
+            "rooms": ROOMS.get(r["rooms"], "—") if r["rooms"] else "—",
+            "budget": budget_str(r["deal_type"], r["budget_min"], r["budget_max"]),
+            "urgency": URGENCY.get(r["urgency"], r["urgency"]), "urgency_key": r["urgency"],
+            "status": r["status"], "status_label": STATUS.get(r["status"]),
+            "created": date_short(r["created_at"]), "created_time": r["created_at"][11:16], "ago": rel(r["created_at"])}
+
+
 def request_view(r):
-    unit = " AZN/ay" if r["deal_type"] == "rent" else " AZN"
-    lo, hi = r["budget_min"], r["budget_max"]
-    budget = (f"{money(lo)} – {money(hi)}" if lo else f"{money(hi)}-dək") + unit if hi else "—"
-    return {"deal": DEALS.get(r["deal_type"], r["deal_type"]), "districts": json.loads(r["districts"] or "[]"),
-            "rooms": ROOMS.get(r["rooms"], "—") if r["rooms"] else "—", "budget": budget,
-            "urgency": URGENCY.get(r["urgency"], r["urgency"]), "note": r["note"], "name": r["name"],
-            "phone": phone_display(r["phone"]), "status": r["status"], "status_label": STATUS.get(r["status"]),
-            "created": date_short(r["created_at"]), "created_time": r["created_at"][11:16]}
+    """Müştərinin öz səhifəsi üçün: xülasə + qeyd, ad və telefon."""
+    v = request_summary(r)
+    v.update(note=r["note"], name=r["name"], phone=phone_display(r["phone"]))
+    return v
+
+
+def agent_short_name(first, last):
+    """'Rəşad Məmmədov' → 'Rəşad M.' (müştəriyə maklerin tam soyadı göstərilmir)."""
+    first, last = (first or "").strip(), (last or "").strip()
+    return f"{first} {last[:1]}." if last else first
+
+
+def offer_cards(db, request_id, deal_type):
+    """Müştəriyə görünən təkliflər (geri çəkilənlər yox), makler adı: ad + soyadın ilk hərfi."""
+    rows = db.execute(
+        "SELECT o.*, u.first_name, u.last_name FROM offers o JOIN users u ON u.id = o.agent_id "
+        "WHERE o.request_id = ? AND o.status != 'withdrawn' ORDER BY o.created_at DESC, o.id DESC", (request_id,)).fetchall()
+    unit = " AZN/ay" if deal_type == "rent" else " AZN"
+    out = []
+    for o in rows:
+        out.append({"id": o["id"], "title": o["title"], "price": f"{money(o['price'])}{unit}" if o["price"] else "—",
+                    "district": o["district"], "rooms": ROOMS.get(o["rooms"], "—") if o["rooms"] else "—",
+                    "area": (f"{o['area']:g} m²" if o["area"] else None), "image": o["image_url"],
+                    "description": o["description"], "status": o["status"],
+                    "agent": agent_short_name(o["first_name"], o["last_name"]),
+                    "when": rel(o["created_at"])})
+    return out
 
 
 @bp.route("/teleb/<token>")
 def menim(token):
     if len(token) > 64:
         abort(404)
-    r = get_db().execute("SELECT * FROM customer_requests WHERE token = ?", (token,)).fetchone()
+    db = get_db()
+    expire_requests(db)
+    db.commit()
+    r = db.execute("SELECT * FROM customer_requests WHERE token = ?", (token,)).fetchone()
     if r is None:
         abort(404)
-    resp = make_response(render_template("teleb/menim.html", r=request_view(r), offers=[],
+    resp = make_response(render_template("teleb/menim.html", r=request_view(r), offers=offer_cards(db, r["id"], r["deal_type"]),
                                          link=url_for("teleb.menim", token=token, _external=True)))
     resp.headers["Referrer-Policy"] = "no-referrer"
     resp.headers["X-Robots-Tag"] = "noindex, nofollow"

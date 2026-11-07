@@ -15,6 +15,11 @@
       <h1>{{ r.deal }} · <i>{{ r.districts|join(', ') }}</i></h1>
       <div class="underline"></div>
 
+      {% if r.status == 'expired' %}
+      <div class="expired"><b>Tələbin müddəti bitib</b>Tələb 30 gün aktiv qalır. Hələ də axtarırsansa, <a href="{{ url_for('teleb.forma') }}">yeni tələb yaz</a>.</div>
+      {% elif r.status == 'closed' %}
+      <div class="expired"><b>Tələb bağlanıb</b>Yeni təkliflər qəbul olunmur.</div>
+      {% endif %}
       <div class="savebox">
         <b>Bu linki saxla, təkliflər burada görünəcək</b>
         <p>Link yalnız səndədir — qeydiyyat olmadığı üçün tələbinə ancaq bu linklə qayıda bilərsən. Başqası ilə paylaşma.</p>
@@ -36,9 +41,21 @@
         <div class="sum-row"><span>Yaradılıb</span><span>{{ r.created }}, {{ r.created_time }}</span></div>
       </div>
 
-      <div class="offers-h">Təkliflər</div>
+      <div class="offers-h">Təkliflər{% if offers %} ({{ offers|length }}){% endif %}</div>
+      <div class="offers">
       {%- for o in offers %}
+        <div class="offer">
+          {% if o.image %}<img src="{{ o.image }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.outerHTML='<div class=&quot;ph&quot;>Şəkil yüklənmədi</div>'">{% else %}<div class="ph">Şəkil yoxdur</div>{% endif %}
+          <div class="ob">
+            <div class="ot">{{ o.title }}</div>
+            <div class="op">{{ o.price }}</div>
+            <div class="om">{{ o.district or '—' }} · {{ o.rooms }} otaq{% if o.area %} · {{ o.area }}{% endif %}</div>
+            {% if o.description %}<div class="od">{{ o.description }}</div>{% endif %}
+            <div class="oa"><span>Makler: <b>{{ o.agent }}</b></span><span>{{ o.when }}</span></div>
+          </div>
+        </div>
       {%- else %}
-      <div class="empty">Hələ təklif yoxdur. Maklerlər tələbini görür.<br>Təkliflər gələndə bu səhifədə görünəcək.</div>
+        <div class="empty">{% if r.status == 'active' %}Hələ təklif yoxdur. Maklerlər tələbini görür.<br>Təkliflər gələndə bu səhifədə görünəcək.{% else %}Bu tələbə təklif gəlməyib.{% endif %}</div>
       {%- endfor %}
+      </div>
 {% endblock %}

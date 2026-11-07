@@ -53,6 +53,10 @@ def password_problem(pw):
     return None
 
 
+# CSRF uğursuz olanda yönləndirilməyən, g.csrf_failed ilə özü idarə edən görünüşlər
+CSRF_SOFT_ENDPOINTS = {"teleb.forma"}
+
+
 def csrf_token():
     if "_csrf" not in session:
         session["_csrf"] = secrets.token_urlsafe(32)
@@ -73,7 +77,9 @@ def _safe_next(target):
 
 
 def client_ip():
-    return request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    """Müştərinin IP-si. X-Forwarded-For-u ProxyFix (x_for=1) emal edir: yalnız Render proxy-sinin
+    əlavə etdiyi son dəyər götürülür, müştərinin özünün göndərdiyi saxta dəyərlər nəzərə alınmır."""
+    return request.remote_addr or ""
 
 
 def login_user(user, remember=False, session_token=None):
@@ -257,6 +263,11 @@ def init_app(app):
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
             sent = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
             if not sent or sent != session.get("_csrf"):
+                if request.endpoint in CSRF_SOFT_ENDPOINTS:
+                    # müştəri forması: yönləndirmə yox — görünüş özü formanı dəyərlərlə yenidən göstərir
+                    session.pop("_csrf", None)
+                    g.csrf_failed = True
+                    return None
                 if is_api_request():
                     return jsonify(ok=False, error="Təhlükəsizlik tokeni etibarsızdır. Səhifəni yeniləyin."), 400
                 flash("Sessiya yeniləndi, zəhmət olmasa yenidən cəhd edin.", "err")

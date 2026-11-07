@@ -1,0 +1,41 @@
+{% extends 'teleb/_layout.html' %}
+{% block title %}Məxfilik siyasəti{% endblock %}
+{% block showcase %}
+      <div class="eyebrow">MaklerHub</div>
+      <h1>
+        <span class="line"><span>Nömrən sənindir,</span></span>
+        <span class="line line2"><span>kimə açılacağını sən seçirsən.</span></span>
+      </h1>
+{% endblock %}
+{% block card %}
+      <div class="kicker">Hüquqi məlumat</div>
+      <h1>Məxfilik <i>siyasəti</i></h1>
+      <div class="underline"></div>
+      <div class="doc">
+        <h2>Hansı məlumatları toplayırıq</h2>
+        <ul>
+          <li><b>Müştəri:</b> ad, telefon nömrəsi, tələbin özü (əməliyyat, rayon, otaq, büdcə, təcililik, qeyd),
+          razılığın verildiyi vaxt və sui-istifadənin qarşısını almaq üçün IP ünvanı.</li>
+          <li><b>Makler:</b> ad, soyad, e-poçt, telefon, lisenziya kodu, xidmət sahəsi, giriş etdiyi cihazlar (brauzer
+          məlumatı və IP), göndərdiyi təkliflər.</li>
+        </ul>
+
+        <h2>Telefon nömrəsi kimə görünür</h2>
+        <p>Maklerlər tələbi <b>nömrəsiz</b> və yalnız adın ilk hissəsi ilə görür. Nömrən <b>yalnız sənin qəbul etdiyin
+        təklifin maklerinə</b> açılır. Başqa maklerlərə, reklamçılara və üçüncü tərəflərə verilmir və satılmır.</p>
+
+        <h2>Nə qədər saxlayırıq</h2>
+        <p>Tələb aktiv olduğu müddətdə (ən çox 30 gün) saxlanılır. Tələb bağlanandan və ya müddəti bitəndən
+        <b>90 gün sonra</b> ad, telefon, qeyd və IP silinir (anonimləşdirilir); yalnız şəxsiyyətsiz statistika qalır.</p>
+
+        <h2>Cookie-lər</h2>
+        <p>Yalnız işləmək üçün zəruri cookie-lər istifadə olunur: sessiya, təhlükəsizlik tokeni və maklerlər üçün
+        cihaz identifikatoru. Reklam və izləmə cookie-ləri yoxdur.</p>
+
+        <h2>Silinmə və suallar</h2>
+        <p>Məlumatlarının daha tez silinməsini istəyirsənsə, tələbinin linkini və ya nömrəni yazaraq
+        <a href="mailto:{{ contact }}">{{ contact }}</a> ünvanına müraciət et.</p>
+        <p>Ətraflı: <a href="{{ url_for('public.sertler') }}">İstifadə şərtləri</a>.</p>
+        <p class="upd">Son yenilənmə: noyabr 2026</p>
+      </div>
+{% endblock %}
