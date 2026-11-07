@@ -1,0 +1,47 @@
+{% extends 'admin/base.html' %}
+{% set page_css = 'admin-v2.css' %}
+{% block title %}Admin · Şikayətlər{% endblock %}
+{% block shell %}
+  <main>
+    <div class="head reveal" style="animation-delay:.05s">
+      <div><h1>Şikayətlər</h1><p>Müştəri və maklerlərdən gələn şikayətlər</p></div>
+    </div>
+    {% include 'admin/_flash.html' %}
+
+    <div class="toolbar reveal" style="animation-delay:.1s">
+      <div class="filters">
+        {%- for k, v in labels.items() %}
+        <a class="fchip{% if status == k %} active{% endif %}" href="{{ url_for('admin.sikayetler', status=k) }}">{{ v }} ({{ counts.get(k, 0) }})</a>
+        {%- endfor %}
+        <a class="fchip{% if status == 'all' %} active{% endif %}" href="{{ url_for('admin.sikayetler', status='all') }}">Hamısı</a>
+      </div>
+    </div>
+
+    <div class="tablewrap reveal" style="animation-delay:.16s"><table>
+      <thead><tr><th>#</th><th>Kimdən</th><th>Səbəb</th><th>Mətn</th><th>Tələb / təklif</th><th>Makler</th><th>Vaxt</th><th></th></tr></thead>
+      <tbody>
+      {%- for c in items %}
+        <tr>
+          <td>{{ c.id }}</td>
+          <td>{{ 'Müştəri' if c.from_side == 'customer' else 'Makler' }}</td>
+          <td><span class="pill {{ 'trial' if c.status == 'new' else 'active' }}">{{ reasons.get(c.reason, c.reason) }}</span></td>
+          <td><div class="msub" style="max-width:260px">{{ c.text or '—' }}</div></td>
+          <td><a href="{{ url_for('admin.teleb', rid=c.request_id) }}">Tələb #{{ c.request_id }}</a>{% if c.offer_title %}<div class="msub">təklif: {{ c.offer_title }}</div>{% endif %}</td>
+          <td>{% if c.agent_id %}{{ full_name(c) }}<div class="msub">{{ 'dayandırılıb' if c.agent_status == 'suspended' else '' }}</div>{% else %}—{% endif %}</td>
+          <td>{{ rel(c.created_at) }}</td>
+          <td><div class="acts">
+            {% if c.status == 'new' %}
+            <form method="post" action="{{ url_for('admin.sikayet_baxildi', cid=c.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('admin.sikayetler', status=status) }}"><button class="sbtn" type="submit">Baxıldı</button></form>
+            {% endif %}
+            {% if c.agent_id and c.from_side == 'customer' and c.agent_status != 'suspended' %}
+            <form method="post" action="{{ url_for('admin.makler_status', uid=c.agent_id) }}" onsubmit="return confirm('Makler dayandırılsın?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="status" value="suspended"><input type="hidden" name="next" value="{{ url_for('admin.sikayetler', status=status) }}"><button class="sbtn bad" type="submit">Makleri dayandır</button></form>
+            {% endif %}
+          </div></td>
+        </tr>
+      {%- else %}
+        <tr><td colspan="8" class="mh-empty">Şikayət yoxdur.</td></tr>
+      {%- endfor %}
+      </tbody>
+    </table></div>
+  </main>
+{% endblock %}

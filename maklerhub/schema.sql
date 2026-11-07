@@ -170,3 +170,12 @@ CREATE TABLE IF NOT EXISTS complaints (
   created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_complaints_status ON complaints(status, created_at);
+
+-- ------------------------------------------------------------ Gün 4 (canlı bazada startup-da tətbiq olunur)
+ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS close_reason TEXT;      -- found_here | found_elsewhere | not_needed
+ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS customer_seen_at TEXT;  -- müştərinin səhifəyə son baxışı ("Yeni" nişanı)
+ALTER TABLE offers ADD COLUMN IF NOT EXISTS decided_at TEXT;                   -- qəbul/rədd vaxtı
+CREATE INDEX IF NOT EXISTS ix_offers_request ON offers(request_id, status);
+-- şikayət: eyni obyekt üçün eyni tərəfdən 1 dəfə (müştəri → təklif, makler → tələb)
+CREATE UNIQUE INDEX IF NOT EXISTS ux_complaints_customer ON complaints(offer_id) WHERE from_side = 'customer';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_complaints_agent ON complaints(request_id, agent_id) WHERE from_side = 'agent';

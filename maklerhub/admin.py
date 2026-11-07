@@ -1,38 +1,291 @@
-"""Admin panel: lisenziya kodları (sadə bölmə), sistem loqları; qalan səhifələr placeholder (tam panel Gün 4-də)."""
-import os
+"""Admin panel: ümumi baxış, tələblər, maklerlər, lisenziyalar, şikayətlər, loqlar, ayarlar (şifrə).
+Bütün admin hərəkətləri loqa yazılır."""
+import json
 from datetime import timedelta
 
-from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from . import licenses
 from .auth import admin_required
 from .db import add_log, get_db
-from .helpers import date_short, full_name, log_time, now, ts
+from .helpers import date_short, full_name, log_time, now, parse, phone_display, rel, ts
+from .offers import AGENT_COMPLAINTS, CLOSE_REASONS, CUSTOMER_COMPLAINTS, OFFER_STATUS
+from .teleb import DEALS, ROOMS, STATUS as REQ_STATUS, URGENCY, budget_str, expire_requests
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
-NAV = [("admin.panel", "Ümumi baxış"), ("admin.maklerler", "Maklerlər"), ("admin.lisenziyalar", "Lisenziyalar"),
-       ("admin.loglar", "Sistem loqları"), ("admin.ayarlar", "Ayarlar")]
+NAV = [("admin.panel", "Ümumi baxış"), ("admin.telebler", "Tələblər"), ("admin.maklerler", "Maklerlər"),
+       ("admin.lisenziyalar", "Lisenziyalar"), ("admin.sikayetler", "Şikayətlər"), ("admin.loglar", "Sistem loqları"),
+       ("admin.ayarlar", "Ayarlar")]
+PAGE = 50
+COMPLAINT_REASONS = {**CUSTOMER_COMPLAINTS, **AGENT_COMPLAINTS}
+COMPLAINT_STATUS = {"new": "Yeni", "reviewed": "Baxılıb"}
+CLOSE_REASONS_ALL = {**CLOSE_REASONS, "admin": "Admin bağladı"}
 
 
 def render(template, active, **ctx):
-    return render_template(template, nav=NAV, active=active, **ctx)
+    new_complaints = get_db().execute("SELECT COUNT(*) FROM complaints WHERE status = 'new'").fetchone()[0]
+    return render_template(template, nav=NAV, active=active, new_complaints=new_complaints, **ctx)
 
 
-# ---------------------------------------------------------------- səhifələr
+def _back(default):
+    nxt = request.form.get("next") or request.args.get("next") or ""
+    return redirect(nxt if nxt.startswith("/admin") and not nxt.startswith("//") else default)
+
+
+def _page():
+    try:
+        return max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        return 1
+
+
+def _req_row(r):
+    districts = json.loads(r["districts"] or "[]")
+    return {"r": r, "deal": DEALS.get(r["deal_type"], r["deal_type"]), "districts": ", ".join(districts),
+            "rooms": ROOMS.get(r["rooms"], "—") if r["rooms"] else "—",
+            "budget": budget_str(r["deal_type"], r["budget_min"], r["budget_max"]),
+            "status": REQ_STATUS.get(r["status"], r["status"]), "when": rel(r["created_at"]),
+            "pill": "active" if r["status"] == "active" else "susp" if r["status"] == "closed" else "trial"}
+
+
+# ---------------------------------------------------------------- ümumi baxış
 @bp.route("")
 @bp.route("/")
 @admin_required
 def panel():
-    return render("admin/panel.html", "admin.panel")
+    db = get_db()
+    expire_requests(db)
+    db.commit()
+    week = ts(now() - timedelta(days=7))
+    k = db.execute(
+        "SELECT (SELECT COUNT(*) FROM customer_requests WHERE status = 'active') AS active_req, "
+        "(SELECT COUNT(*) FROM customer_requests WHERE created_at >= ?) AS new_req, "
+        "(SELECT COUNT(*) FROM offers WHERE status != 'withdrawn') AS offers, "
+        "(SELECT COUNT(*) FROM offers WHERE status = 'accepted') AS accepted, "
+        "(SELECT COUNT(*) FROM offers WHERE status IN ('accepted', 'rejected')) AS decided, "
+        "(SELECT COUNT(*) FROM users u JOIN licenses l ON l.id = u.license_id WHERE u.role = 'makler' "
+        " AND u.status = 'active' AND l.status = 'used' AND l.expires_at > ?) AS maklers, "
+        "(SELECT COUNT(*) FROM complaints WHERE status = 'new') AS complaints", (week, ts())).fetchone()
+    kpi = dict(k)
+    # qəbul faizi: cavab verilmiş (qəbul + rədd) təkliflər arasında qəbul olunanlar
+    kpi["accept_rate"] = round(100 * k["accepted"] / k["decided"]) if k["decided"] else None
+    reqs = [_req_row(r) for r in db.execute("SELECT * FROM customer_requests ORDER BY id DESC LIMIT 10")]
+    offers = db.execute(
+        "SELECT o.id, o.title, o.status, o.created_at, o.request_id, u.first_name, u.last_name FROM offers o "
+        "JOIN users u ON u.id = o.agent_id ORDER BY o.id DESC LIMIT 10").fetchall()
+    return render("admin/panel.html", "admin.panel", kpi=kpi, reqs=reqs, offers=offers, offer_status=OFFER_STATUS,
+                  rel=rel, full_name=full_name)
 
 
+# ---------------------------------------------------------------- tələblər
+@bp.route("/telebler")
+@admin_required
+def telebler():
+    db = get_db()
+    expire_requests(db)
+    db.commit()
+    status = request.args.get("status") if request.args.get("status") in REQ_STATUS else ""
+    q = (request.args.get("q") or "").strip()[:60]
+    where, params = [], []
+    if status:
+        where.append("status = ?")
+        params.append(status)
+    if q:
+        digits = "".join(ch for ch in q if ch.isdigit())
+        cond = ["name ILIKE ?", "districts ILIKE ?"]
+        params += [f"%{q}%", f"%{q}%"]
+        if digits:
+            cond.append("phone LIKE ?")
+            params.append(f"%{digits[-9:]}%")
+            if q.isdigit():
+                cond.append("id = ?")
+                params.append(int(q))
+        where.append("(" + " OR ".join(cond) + ")")
+    sql_where = (" WHERE " + " AND ".join(where)) if where else ""
+    total = db.execute("SELECT COUNT(*) FROM customer_requests" + sql_where, params).fetchone()[0]
+    page = _page()
+    rows = db.execute(
+        "SELECT r.*, (SELECT COUNT(*) FROM offers o WHERE o.request_id = r.id AND o.status != 'withdrawn') AS n_offers "
+        "FROM customer_requests r" + sql_where + f" ORDER BY r.id DESC LIMIT {PAGE} OFFSET {(page - 1) * PAGE}",
+        params).fetchall()
+    counts = {r["status"]: r["c"] for r in db.execute("SELECT status, COUNT(*) c FROM customer_requests GROUP BY status")}
+    return render("admin/telebler.html", "admin.telebler", items=[_req_row(r) for r in rows], status=status, q=q,
+                  counts=counts, labels=REQ_STATUS, page=page, pages=max(1, -(-total // PAGE)), total=total)
+
+
+@bp.route("/teleb/<int:rid>")
+@admin_required
+def teleb(rid):
+    db = get_db()
+    r = db.execute("SELECT * FROM customer_requests WHERE id = ?", (rid,)).fetchone()
+    if r is None:
+        abort(404)
+    offers = db.execute(
+        "SELECT o.*, u.first_name, u.last_name, u.email, u.phone AS agent_phone, "
+        "(SELECT 1 FROM contacts c WHERE c.offer_id = o.id) AS has_contact FROM offers o "
+        "JOIN users u ON u.id = o.agent_id WHERE o.request_id = ? ORDER BY o.id", (rid,)).fetchall()
+    complaints = db.execute("SELECT * FROM complaints WHERE request_id = ? ORDER BY id", (rid,)).fetchall()
+    return render("admin/teleb.html", "admin.telebler", x=_req_row(r), phone=phone_display(r["phone"]), offers=offers,
+                  complaints=complaints, offer_status=OFFER_STATUS, reasons=COMPLAINT_REASONS, urgency=URGENCY,
+                  close_reason=CLOSE_REASONS_ALL.get(r["close_reason"]), full_name=full_name, rel=rel,
+                  date_short=date_short, phone_display=phone_display)
+
+
+@bp.route("/teleb/<int:rid>/bagla", methods=["POST"])
+@admin_required
+def teleb_bagla(rid):
+    db = get_db()
+    n = db.execute("UPDATE customer_requests SET status = 'closed', closed_at = ?, close_reason = 'admin' "
+                   "WHERE id = ? AND status = 'active'", (ts(), rid)).rowcount
+    if n:
+        add_log(db, "warn", "Sistem", f"Admin tələbi bağladı: #{rid}", f"icra edən={g.user['email']}")
+        flash(f"Tələb #{rid} bağlandı.", "ok")
+    else:
+        flash("Tələb aktiv deyil.", "err")
+    db.commit()
+    return redirect(url_for("admin.teleb", rid=rid))
+
+
+@bp.route("/teleb/<int:rid>/sil", methods=["POST"])
+@admin_required
+def teleb_sil(rid):
+    db = get_db()
+    r = db.execute("SELECT id, deal_type FROM customer_requests WHERE id = ?", (rid,)).fetchone()
+    if r is None:
+        abort(404)
+    counts = db.execute("SELECT (SELECT COUNT(*) FROM offers WHERE request_id = ?) AS o, "
+                        "(SELECT COUNT(*) FROM contacts WHERE request_id = ?) AS c, "
+                        "(SELECT COUNT(*) FROM complaints WHERE request_id = ?) AS k", (rid, rid, rid)).fetchone()
+    # FK-lar CASCADE: təkliflər, kontaktlar, şikayətlər, bu tələbə bağlı bildirişlər birlikdə silinir
+    db.execute("DELETE FROM notifications WHERE link = ?", (f"/kabinet/teleb/{rid}",))
+    db.execute("DELETE FROM customer_requests WHERE id = ?", (rid,))
+    add_log(db, "warn", "Sistem", f"Admin tələbi sildi: #{rid}",
+            f"təklif={counts['o']} kontakt={counts['c']} şikayət={counts['k']}\nicra edən={g.user['email']}")
+    db.commit()
+    flash(f"Tələb #{rid} və əlaqəli məlumatlar silindi.", "ok")
+    return redirect(url_for("admin.telebler"))
+
+
+# ---------------------------------------------------------------- maklerlər
 @bp.route("/maklerler")
 @admin_required
 def maklerler():
-    return render("admin/maklerler.html", "admin.maklerler")
+    db = get_db()
+    rows = db.execute(
+        "SELECT u.*, l.code AS lic_code, l.status AS lic_status, l.expires_at, "
+        "(SELECT COUNT(*) FROM devices d WHERE d.user_id = u.id) AS n_devices, "
+        "(SELECT COUNT(*) FROM offers o WHERE o.agent_id = u.id AND o.status != 'withdrawn') AS n_offers, "
+        "(SELECT COUNT(*) FROM offers o WHERE o.agent_id = u.id AND o.status = 'accepted') AS n_accepted "
+        "FROM users u LEFT JOIN licenses l ON l.id = u.license_id WHERE u.role = 'makler' ORDER BY u.id DESC").fetchall()
+    stamp = ts()
+    items = []
+    for u in rows:
+        lic_ok = u["lic_status"] == "used" and u["expires_at"] and u["expires_at"] > stamp
+        items.append({"u": u, "name": full_name(u), "phone": phone_display(u["phone"]), "lic_ok": lic_ok,
+                      "expires": date_short(u["expires_at"]) if u["expires_at"] else "—",
+                      "lic_label": "Ləğv edilib" if u["lic_status"] == "revoked" else ("Aktiv" if lic_ok else "Bitib")})
+    kpi = {"all": len(items), "active": sum(1 for x in items if x["u"]["status"] == "active" and x["lic_ok"]),
+           "susp": sum(1 for x in items if x["u"]["status"] == "suspended"),
+           "expired": sum(1 for x in items if not x["lic_ok"])}
+    return render("admin/maklerler.html", "admin.maklerler", items=items, kpi=kpi)
 
 
+def _makler(db, uid):
+    u = db.execute("SELECT * FROM users WHERE id = ? AND role = 'makler'", (uid,)).fetchone()
+    if u is None:
+        abort(404)
+    return u
+
+
+@bp.route("/makler/<int:uid>/status", methods=["POST"])
+@admin_required
+def makler_status(uid):
+    db = get_db()
+    u = _makler(db, uid)
+    status = request.form.get("status")
+    if status not in ("active", "suspended"):
+        abort(400)
+    db.execute("UPDATE users SET status = ? WHERE id = ?", (status, uid))
+    if status == "suspended":
+        db.execute("UPDATE sessions SET active = 0 WHERE user_id = ? AND active = 1", (uid,))
+    add_log(db, "warn" if status == "suspended" else "info", "Sistem",
+            f"Makler {'dayandırıldı' if status == 'suspended' else 'aktivləşdirildi'}: {full_name(u)}",
+            f"email={u['email']}\nicra edən={g.user['email']}")
+    db.commit()
+    flash(f"{full_name(u)} {'dayandırıldı' if status == 'suspended' else 'aktivləşdirildi'}.", "ok")
+    return _back(url_for("admin.maklerler"))
+
+
+@bp.route("/makler/<int:uid>/cihazlar", methods=["POST"])
+@admin_required
+def makler_cihazlar(uid):
+    db = get_db()
+    u = _makler(db, uid)
+    n = licenses.reset_devices(db, uid)
+    add_log(db, "info", "Sistem", f"Cihazlar sıfırlandı: {full_name(u)}", f"silinən={n}\nicra edən={g.user['email']}")
+    db.commit()
+    flash(f"{full_name(u)}: {n} cihaz silindi, aktiv sessiyalar bağlandı.", "ok")
+    return _back(url_for("admin.maklerler"))
+
+
+@bp.route("/makler/<int:uid>/uzat", methods=["POST"])
+@admin_required
+def makler_uzat(uid):
+    db = get_db()
+    u = _makler(db, uid)
+    try:
+        days = int(request.form.get("days") or 0)
+    except ValueError:
+        days = 0
+    if not 1 <= days <= 3650:
+        flash("Gün sayı 1–3650 aralığında olmalıdır.", "err")
+        return _back(url_for("admin.maklerler"))
+    lic = db.execute("SELECT * FROM licenses WHERE id = ?", (u["license_id"],)).fetchone() if u["license_id"] else None
+    if lic is None or lic["status"] == "revoked":
+        flash("Lisenziya yoxdur və ya ləğv edilib — yeni kod verin.", "err")
+        return _back(url_for("admin.maklerler"))
+    base = max(parse(lic["expires_at"]) or now(), now())
+    new_exp = ts(base + timedelta(days=days))
+    db.execute("UPDATE licenses SET status = 'used', expires_at = ? WHERE id = ?", (new_exp, lic["id"]))
+    add_log(db, "info", "Sistem", f"Lisenziya uzadıldı: {full_name(u)} (+{days} gün)",
+            f"kod={lic['code']}\nyeni bitmə={new_exp}\nicra edən={g.user['email']}")
+    db.commit()
+    flash(f"{full_name(u)}: lisenziya {date_short(new_exp)} tarixinə qədər uzadıldı.", "ok")
+    return _back(url_for("admin.maklerler"))
+
+
+# ---------------------------------------------------------------- şikayətlər
+@bp.route("/sikayetler")
+@admin_required
+def sikayetler():
+    db = get_db()
+    status = request.args.get("status", "new")
+    status = status if status in COMPLAINT_STATUS or status == "all" else "new"
+    sql = ("SELECT c.*, o.title AS offer_title, u.first_name, u.last_name, u.status AS agent_status "
+           "FROM complaints c LEFT JOIN offers o ON o.id = c.offer_id LEFT JOIN users u ON u.id = c.agent_id")
+    params = ()
+    if status != "all":
+        sql += " WHERE c.status = ?"
+        params = (status,)
+    rows = db.execute(sql + " ORDER BY c.id DESC LIMIT 300", params).fetchall()
+    counts = {r["status"]: r["c"] for r in db.execute("SELECT status, COUNT(*) c FROM complaints GROUP BY status")}
+    return render("admin/sikayetler.html", "admin.sikayetler", items=rows, status=status, counts=counts,
+                  labels=COMPLAINT_STATUS, reasons=COMPLAINT_REASONS, rel=rel, full_name=full_name)
+
+
+@bp.route("/sikayet/<int:cid>/baxildi", methods=["POST"])
+@admin_required
+def sikayet_baxildi(cid):
+    db = get_db()
+    if db.execute("UPDATE complaints SET status = 'reviewed' WHERE id = ? AND status = 'new'", (cid,)).rowcount:
+        add_log(db, "info", "Sistem", f"Şikayətə baxıldı: #{cid}", f"icra edən={g.user['email']}")
+        db.commit()
+        flash(f"Şikayət #{cid} baxılmış kimi qeyd edildi.", "ok")
+    return _back(url_for("admin.sikayetler"))
+
+
+# ---------------------------------------------------------------- loqlar, ayarlar
 @bp.route("/loglar")
 @admin_required
 def loglar():
@@ -42,7 +295,8 @@ def loglar():
 @bp.route("/ayarlar")
 @admin_required
 def ayarlar():
-    return render("admin/ayarlar.html", "admin.ayarlar")
+    changed = g.user["password_changed_at"]
+    return render("admin/ayarlar.html", "admin.ayarlar", pw_changed=rel(changed) if changed else "məlum deyil")
 
 
 # Köhnə "Mənbə statusu": fayl saxlanılır, içi "Tezliklə" (naviqasiyada görünmür)
@@ -114,26 +368,6 @@ def lisenziya_legv(lid):
     else:
         flash("Kod tapılmadı və ya artıq ləğv edilib.", "err")
     return redirect(url_for("admin.lisenziyalar", status=request.args.get("status", "all")))
-
-
-# ---------------------------------------------------------------- MÜVƏQQƏTİ: IP diaqnostikası
-# Render-də real müştəri IP-si təsdiqlənəndən sonra silinəcək.
-DEBUG_IP_HEADERS = ("X-Forwarded-For", "X-Forwarded-Proto", "X-Real-IP", "True-Client-IP", "CF-Connecting-IP")
-
-
-@bp.route("/debug/ip")
-@admin_required
-def debug_ip():
-    from .auth import client_ip_source, ip_limit_applies
-    ip, source = client_ip_source()
-    rows = [("client_ip()", ip),
-            ("client_ip() mənbəyi", source),
-            ("IP limiti tətbiq olunur?", "bəli" if ip_limit_applies(ip) else "XEYR (fail-open)"),
-            ("request.remote_addr (debug üçün xam)", request.remote_addr),
-            ("MAKLERHUB_BEHIND_PROXY", os.environ.get("MAKLERHUB_BEHIND_PROXY", "(yoxdur)"))]
-    rows += [(h, request.headers.get(h)) for h in DEBUG_IP_HEADERS]
-    body = "\n".join(f"{k}: {v if v is not None else '(yoxdur)'}" for k, v in rows)
-    return body, 200, {"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"}
 
 
 # ---------------------------------------------------------------- loqlar API

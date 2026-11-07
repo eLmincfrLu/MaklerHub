@@ -144,6 +144,15 @@ def phone_display(value):
     return f"+994 {d[:2]} {d[2:5]} {d[5:7]} {d[7:]}"
 
 
+def phone_masked(value):
+    """'+994501234567' → '+994 50 *** ** 67' (müştərinin öz səhifəsində)."""
+    p = normalize_phone(value)
+    if not p:
+        return "—"
+    d = p[4:]
+    return f"+994 {d[:2]} *** ** {d[7:]}"
+
+
 # ---------------------------------------------------------------- qiymət
 def money(n):
     return f"{int(round(n or 0)):,}"

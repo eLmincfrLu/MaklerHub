@@ -1,5 +1,7 @@
-"""Ümumi fixture-lər. Axın testləri .env-dəki DATABASE_URL bazasında işləyir və sessiyanın sonunda
-yaratdıqları bütün sətirləri (id-si başlanğıc nişanından böyük olanları) silir."""
+"""Ümumi fixture-lər. Testlər YALNIZ .env-dəki TEST_DATABASE_URL bazasında işləyir:
+- TEST_DATABASE_URL yoxdursa və ya host-u DATABASE_URL ilə eynidirsə pytest dərhal dayanır;
+- sessiyanın əvvəlində test bazasında sxem sıfırdan yaradılır (init_db);
+- prosesdə DATABASE_URL test bazası ilə əvəz olunur ki, heç bir kod real bazaya qoşula bilməsin."""
 import os
 import re
 import secrets
@@ -10,40 +12,39 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from dotenv import load_dotenv  # noqa: E402
 
-load_dotenv(os.path.join(ROOT, ".env"))
+import dbguard  # noqa: E402
 
-# silinmə ardıcıllığı FK-lara uyğundur
-CLEAN_TABLES = ["contacts", "complaints", "notifications", "offers", "customer_requests", "agent_areas", "sessions",
-                "devices", "logs", "login_attempts", "users", "licenses"]
+load_dotenv(os.path.join(ROOT, ".env"))  # mövcud mühit dəyişənlərini əvəz etmir
+
+
+def pytest_configure(config):
+    try:
+        test_url = dbguard.check(os.environ)
+    except dbguard.UnsafeTestDatabase as exc:
+        raise pytest.UsageError(f"TƏHLÜKƏSİZLİK: {exc}")
+    os.environ["MAKLERHUB_REAL_DATABASE_HOST"] = dbguard.host_of(os.environ.get("DATABASE_URL"))
+    os.environ["DATABASE_URL"] = test_url  # maklerhub import olunmamışdan əvvəl
+    os.environ.pop("MAKLERHUB_BEHIND_PROXY", None)
 
 
 @pytest.fixture(scope="session")
 def app():
-    if not os.environ.get("DATABASE_URL"):
-        pytest.skip("DATABASE_URL yoxdur")
     from maklerhub import create_app, db as dbmod
-    application = create_app({"TESTING": True})
-    con = dbmod.connect(application.config["DATABASE"])
-    marks = {t: con.execute(f"SELECT COALESCE(MAX(id), 0) FROM {t}").fetchone()[0] for t in CLEAN_TABLES}
-    con.close()
-    application.config["_MARKS"] = marks
+    url = os.environ["DATABASE_URL"]
+    # pytest_configure işləməyibsə (məs. fixture skriptdən çağırılıb) DATABASE_URL real baza ola bilər → init_db YOX
+    real_host = os.environ.get("MAKLERHUB_REAL_DATABASE_HOST")
+    if real_host is None or url != (os.environ.get("TEST_DATABASE_URL") or "").strip() or dbguard.host_of(url) == real_host:
+        raise RuntimeError("TƏHLÜKƏSİZLİK: app fixture yalnız qoruyucudan keçmiş test bazası ilə işləyir.")
+    dbmod.init_db(url)  # test bazası sıfırdan
+    application = create_app({"TESTING": True, "DATABASE": url})
     yield application
-    con = dbmod.connect(application.config["DATABASE"])
-    try:
-        new_users = [r[0] for r in con.execute("SELECT id FROM users WHERE id > ?", (marks["users"],))]
-        if new_users:
-            con.execute("UPDATE users SET license_id = NULL WHERE id = ANY(?)", (new_users,))
-        for t in CLEAN_TABLES:
-            con.execute(f"DELETE FROM {t} WHERE id > ?", (marks[t],))
-        con.commit()
-    finally:
-        con.close()
-        if dbmod._pool is not None:
-            dbmod._pool.close()
-            dbmod._pool = None
+    if dbmod._pool is not None:
+        dbmod._pool.close()
+        dbmod._pool = None
 
 
 @pytest.fixture
@@ -60,33 +61,49 @@ def csrf(client, path):
     return m.group(1)
 
 
+def login(app, email, password, ip=None):
+    client = app.test_client()
+    client.environ_base["REMOTE_ADDR"] = ip or f"10.9.{secrets.randbelow(250)}.{secrets.randbelow(250)}"
+    tok = csrf(client, "/giris")
+    r = client.post("/giris", data={"csrf_token": tok, "email": email, "password": password})
+    return client, r
+
+
+@pytest.fixture
+def admin_client(app):
+    client, r = login(app, (os.environ.get("MAKLERHUB_ADMIN_EMAIL") or "admin@maklerhub.az").lower(),
+                      os.environ["MAKLERHUB_ADMIN_PASSWORD"])
+    assert r.status_code == 302
+    return client
+
+
 @pytest.fixture
 def make_makler(app, db):
-    """Lisenziyalı makler (+ xidmət sahəsi) yaradır və test client ilə daxil edir. Qaytarır: (client, user_id)."""
+    """Lisenziyalı makler (+ xidmət sahəsi) yaradır və daxil edir. Qaytarır: (client, user_id)."""
     from werkzeug.security import generate_password_hash
     from maklerhub.helpers import now, ts
 
-    def _make(areas=(), ip=None):
+    def _make(areas=(), first="Test", last="Sınaqov", phone="+994500000000", login_now=True):
         email = f"pytest-{secrets.token_hex(4)}@maklerhub.local"
         stamp = now()
         lid = db.execute("INSERT INTO licenses(code, days, status, note, created_at, activated_at, expires_at) "
                          "VALUES (?, 30, 'used', 'pytest', ?, ?, ?)",
-                         (f"MH-TEST-{secrets.token_hex(2).upper()}-{secrets.token_hex(2).upper()}", ts(stamp),
-                          ts(stamp), ts(stamp + timedelta(days=30)))).lastrowid
+                         (f"MH-TEST-{secrets.token_hex(3).upper()}", ts(stamp), ts(stamp),
+                          ts(stamp + timedelta(days=30)))).lastrowid
         uid = db.execute("INSERT INTO users(first_name, last_name, email, phone, password_hash, role, status, license_id, "
-                         "created_at) VALUES ('Test', 'Sınaqov', ?, '+994500000000', ?, 'makler', 'active', ?, ?)",
-                         (email, generate_password_hash("TestPass123"), lid, ts(stamp))).lastrowid
+                         "created_at) VALUES (?, ?, ?, ?, ?, 'makler', 'active', ?, ?)",
+                         (first, last, email, phone, generate_password_hash("TestPass123"), lid, ts(stamp))).lastrowid
         db.execute("UPDATE licenses SET user_id = ? WHERE id = ?", (uid, lid))
         for deal, districts, lo, hi in areas:
             for d in districts:
                 db.execute("INSERT INTO agent_areas(user_id, district, deal_type, price_min, price_max) VALUES (?,?,?,?,?)",
                            (uid, d, deal, lo, hi))
         db.commit()
-        client = app.test_client()
-        client.environ_base["REMOTE_ADDR"] = ip or f"10.9.{secrets.randbelow(250)}.{secrets.randbelow(250)}"
-        tok = csrf(client, "/giris")
-        r = client.post("/giris", data={"csrf_token": tok, "email": email, "password": "TestPass123"})
+        if not login_now:
+            return email, uid
+        client, r = login(app, email, "TestPass123")
         assert r.status_code == 302, r.get_data(as_text=True)[:500]
+        client.email = email
         return client, uid
     return _make
 

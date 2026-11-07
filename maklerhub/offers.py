@@ -1,8 +1,11 @@
-"""Makler təklifləri: forma yoxlaması, göndərmə (limit FOR UPDATE ilə), geri çəkmə; kabinet üçün tələb siyahısı."""
+"""Makler təklifləri: yoxlama, göndərmə (limit FOR UPDATE ilə), geri çəkmə, kabinet siyahısı;
+müştəri qərarları (qəbul/rədd, kontakt), tələbin bağlanması, şikayətlər, yeni tələb bildirişləri."""
 from urllib.parse import urlsplit
 
+import psycopg
+
 from . import matching
-from .helpers import BAKU_DISTRICTS, ts
+from .helpers import BAKU_DISTRICTS, phone_display, ts
 from .teleb import BUDGET, OFFER_LIMIT, ROOMS, URGENCY_ORDER, request_alive
 
 TITLE_MAX = 80
@@ -150,3 +153,129 @@ def apply_filters(items, f):
     else:
         out.sort(key=lambda x: (x["score"], x["r"]["created_at"]), reverse=True)
     return out
+
+
+# ---------------------------------------------------------------- müştəri qərarları (Gün 4)
+ACCEPT_LIMIT = 3  # bir tələbdə qəbul oluna bilən təklif
+CLOSE_REASONS = {"found_here": "MaklerHub ilə tapdım", "found_elsewhere": "Başqa yolla tapdım",
+                 "not_needed": "Artıq lazım deyil"}
+CUSTOMER_COMPLAINTS = {"fake": "Saxta və ya mövcud olmayan ev", "spam": "Spam", "inappropriate": "Uyğunsuz məzmun",
+                       "other": "Digər"}
+AGENT_COMPLAINTS = {"fake_request": "Saxta tələb", "wrong_phone": "Nömrə yanlışdır", "other": "Digər"}
+COMPLAINT_TEXT_MAX = 300
+
+
+def _locked_request(db, token):
+    """Tələb sətri token ilə FOR UPDATE (təklif qərarları bir-birinə qarışmasın)."""
+    return db.execute("SELECT id, status, created_at FROM customer_requests WHERE token = ? FOR UPDATE",
+                      (token,)).fetchone()
+
+
+def decide_offer(db, token, offer_id, accept):
+    """Müştəri qərarı. Qaytarır: ("ok", None) | ("error", mətn) | ("notfound", None).
+    Təklif mütləq HƏMİN tokenin tələbinə aid olmalıdır. Qəbulda contacts sətri yaranır (nömrə maklerə açılır)."""
+    req = _locked_request(db, token)
+    offer = db.execute("SELECT id, agent_id, status, title FROM offers WHERE id = ? AND request_id = ?",
+                       (offer_id, req["id"])).fetchone() if req else None
+    if offer is None:
+        db.rollback()
+        return "notfound", None
+    error = None
+    if not request_alive(db, req):
+        error = "Bu tələb bağlanıb — təkliflərə cavab vermək olmur."
+    elif offer["status"] != "sent":
+        error = "Bu təklifə artıq cavab vermisiniz."
+    elif accept and db.execute("SELECT COUNT(*) FROM offers WHERE request_id = ? AND status = 'accepted'",
+                               (req["id"],)).fetchone()[0] >= ACCEPT_LIMIT:
+        error = f"Bir tələbdə ən çox {ACCEPT_LIMIT} təklif qəbul etmək olar."
+    if error:
+        db.rollback()
+        return "error", error
+    stamp = ts()
+    db.execute("UPDATE offers SET status = ?, decided_at = ? WHERE id = ?",
+               ("accepted" if accept else "rejected", stamp, offer_id))
+    if accept:
+        db.execute("INSERT INTO contacts(offer_id, request_id, agent_id, created_at) VALUES (?,?,?,?)",
+                   (offer_id, req["id"], offer["agent_id"], stamp))
+        text = f"Təklifiniz qəbul edildi: {offer['title']}. Müştərinin nömrəsi açıldı."
+    else:
+        text = f"Təklifiniz rədd edildi: {offer['title']}"
+    db.execute("INSERT INTO notifications(user_id, request_id, kind, text, link, is_read, created_at) "
+               "VALUES (?, NULL, ?, ?, ?, 0, ?)",
+               (offer["agent_id"], "offer_accepted" if accept else "offer_rejected", text,
+                f"/kabinet/teleb/{req['id']}", stamp))
+    db.commit()
+    return "ok", None
+
+
+def close_request(db, token, reason):
+    if reason not in CLOSE_REASONS:
+        return "error", "Bağlama səbəbini seçin."
+    req = _locked_request(db, token)
+    if req is None:
+        db.rollback()
+        return "notfound", None
+    if req["status"] != "active":
+        db.rollback()
+        return "error", "Tələb artıq bağlanıb."
+    db.execute("UPDATE customer_requests SET status = 'closed', closed_at = ?, close_reason = ? WHERE id = ?",
+               (ts(), reason, req["id"]))
+    db.commit()
+    return "ok", None
+
+
+def add_complaint(db, side, request_id, reason, text, offer_id=None, agent_id=None):
+    """Şikayət yazır. Eyni obyekt üçün eyni tərəfdən təkrar — unikal indeks rədd edir."""
+    reasons = CUSTOMER_COMPLAINTS if side == "customer" else AGENT_COMPLAINTS
+    if reason not in reasons:
+        return "error", "Şikayət səbəbini seçin."
+    text = (text or "").strip()
+    if len(text) > COMPLAINT_TEXT_MAX:
+        return "error", f"Mətn {COMPLAINT_TEXT_MAX} simvoldan uzun ola bilməz."
+    try:
+        db.execute("INSERT INTO complaints(request_id, offer_id, agent_id, from_side, reason, text, status, created_at) "
+                   "VALUES (?,?,?,?,?,?,'new',?)", (request_id, offer_id, agent_id, side, reason, text, ts()))
+        db.commit()
+    except psycopg.errors.UniqueViolation:
+        db.rollback()
+        return "error", "Bu barədə artıq şikayət göndərmisiniz."
+    return "ok", None
+
+
+def contacts_for(db, agent_id, offer_ids):
+    """Qəbul olunmuş təkliflər üçün müştəri adı və telefonu: {offer_id: {...}}. YALNIZ contacts sətri varsa."""
+    if not offer_ids:
+        return {}
+    rows = db.execute(
+        "SELECT c.offer_id, r.name, r.phone FROM contacts c JOIN offers o ON o.id = c.offer_id "
+        "JOIN customer_requests r ON r.id = c.request_id "
+        "WHERE c.agent_id = ? AND o.status = 'accepted' AND c.offer_id = ANY(?)", (agent_id, list(offer_ids))).fetchall()
+    out = {}
+    for r in rows:
+        digits = (r["phone"] or "").lstrip("+")
+        out[r["offer_id"]] = {"name": r["name"] or "Müştəri", "phone": phone_display(r["phone"]),
+                              "tel": r["phone"], "wa": f"https://wa.me/{digits}" if digits else None}
+    return out
+
+
+def notify_new_request(db, req):
+    """Yeni tələb: aktiv lisenziyalı və aktiv maklerlərdən bal ≥ GOOD_SCORE olanlara bildiriş (bir sorğu + toplu yazma)."""
+    rows = db.execute(
+        "SELECT a.user_id, a.deal_type, a.district, a.price_min, a.price_max FROM agent_areas a "
+        "JOIN users u ON u.id = a.user_id JOIN licenses l ON l.id = u.license_id "
+        "WHERE u.role = 'makler' AND u.status = 'active' AND l.status = 'used' AND l.expires_at > ? "
+        "AND a.deal_type = ?", (ts(), req["deal_type"])).fetchall()
+    by_user = {}
+    for r in rows:
+        by_user.setdefault(r["user_id"], []).append(r)
+    stamp = ts()
+    out = []
+    for uid, areas in by_user.items():
+        res = matching.score(req, areas)
+        if res and res[0] >= matching.GOOD_SCORE:
+            out.append((uid, req["id"], "new_request", f"Yeni uyğun tələb ({res[0]}%): {req['summary']}",
+                        f"/kabinet/teleb/{req['id']}", stamp))
+    if out:
+        db.executemany("INSERT INTO notifications(user_id, request_id, kind, text, link, is_read, created_at) "
+                       "VALUES (?,?,?,?,?,0,?)", out)
+    return len(out)

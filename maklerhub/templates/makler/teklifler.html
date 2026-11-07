@@ -1,5 +1,5 @@
 {% extends 'makler/base.html' %}
-{% set page_css = 'teleblist.css' %}
+{% set page_css = 'teleblist2.css' %}
 {% block title %}Təkliflərim{% endblock %}
 {% block main %}
   <div class="head reveal" style="animation-delay:.05s">
@@ -30,6 +30,9 @@
       </div>
       <div class="pricebox"><div class="now">{{ it.price }}</div></div>
     </a>
+    {%- if it.contact %}
+    <div class="contactrow"><div class="contactbox"><b>Müştəri ilə əlaqə</b>{{ it.contact.name }} · <a href="tel:{{ it.contact.tel }}">{{ it.contact.phone }}</a>{% if it.contact.wa %} · <a href="{{ it.contact.wa }}" target="_blank" rel="noopener noreferrer">WhatsApp</a>{% endif %}</div></div>
+    {%- endif %}
     {%- else %}
     <div class="mh-empty">{% if status %}Bu statusda təklif yoxdur.{% else %}Hələ təklif göndərməmisiniz. <a href="{{ url_for('makler.kabinet') }}" style="color:var(--gold-dim);font-weight:600">Tələblərə baxın</a>.{% endif %}</div>
     {%- endfor %}

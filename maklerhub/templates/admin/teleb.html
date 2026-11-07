@@ -1,0 +1,71 @@
+{% extends 'admin/base.html' %}
+{% set page_css = 'admin-v2.css' %}
+{% block title %}Admin · Tələb #{{ x.r.id }}{% endblock %}
+{% block shell %}
+  <main>
+    <a class="back" href="{{ url_for('admin.telebler') }}">← Tələblər</a>
+    <div class="head reveal" style="animation-delay:.05s">
+      <div><h1>Tələb #{{ x.r.id }}</h1><p>{{ x.deal }} · {{ x.rooms }} otaq · {{ x.districts }}</p></div>
+    </div>
+    {% include 'admin/_flash.html' %}
+
+    <div class="grid2">
+      <div class="box">
+        <h2>Məlumat</h2>
+        <div class="rows">
+          <div class="row"><span>Status</span><span><span class="pill {{ x.pill }}">{{ x.status }}</span>{% if close_reason %} · {{ close_reason }}{% endif %}</span></div>
+          <div class="row"><span>Müştəri</span><span>{{ x.r.name or '—' }}</span></div>
+          <div class="row"><span>Telefon</span><span>{% if x.r.phone %}<a href="tel:{{ x.r.phone }}">{{ phone }}</a>{% else %}— (anonimləşdirilib){% endif %}</span></div>
+          <div class="row"><span>Büdcə</span><span>{{ x.budget }}</span></div>
+          <div class="row"><span>Təcililik</span><span>{{ urgency.get(x.r.urgency, x.r.urgency) }}</span></div>
+          <div class="row"><span>Yaradılıb</span><span>{{ x.r.created_at }} ({{ x.when }})</span></div>
+          <div class="row"><span>Bağlanıb</span><span>{{ x.r.closed_at or '—' }}</span></div>
+          <div class="row"><span>IP</span><span>{{ x.r.ip or '—' }}</span></div>
+          <div class="row"><span>Razılıq</span><span>{{ x.r.consent_at or '—' }}</span></div>
+        </div>
+        {% if x.r.note %}<div class="note">{{ x.r.note }}</div>{% endif %}
+      </div>
+
+      <div class="box danger">
+        <h2>Əməliyyatlar</h2>
+        <div class="acts">
+          {% if x.r.status == 'active' %}
+          <form method="post" action="{{ url_for('admin.teleb_bagla', rid=x.r.id) }}" onsubmit="return confirm('Tələb bağlansın?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="sbtn" type="submit">Tələbi bağla</button></form>
+          {% endif %}
+          <form method="post" action="{{ url_for('admin.teleb_sil', rid=x.r.id) }}" onsubmit="return confirm('Tələb, təklifləri, kontaktları, şikayətləri və bildirişləri HƏMİŞƏLİK silinsin?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="sbtn bad" type="submit">Tələbi sil</button></form>
+        </div>
+        <p class="msub" style="margin-top:12px">Silmə geri qaytarılmır və loqa yazılır.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="sh">Təkliflər ({{ offers|length }})</div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>#</th><th>Təklif</th><th>Makler</th><th>Status</th><th>Kontakt</th><th>Vaxt</th></tr></thead>
+        <tbody>
+        {%- for o in offers %}
+          <tr><td>{{ o.id }}</td><td><div class="mname">{{ o.title }}</div><div class="msub">{{ '{:,}'.format(o.price) if o.price else '—' }} · {{ o.district or '—' }}{% if o.image_url %} · <a href="{{ o.image_url }}" target="_blank" rel="noopener noreferrer">şəkil</a>{% endif %}</div></td>
+          <td><div class="mname">{{ full_name(o) }}</div><div class="msub">{{ o.email }} · {{ phone_display(o.agent_phone) }}</div></td>
+          <td>{{ offer_status.get(o.status, o.status) }}</td><td>{{ 'açılıb' if o.has_contact else '—' }}</td><td>{{ rel(o.created_at) }}</td></tr>
+        {%- else %}
+          <tr><td colspan="6" class="mh-empty">Təklif yoxdur.</td></tr>
+        {%- endfor %}
+        </tbody>
+      </table></div>
+    </div>
+
+    {% if complaints %}
+    <div class="section">
+      <div class="sh">Şikayətlər ({{ complaints|length }}) <a href="{{ url_for('admin.sikayetler', status='all') }}">Hamısı →</a></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>#</th><th>Kimdən</th><th>Səbəb</th><th>Mətn</th><th>Status</th></tr></thead>
+        <tbody>
+        {%- for c in complaints %}
+          <tr><td>{{ c.id }}</td><td>{{ 'Müştəri' if c.from_side == 'customer' else 'Makler' }}{% if c.offer_id %} · təklif #{{ c.offer_id }}{% endif %}</td><td>{{ reasons.get(c.reason, c.reason) }}</td><td><div class="msub">{{ c.text or '—' }}</div></td><td>{{ 'Yeni' if c.status == 'new' else 'Baxılıb' }}</td></tr>
+        {%- endfor %}
+        </tbody>
+      </table></div>
+    </div>
+    {% endif %}
+  </main>
+{% endblock %}

@@ -1,14 +1,52 @@
 {% extends 'admin/base.html' %}
-{% set page_css = 'admin-maklerler.css' %}
+{% set page_css = 'admin-v2.css' %}
 {% block title %}Admin · Maklerlər{% endblock %}
 {% block shell %}
   <main>
     <div class="head reveal" style="animation-delay:.05s">
-      <div><h1>Maklerlər</h1><p>Maklerlər və lisenziya kodları</p></div>
+      <div><h1>Maklerlər</h1><p>Hesablar, lisenziyalar və cihazlar</p></div>
+      <a class="btn" href="{{ url_for('admin.lisenziyalar') }}" style="text-decoration:none">+ Lisenziya kodu</a>
+    </div>
+    {% include 'admin/_flash.html' %}
+
+    <div class="kpis reveal" style="animation-delay:.1s">
+      <div class="kpi"><div class="l">Cəmi makler</div><div class="n">{{ kpi.all }}</div></div>
+      <div class="kpi"><div class="l">Aktiv (lisenziya ilə)</div><div class="n">{{ kpi.active }}</div></div>
+      <div class="kpi"><div class="l">Dayandırılıb</div><div class="n">{{ kpi.susp }}</div></div>
+      <div class="kpi"><div class="l">Lisenziya bitib</div><div class="n">{{ kpi.expired }}</div></div>
     </div>
 
-    <div class="section reveal" style="animation-delay:.12s">
-      <div class="mh-empty">Tezliklə — bu bölmə yeni modelə uyğun hazırlanır.</div>
-    </div>
+    <div class="tablewrap reveal" style="animation-delay:.16s"><table>
+      <thead><tr><th>Makler</th><th>Telefon</th><th>Status</th><th>Lisenziya</th><th>Cihaz</th><th>Təklif</th><th>Əməliyyatlar</th></tr></thead>
+      <tbody>
+      {%- for x in items %}
+        <tr id="m-{{ x.u.id }}">
+          <td><div class="mname">{{ x.name }}</div><div class="msub">{{ x.u.email }}</div></td>
+          <td>{% if x.u.phone %}<a href="tel:{{ x.u.phone }}">{{ x.phone }}</a>{% else %}—{% endif %}</td>
+          <td><span class="pill {{ 'active' if x.u.status == 'active' else 'susp' }}">{{ 'Aktiv' if x.u.status == 'active' else 'Dayandırılıb' }}</span></td>
+          <td><span class="pill {{ 'active' if x.lic_ok else 'susp' }}">{{ x.lic_label }}</span><div class="msub">{{ x.expires }}{% if x.u.lic_code %} · <span class="lic-code">{{ x.u.lic_code }}</span>{% endif %}</div></td>
+          <td>{{ x.u.n_devices }}</td>
+          <td>{{ x.u.n_offers }}<div class="msub">qəbul: {{ x.u.n_accepted }}</div></td>
+          <td><div class="acts">
+            <form method="post" action="{{ url_for('admin.makler_status', uid=x.u.id) }}"{% if x.u.status == 'active' %} onsubmit="return confirm('{{ x.name }} dayandırılsın? Dərhal sistemdən çıxarılacaq.')"{% endif %}>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('admin.maklerler') }}#m-{{ x.u.id }}">
+              <input type="hidden" name="status" value="{{ 'suspended' if x.u.status == 'active' else 'active' }}">
+              <button class="sbtn{{ ' bad' if x.u.status == 'active' }}" type="submit">{{ 'Dayandır' if x.u.status == 'active' else 'Aktivləşdir' }}</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.makler_cihazlar', uid=x.u.id) }}" onsubmit="return confirm('Cihazlar sıfırlansın? Makler yenidən daxil olmalı olacaq.')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('admin.maklerler') }}#m-{{ x.u.id }}">
+              <button class="sbtn" type="submit">Cihazları sıfırla</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.makler_uzat', uid=x.u.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('admin.maklerler') }}#m-{{ x.u.id }}">
+              <input class="days" type="number" name="days" min="1" max="3650" value="30" aria-label="Gün"><button class="sbtn" type="submit">gün uzat</button>
+            </form>
+          </div></td>
+        </tr>
+      {%- else %}
+        <tr><td colspan="7" class="mh-empty">Hələ makler yoxdur. <a href="{{ url_for('admin.lisenziyalar') }}" style="color:var(--gold)">Lisenziya kodu yaradın</a>.</td></tr>
+      {%- endfor %}
+      </tbody>
+    </table></div>
   </main>
 {% endblock %}

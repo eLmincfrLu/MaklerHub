@@ -3,11 +3,11 @@ import json
 import secrets
 from datetime import timedelta
 
-from flask import Blueprint, abort, g, make_response, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, make_response, redirect, render_template, request, url_for
 
 from .auth import client_ip, ip_limit_applies
 from .db import add_log, get_db, get_setting
-from .helpers import BAKU_DISTRICTS, date_short, money, normalize_phone, now, phone_display, rel, ts
+from .helpers import BAKU_DISTRICTS, date_short, money, normalize_phone, now, phone_display, phone_masked, rel, ts
 
 bp = Blueprint("teleb", __name__)
 
@@ -133,13 +133,18 @@ def forma():
             if not errors:
                 token = secrets.token_urlsafe(24)
                 stamp = ts()
-                db.execute(
+                rid = db.execute(
                     "INSERT INTO customer_requests(token, name, phone, deal_type, districts, rooms, budget_min, "
                     "budget_max, urgency, note, consent, consent_at, status, ip, created_at) "
                     "VALUES (?,?,?,?,?,?,?,?,?,?,1,?,'active',?,?)",
                     (token, clean["name"], clean["phone"], clean["deal"],
                      json.dumps(clean["districts"], ensure_ascii=False), clean["rooms"], clean["budget_min"],
-                     clean["budget_max"], clean["urgency"], clean["note"], stamp, ip, stamp))
+                     clean["budget_max"], clean["urgency"], clean["note"], stamp, ip, stamp)).lastrowid
+                from .offers import notify_new_request
+                notify_new_request(db, {"id": rid, "deal_type": clean["deal"], "districts": clean["districts"],
+                                        "budget_min": clean["budget_min"], "budget_max": clean["budget_max"],
+                                        "summary": f"{DEALS[clean['deal']]}, {', '.join(clean['districts'])}, "
+                                                   f"{ROOMS[clean['rooms']]} otaq"})
                 add_log(db, "info", "Müştəri", f"Yeni tələb: {DEALS[clean['deal']]}, {', '.join(clean['districts'])}",
                         f"otaq={ROOMS[clean['rooms']]} büdcə≤{clean['budget_max']}")
                 db.commit()
@@ -183,25 +188,40 @@ def agent_short_name(first, last):
     return f"{first} {last[:1]}." if last else first
 
 
-def offer_cards(db, request_id, deal_type):
-    """Müştəriyə görünən təkliflər (geri çəkilənlər yox), makler adı: ad + soyadın ilk hərfi."""
+def offer_cards(db, request_id, deal_type, seen_at=None):
+    """Müştəriyə görünən təkliflər (geri çəkilənlər yox). Makler adı: "Ad S."; qəbul olunanda tam ad və telefon.
+    new: müştərinin son baxışından sonra gəlib."""
     rows = db.execute(
-        "SELECT o.*, u.first_name, u.last_name FROM offers o JOIN users u ON u.id = o.agent_id "
+        "SELECT o.*, u.first_name, u.last_name, u.phone AS agent_phone FROM offers o JOIN users u ON u.id = o.agent_id "
         "WHERE o.request_id = ? AND o.status != 'withdrawn' ORDER BY o.created_at DESC, o.id DESC", (request_id,)).fetchall()
     unit = " AZN/ay" if deal_type == "rent" else " AZN"
     out = []
     for o in rows:
+        accepted = o["status"] == "accepted"
         out.append({"id": o["id"], "title": o["title"], "price": f"{money(o['price'])}{unit}" if o["price"] else "—",
                     "district": o["district"], "rooms": ROOMS.get(o["rooms"], "—") if o["rooms"] else "—",
                     "area": (f"{o['area']:g} m²" if o["area"] else None), "image": o["image_url"],
                     "description": o["description"], "status": o["status"],
                     "agent": agent_short_name(o["first_name"], o["last_name"]),
+                    "agent_full": f"{o['first_name']} {o['last_name']}".strip() if accepted else None,
+                    "agent_phone": phone_display(o["agent_phone"]) if accepted else None,
+                    "agent_tel": o["agent_phone"] if accepted else None,
+                    "new": seen_at is None or o["created_at"] > seen_at,
                     "when": rel(o["created_at"])})
     return out
 
 
+def _page_response(html):
+    resp = make_response(html)
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @bp.route("/teleb/<token>")
 def menim(token):
+    from .offers import ACCEPT_LIMIT, CLOSE_REASONS, CUSTOMER_COMPLAINTS, COMPLAINT_TEXT_MAX
     if len(token) > 64:
         abort(404)
     db = get_db()
@@ -210,9 +230,89 @@ def menim(token):
     r = db.execute("SELECT * FROM customer_requests WHERE token = ?", (token,)).fetchone()
     if r is None:
         abort(404)
-    resp = make_response(render_template("teleb/menim.html", r=request_view(r), offers=offer_cards(db, r["id"], r["deal_type"]),
-                                         link=url_for("teleb.menim", token=token, _external=True)))
-    resp.headers["Referrer-Policy"] = "no-referrer"
-    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
-    resp.headers["Cache-Control"] = "no-store"
-    return resp
+    offers = offer_cards(db, r["id"], r["deal_type"], r["customer_seen_at"])
+    complained = {x[0] for x in db.execute(
+        "SELECT offer_id FROM complaints WHERE request_id = ? AND from_side = 'customer'", (r["id"],))}
+    # son baxış: növbəti dəfə yalnız bundan sonra gələnlər "Yeni" olacaq
+    db.execute("UPDATE customer_requests SET customer_seen_at = ? WHERE id = ?", (ts(), r["id"]))
+    db.commit()
+    try:
+        confirm_id = int(request.args.get("tesdiq", 0))
+    except ValueError:
+        confirm_id = 0
+    alive = request_alive(db, r)
+    n_accepted = sum(1 for o in offers if o["status"] == "accepted")
+    view = request_view(r)
+    view["phone"] = phone_masked(r["phone"])
+    return _page_response(render_template(
+        "teleb/menim.html", r=view, token=token, alive=alive, link=url_for("teleb.menim", token=token, _external=True),
+        offers=[o for o in offers if o["status"] != "rejected"], rejected=[o for o in offers if o["status"] == "rejected"],
+        confirm_id=confirm_id, can_accept=alive and n_accepted < ACCEPT_LIMIT, accept_limit=ACCEPT_LIMIT,
+        n_accepted=n_accepted, close_reasons=CLOSE_REASONS, close_reason=CLOSE_REASONS.get(r["close_reason"]),
+        complaint_reasons=CUSTOMER_COMPLAINTS, complaint_max=COMPLAINT_TEXT_MAX, complained=complained))
+
+
+def _back(token, anchor=""):
+    return redirect(url_for("teleb.menim", token=token) + anchor)
+
+
+def _offer_action(token, oid, accept):
+    from .offers import decide_offer
+    db = get_db()
+    res, error = decide_offer(db, token, oid, accept)
+    if res == "notfound":
+        abort(404)
+    if error:
+        flash(error, "err")
+    elif accept:
+        add_log(db, "info", "Müştəri", f"Təklif qəbul edildi: #{oid}", "nömrə maklerə açıldı")
+        db.commit()
+        flash("Təklif qəbul edildi. Makler sizinlə əlaqə saxlayacaq.", "ok")
+    else:
+        flash("Təklif rədd edildi.", "ok")
+    return _back(token, f"#o-{oid}")
+
+
+@bp.route("/teleb/<token>/teklif/<int:oid>/qebul", methods=["POST"])
+def qebul(token, oid):
+    return _offer_action(token, oid, True)
+
+
+@bp.route("/teleb/<token>/teklif/<int:oid>/redd", methods=["POST"])
+def redd(token, oid):
+    return _offer_action(token, oid, False)
+
+
+@bp.route("/teleb/<token>/bagla", methods=["POST"])
+def bagla(token):
+    from .offers import close_request
+    db = get_db()
+    res, error = close_request(db, token, request.form.get("reason", ""))
+    if res == "notfound":
+        abort(404)
+    if error:
+        flash(error, "err")
+    else:
+        add_log(db, "info", "Müştəri", "Tələb müştəri tərəfindən bağlandı", f"səbəb={request.form.get('reason')}")
+        db.commit()
+        flash("Tələb bağlandı. Təşəkkür edirik!", "ok")
+    return _back(token)
+
+
+@bp.route("/teleb/<token>/teklif/<int:oid>/sikayet", methods=["POST"])
+def sikayet(token, oid):
+    from .offers import add_complaint
+    db = get_db()
+    row = db.execute("SELECT o.id, o.agent_id, r.id AS rid FROM offers o JOIN customer_requests r ON r.id = o.request_id "
+                     "WHERE o.id = ? AND r.token = ?", (oid, token)).fetchone()
+    if row is None:
+        abort(404)
+    res, error = add_complaint(db, "customer", row["rid"], request.form.get("reason", ""), request.form.get("text", ""),
+                               offer_id=oid, agent_id=row["agent_id"])
+    if error:
+        flash(error, "err")
+    else:
+        add_log(db, "warn", "Müştəri", f"Şikayət: təklif #{oid}", f"səbəb={request.form.get('reason')}")
+        db.commit()
+        flash("Şikayətiniz qəbul edildi. Administrator baxacaq.", "ok")
+    return _back(token, f"#o-{oid}")

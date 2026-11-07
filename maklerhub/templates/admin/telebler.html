@@ -1,0 +1,48 @@
+{% extends 'admin/base.html' %}
+{% set page_css = 'admin-v2.css' %}
+{% block title %}Admin · Tələblər{% endblock %}
+{% block shell %}
+  <main>
+    <div class="head reveal" style="animation-delay:.05s">
+      <div><h1>Tələblər</h1><p>Müştəri tələbləri (cəmi {{ total }})</p></div>
+    </div>
+    {% include 'admin/_flash.html' %}
+
+    <div class="toolbar reveal" style="animation-delay:.1s">
+      <div class="filters">
+        <a class="fchip{% if not status %} active{% endif %}" href="{{ url_for('admin.telebler', q=q or None) }}">Hamısı</a>
+        {%- for k, v in labels.items() %}
+        <a class="fchip{% if status == k %} active{% endif %}" href="{{ url_for('admin.telebler', status=k, q=q or None) }}">{{ v }} ({{ counts.get(k, 0) }})</a>
+        {%- endfor %}
+      </div>
+      <form class="qform" method="get" action="{{ url_for('admin.telebler') }}">
+        {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+        <input type="search" name="q" value="{{ q }}" placeholder="#id, ad, telefon, rayon" aria-label="Axtar">
+        <button class="sbtn" type="submit">Axtar</button>
+      </form>
+    </div>
+
+    <div class="tablewrap reveal" style="animation-delay:.16s"><table>
+      <thead><tr><th>#</th><th>Tələb</th><th>Müştəri</th><th>Büdcə</th><th>Təklif</th><th>Status</th><th>Vaxt</th></tr></thead>
+      <tbody>
+      {%- for x in items %}
+        <tr>
+          <td><a href="{{ url_for('admin.teleb', rid=x.r.id) }}">#{{ x.r.id }}</a></td>
+          <td><div class="mname"><a href="{{ url_for('admin.teleb', rid=x.r.id) }}">{{ x.deal }} · {{ x.rooms }} otaq</a></div><div class="msub">{{ x.districts }}</div></td>
+          <td>{{ x.r.name or '—' }}</td>
+          <td>{{ x.budget }}</td>
+          <td>{{ x.r.n_offers }}</td>
+          <td><span class="pill {{ x.pill }}">{{ x.status }}</span></td>
+          <td>{{ x.when }}</td>
+        </tr>
+      {%- else %}
+        <tr><td colspan="7" class="mh-empty">Tələb tapılmadı.</td></tr>
+      {%- endfor %}
+      </tbody>
+    </table></div>
+
+    {% if pages > 1 %}
+    <div class="pager">{% for p in range(1, pages + 1) %}{% if p == page %}<span class="on">{{ p }}</span>{% else %}<a href="{{ url_for('admin.telebler', page=p, status=status or None, q=q or None) }}">{{ p }}</a>{% endif %}{% endfor %}</div>
+    {% endif %}
+  </main>
+{% endblock %}

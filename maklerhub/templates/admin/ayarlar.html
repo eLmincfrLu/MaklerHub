@@ -1,14 +1,23 @@
 {% extends 'admin/base.html' %}
-{% set page_css = 'admin-ayarlar.css' %}
+{% set page_css = 'admin-v2.css' %}
 {% block title %}Admin · Ayarlar{% endblock %}
 {% block shell %}
   <main>
     <div class="head reveal" style="animation-delay:.05s">
-      <div><h1>Ayarlar</h1><p>Platforma parametrləri</p></div>
+      <div><h1>Ayarlar</h1><p>Admin hesabı</p></div>
     </div>
 
-    <div class="section reveal" style="animation-delay:.12s">
-      <div class="mh-empty">Tezliklə — bu bölmə yeni modelə uyğun hazırlanır.</div>
+    <div class="box pwform reveal" style="animation-delay:.1s">
+      <h2>Şifrəni dəyiş</h2>
+      <p class="msub" style="margin-bottom:14px">{{ current_user.email }} · son dəyişiklik: {{ pw_changed }}. Minimum 8 simvol, ən azı bir rəqəm.</p>
+      <div class="lic-flash" id="pwMsg" hidden></div>
+      <form id="pwForm" autocomplete="off">
+        <div class="mh-field"><label for="pw-cur">Cari şifrə</label><input id="pw-cur" type="password" name="current" autocomplete="current-password" required></div>
+        <div class="mh-field"><label for="pw-new">Yeni şifrə</label><input id="pw-new" type="password" name="new" autocomplete="new-password" required></div>
+        <div class="mh-field"><label for="pw-new2">Yeni şifrə (təkrar)</label><input id="pw-new2" type="password" name="new2" autocomplete="new-password" required></div>
+        <button class="btn" type="submit">Şifrəni yenilə</button>
+      </form>
     </div>
   </main>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/admin-sifre.js') }}"></script>{% endblock %}

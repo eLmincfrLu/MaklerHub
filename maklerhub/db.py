@@ -210,12 +210,42 @@ def close_db(_exc=None):
         db.close()
 
 
-def create_schema(con):
+# pg_advisory_xact_lock açarı: sxem DDL-i eyni anda yalnız bir prosesdə (deploy zamanı iki nüsxə deadlock verməsin).
+# Tranzaksiya səviyyəli lock seçilib: Neon "-pooler" (PgBouncer, tranzaksiya rejimi) sessiya lock-unu etibarlı
+# saxlamır; xact lock isə commit/rollback-da (xəta olanda da) avtomatik buraxılır.
+SCHEMA_LOCK_KEY = 7_302_202_611
+
+
+def _schema_lock(con):
+    con.execute("SELECT pg_advisory_xact_lock(?)", (SCHEMA_LOCK_KEY,))
+
+
+def create_schema(con, commit=True):
     with open(os.path.join(os.path.dirname(__file__), "schema.sql"), encoding="utf-8") as fh:
         con.script(fh.read())
     for k, v in DEFAULT_SETTINGS.items():
         con.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (k, v))
-    con.commit()
+    if commit:
+        con.commit()
+
+
+def bootstrap(url):
+    """Startup: sxemi (IF NOT EXISTS / ADD COLUMN IF NOT EXISTS) tətbiq edir, boş bazada admin + kodlar.
+    Hamısı BİR tranzaksiyada, advisory lock altında; xətada rollback lock-u da buraxır."""
+    con = connect(url)
+    try:
+        _schema_lock(con)
+        fresh = not _schema_exists(con)
+        create_schema(con, commit=False)
+        if fresh:
+            from .seed import seed_minimal
+            seed_minimal(con)
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
 
 
 def _schema_exists(con):
@@ -226,9 +256,9 @@ def init_db(url, seed=False):
     """Bazanı SIFIRDAN yaradır (bütün cədvəllər silinir!). seed=True → demo məlumatlar (hələlik minimal ilə eyni)."""
     con = connect(url)
     try:
+        _schema_lock(con)
         con.script("DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;")
-        con.commit()
-        create_schema(con)
+        create_schema(con, commit=False)
         if seed:
             from .seed import seed as run_seed
             run_seed(con)
@@ -236,6 +266,9 @@ def init_db(url, seed=False):
             from .seed import seed_minimal
             seed_minimal(con)
         con.commit()
+    except Exception:
+        con.rollback()
+        raise
     finally:
         con.close()
 
@@ -291,13 +324,4 @@ def init_app(app):
     # `init-db` onsuz da sıfırdan yaradır — iki dəfə seed (və iki dəst kod) olmasın deyə burada ötürülür.
     if "init-db" in sys.argv:
         return
-    con = connect(url)
-    try:
-        fresh = not _schema_exists(con)
-        create_schema(con)  # yeni cədvəllər/ayarlar varsa əlavə olunur (IF NOT EXISTS)
-        if fresh:
-            from .seed import seed_minimal
-            seed_minimal(con)
-        con.commit()
-    finally:
-        con.close()
+    bootstrap(url)  # yeni cədvəllər/sütunlar/ayarlar varsa əlavə olunur (IF NOT EXISTS)

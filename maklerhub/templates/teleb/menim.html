@@ -10,15 +10,66 @@
       </h1>
       <p>Təkliflər gəldikcə bu səhifədə görünəcək. Bəyəndiyin təklifi qəbul edəndə yalnız həmin makler nömrəni görəcək.</p>
 {% endblock %}
+{% macro offer_card(o, decide) %}
+        <div class="offer{% if o.status == 'accepted' %} accepted{% endif %}" id="o-{{ o.id }}">
+          {% if o.image %}<img src="{{ o.image }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.outerHTML='<div class=&quot;ph&quot;>Şəkil yüklənmədi</div>'">{% else %}<div class="ph">Şəkil yoxdur</div>{% endif %}
+          <div class="ob">
+            <div class="ot">{{ o.title }}{% if o.new %} <span class="newtag">Yeni</span>{% endif %}</div>
+            <div class="op">{{ o.price }}</div>
+            <div class="om">{{ o.district or '—' }} · {{ o.rooms }} otaq{% if o.area %} · {{ o.area }}{% endif %}</div>
+            {% if o.description %}<div class="od">{{ o.description }}</div>{% endif %}
+            <div class="oa"><span>Makler: <b>{{ o.agent_full or o.agent }}</b></span><span>{{ o.when }}</span></div>
+
+            {% if o.status == 'accepted' %}
+            <div class="contactbox">
+              <b>Makler sizinlə əlaqə saxlayacaq</b>
+              {{ o.agent_full }}{% if o.agent_tel %} · <a href="tel:{{ o.agent_tel }}">{{ o.agent_phone }}</a>{% endif %}
+            </div>
+            {% elif decide and o.status == 'sent' and alive %}
+              {% if confirm_id == o.id and can_accept %}
+              <div class="confirmbox">
+                <p>Nömrəniz <b>{{ o.agent }}</b> ilə paylaşılacaq. Davam edək?</p>
+                <div class="actions">
+                  <form method="post" action="{{ url_for('teleb.qebul', token=token, oid=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="abtn yes" type="submit">Bəli, nömrəmi paylaş</button></form>
+                  <a class="abtn ghost" href="{{ url_for('teleb.menim', token=token) }}#o-{{ o.id }}">Ləğv et</a>
+                </div>
+              </div>
+              {% else %}
+              <div class="actions">
+                {% if can_accept %}<a class="abtn yes" href="{{ url_for('teleb.menim', token=token, tesdiq=o.id) }}#o-{{ o.id }}">Maraqlıdır</a>{% endif %}
+                <form method="post" action="{{ url_for('teleb.redd', token=token, oid=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="abtn ghost" type="submit">Maraqlı deyil</button></form>
+              </div>
+              {% if not can_accept %}<p class="hint2">Ən çox {{ accept_limit }} təklif qəbul etmək olar — limit dolub.</p>{% endif %}
+              {% endif %}
+            {% endif %}
+
+            {% if o.id in complained %}
+            <p class="hint2">Bu təklif barədə şikayətiniz qəbul olunub.</p>
+            {% else %}
+            <details class="complain">
+              <summary>Şikayət et</summary>
+              <form method="post" action="{{ url_for('teleb.sikayet', token=token, oid=o.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <select name="reason" required><option value="">Səbəb seçin</option>{% for k, v in complaint_reasons.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+                <textarea name="text" maxlength="{{ complaint_max }}" rows="2" placeholder="Qısa izah (istəyə bağlı)"></textarea>
+                <button class="abtn ghost" type="submit">Göndər</button>
+              </form>
+            </details>
+            {% endif %}
+          </div>
+        </div>
+{% endmacro %}
 {% block card %}
       <div class="kicker">Mənim tələbim</div>
       <h1>{{ r.deal }} · <i>{{ r.districts|join(', ') }}</i></h1>
       <div class="underline"></div>
 
+      {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="alert {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+
       {% if r.status == 'expired' %}
       <div class="expired"><b>Tələbin müddəti bitib</b>Tələb 30 gün aktiv qalır. Hələ də axtarırsansa, <a href="{{ url_for('teleb.forma') }}">yeni tələb yaz</a>.</div>
       {% elif r.status == 'closed' %}
-      <div class="expired"><b>Tələb bağlanıb</b>Yeni təkliflər qəbul olunmur.</div>
+      <div class="expired"><b>Tələb bağlanıb</b>{% if close_reason %}Səbəb: {{ close_reason }}. {% endif %}Yeni təkliflər qəbul olunmur.</div>
       {% endif %}
       <div class="savebox">
         <b>Bu linki saxla, təkliflər burada görünəcək</b>
@@ -41,21 +92,31 @@
         <div class="sum-row"><span>Yaradılıb</span><span>{{ r.created }}, {{ r.created_time }}</span></div>
       </div>
 
-      <div class="offers-h">Təkliflər{% if offers %} ({{ offers|length }}){% endif %}</div>
+      <div class="offers-h">Təkliflər{% if offers %} ({{ offers|length }}){% endif %}{% if n_accepted %} <small>· qəbul: {{ n_accepted }}/{{ accept_limit }}</small>{% endif %}</div>
       <div class="offers">
       {%- for o in offers %}
-        <div class="offer">
-          {% if o.image %}<img src="{{ o.image }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.outerHTML='<div class=&quot;ph&quot;>Şəkil yüklənmədi</div>'">{% else %}<div class="ph">Şəkil yoxdur</div>{% endif %}
-          <div class="ob">
-            <div class="ot">{{ o.title }}</div>
-            <div class="op">{{ o.price }}</div>
-            <div class="om">{{ o.district or '—' }} · {{ o.rooms }} otaq{% if o.area %} · {{ o.area }}{% endif %}</div>
-            {% if o.description %}<div class="od">{{ o.description }}</div>{% endif %}
-            <div class="oa"><span>Makler: <b>{{ o.agent }}</b></span><span>{{ o.when }}</span></div>
-          </div>
-        </div>
+        {{ offer_card(o, True) }}
       {%- else %}
-        <div class="empty">{% if r.status == 'active' %}Hələ təklif yoxdur. Maklerlər tələbini görür.<br>Təkliflər gələndə bu səhifədə görünəcək.{% else %}Bu tələbə təklif gəlməyib.{% endif %}</div>
+        <div class="empty">{% if r.status == 'active' %}Hələ təklif yoxdur. Maklerlər tələbini görür.<br>Təkliflər gələndə bu səhifədə görünəcək.{% else %}Aktiv təklif yoxdur.{% endif %}</div>
       {%- endfor %}
       </div>
+
+      {% if rejected %}
+      <details class="rejected">
+        <summary>Maraqlı olmayanlar ({{ rejected|length }})</summary>
+        <div class="offers">{% for o in rejected %}{{ offer_card(o, False) }}{% endfor %}</div>
+      </details>
+      {% endif %}
+
+      {% if r.status == 'active' %}
+      <details class="closebox">
+        <summary>Tələbi bağla</summary>
+        <form method="post" action="{{ url_for('teleb.bagla', token=token) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <p class="hint2">Bağlanandan sonra yeni təklif gəlmir. Səbəbi seçin:</p>
+          {% for k, v in close_reasons.items() %}<label class="radio"><input type="radio" name="reason" value="{{ k }}" required> {{ v }}</label>{% endfor %}
+          <button class="abtn ghost" type="submit">Tələbi bağla</button>
+        </form>
+      </details>
+      {% endif %}
 {% endblock %}

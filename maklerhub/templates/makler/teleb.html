@@ -1,5 +1,6 @@
 {% extends 'makler/base.html' %}
-{% set page_css = 'teleblist.css' %}
+{% set page_css = 'teleblist2.css' %}
+{% macro contact_box(c) %}<div class="contactbox"><b>Müştəri ilə əlaqə</b>{{ c.name }} · <a href="tel:{{ c.tel }}">{{ c.phone }}</a>{% if c.wa %} · <a href="{{ c.wa }}" target="_blank" rel="noopener noreferrer">WhatsApp</a>{% endif %}</div>{% endmacro %}
 {% block title %}Tələb #{{ req.id }}{% endblock %}
 {% block main %}
   <a class="back" href="{{ url_for('makler.kabinet') }}">← Tələblər</a>
@@ -38,6 +39,7 @@
     <div class="box reveal" style="animation-delay:.16s">
       {% if mine %}
       <h2>Sizin təklifiniz <span class="tag st-{{ mine.status }}">{{ my_label }}</span></h2>
+      {% if contact %}{{ contact_box(contact) }}{% elif mine.status == 'accepted' %}<div class="closed">Müştəri təklifi qəbul edib, amma əlaqə məlumatı artıq mövcud deyil.</div>{% endif %}
       {% if mine.image_url %}<img class="ofr-img" src="{{ mine.image_url }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.outerHTML='<div class=&quot;ofr-ph&quot;>Şəkil yüklənmədi</div>'">{% else %}<div class="ofr-ph">Şəkil yoxdur</div>{% endif %}
       <div class="rows">
         <div class="row"><span>Başlıq</span><span>{{ mine.title }}</span></div>
@@ -78,12 +80,29 @@
           <div class="mh-field"><label for="district">Rayon</label><select id="district" name="district"><option value="">Seçin</option>{% for d in districts %}<option{% if form.district == d %} selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
           <div class="mh-field"><label for="rooms">Otaq sayı</label><select id="rooms" name="rooms"><option value="">Seçin</option>{% for n, l in rooms.items() %}<option value="{{ n }}"{% if form.rooms == n|string %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
         </div>
-        <div class="mh-field"><label for="image_url">Şəkil linki <span style="color:#B7AE93">(istəyə bağlı, yalnız https://)</span></label><input id="image_url" name="image_url" type="url" maxlength="{{ url_max }}" value="{{ form.image_url }}" placeholder="https://..."></div>
+        <div class="mh-field"><label for="image_url">Şəkil linki <span style="color:#B7AE93">(istəyə bağlı, yalnız https://)</span></label><input id="image_url" name="image_url" type="url" maxlength="{{ url_max }}" value="{{ form.image_url }}" placeholder="https://..." data-exts="{{ image_exts|join(',') }}">
+          <div class="mh-hint">Şəklin birbaşa linki (şəklin üstündə sağ klik → “Şəkil ünvanını kopyala”). Bəzi saytlar (məs. Tap.az) başqa saytda şəkil göstərməyə icazə vermir.</div>
+          <div class="imgwarn" id="imgWarn" hidden>Link .jpg, .jpeg, .png və ya .webp ilə bitmir — bu, şəklin özü olmaya bilər. Göndərmək olar, amma şəkil görünməyə bilər.</div></div>
         <div class="mh-field"><label for="description">Təsvir <span style="color:#B7AE93">(max {{ desc_max }})</span></label><textarea id="description" name="description" maxlength="{{ desc_max }}" rows="4">{{ form.description }}</textarea></div>
         <button class="mh-btn" type="submit">Təklifi göndər</button>
         <p class="muted">Bir tələbə yalnız bir dəfə təklif göndərmək olar. Müştəri qəbul edəndə nömrəsi sizə açılacaq.</p>
       </form>
       {% endif %}
+
+      {% if complained %}
+      <p class="muted">Bu tələb barədə şikayətiniz qəbul olunub.</p>
+      {% else %}
+      <details class="complain">
+        <summary>Tələbdən şikayət et</summary>
+        <form method="post" action="{{ url_for('makler.teleb_sikayet', rid=req.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mh-field"><select name="reason" required><option value="">Səbəb seçin</option>{% for k, v in complaint_reasons.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+          <div class="mh-field"><textarea name="text" maxlength="{{ complaint_max }}" rows="2" placeholder="Qısa izah (istəyə bağlı)"></textarea></div>
+          <button class="mh-btn ghost" type="submit">Şikayəti göndər</button>
+        </form>
+      </details>
+      {% endif %}
     </div>
   </div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/makler-teklif.js') }}"></script>{% endblock %}

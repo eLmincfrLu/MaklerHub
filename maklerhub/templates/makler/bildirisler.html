@@ -1,0 +1,26 @@
+{% extends 'makler/base.html' %}
+{% set page_css = 'teleblist2.css' %}
+{% block title %}Bildirişlər{% endblock %}
+{% block main %}
+  <div class="head reveal" style="animation-delay:.05s">
+    <h1>Bildirişlər</h1>
+    <p>Yeni uyğun tələblər və təkliflərinizə verilən cavablar</p>
+  </div>
+
+  {% if items|selectattr('read', 'equalto', False)|list %}
+  <form class="reveal" style="animation-delay:.08s;margin-bottom:14px" method="post" action="{{ url_for('makler.bildirisler_oxundu') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="go" type="submit">Hamısını oxunmuş et</button>
+  </form>
+  {% endif %}
+
+  <div class="list notifs">
+    {%- for n in items %}
+    <a class="nrow{% if not n.read %} unread{% endif %} kind-{{ n.kind }}" href="{{ url_for('makler.bildiris_ac', nid=n.id) }}">
+      <span class="ntext">{{ n.text }}</span><span class="nwhen">{{ n.when }}</span>
+    </a>
+    {%- else %}
+    <div class="mh-empty">Hələ bildiriş yoxdur. Xidmət sahənizə uyğun yeni tələb gələndə və ya müştəri təklifinizə cavab verəndə burada görünəcək.</div>
+    {%- endfor %}
+  </div>
+{% endblock %}

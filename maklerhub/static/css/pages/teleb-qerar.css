@@ -1,0 +1,32 @@
+/* Müştəri qərarları: qəbul/rədd, təsdiq bloku, kontakt, şikayət, tələbi bağla (teleb.css + teleb-offers.css-dən sonra) */
+.newtag{display:inline-block;font-size:.66rem;font-weight:600;color:#fff;background:var(--ok);padding:2px 8px;border-radius:10px;vertical-align:middle;margin-left:4px;}
+.offer.accepted{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok) inset;}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center;}
+.actions form{margin:0;}
+.abtn{display:inline-block;font-family:var(--font-b);font-size:.86rem;font-weight:600;padding:11px 16px;border-radius:2px;cursor:pointer;
+  text-decoration:none;border:1px solid var(--line);background:var(--panel);color:#5B5540;line-height:1.2;}
+.abtn.yes{background:var(--gold);border-color:var(--gold);color:#201803;}
+.abtn.yes:hover{box-shadow:0 8px 20px rgba(201,162,39,.3);}
+.abtn.ghost:hover{border-color:var(--gold-dim);color:var(--navy);}
+.confirmbox{margin-top:12px;padding:14px;border:1.5px solid var(--gold);background:#FBF4DE;}
+.confirmbox p{font-size:.88rem;color:var(--navy);line-height:1.5;}
+.confirmbox .actions{margin-top:10px;}
+.contactbox{margin-top:12px;padding:12px 14px;background:#E6EFE8;border-left:3px solid var(--ok);font-size:.88rem;color:#2F5A3E;line-height:1.55;}
+.contactbox b{display:block;color:#2F5A3E;}
+.contactbox a{color:#2F5A3E;font-weight:600;}
+.hint2{font-size:.76rem;color:#8A8262;margin-top:8px;line-height:1.5;}
+details.complain{margin-top:10px;}
+details summary{cursor:pointer;font-size:.78rem;color:#8A8262;list-style:none;}
+details summary::-webkit-details-marker{display:none;}
+details summary::before{content:'▸ ';}
+details[open] > summary::before{content:'▾ ';}
+details.complain form,details.closebox form{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
+details select,details textarea{width:100%;padding:9px 10px;border:1px solid var(--line);background:var(--panel);font-family:var(--font-b);font-size:.86rem;color:var(--ink);border-radius:2px;}
+details.rejected{margin-top:22px;}
+details.rejected > summary{font-size:.86rem;font-weight:600;color:#7A7256;}
+details.rejected .offers{margin-top:12px;opacity:.75;}
+details.closebox{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);}
+details.closebox > summary{font-size:.86rem;font-weight:600;color:#7A7256;}
+.radio{display:flex;gap:8px;align-items:center;font-size:.88rem;color:var(--ink);}
+.radio input{accent-color:var(--gold);}
+.offers-h small{font-family:var(--font-b);font-size:.78rem;color:#8A8262;font-weight:400;}

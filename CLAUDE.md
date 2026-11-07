@@ -16,8 +16,11 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 - Gün 3 BİTDİ: ProxyFix + `client_ip()`, `/teleb` CSRF xətası formanı saxlayır, `/sertler` və `/mexfilik`, tələb
   müddəti (lazy), `matching.py`, kabinet tələb siyahısı (filtr, sıralama, 20-lik səhifə), tələb detalı + təklif,
   geri çəkmə, Təkliflərim, müştəri səhifəsində təkliflər. pytest: `tests/` (25 test).
-- Sonrakı (Gün 4): müştəri qəbul/rədd, kontakt açılması (`contacts`), müştəri bildirişlərinin göstərilməsi, tam admin
-  panel (cihaz sıfırlama UI, şikayətlər). Gün 5: demo məlumatlar (`seed()` hələlik `seed_minimal` ilə eynidir).
+- Gün 4 BİTDİ: müştəri qəbul (inline təsdiq, JS confirm yox) / rədd / tələbi bağla (close_reason), qəbulda `contacts`
+  → makler müştərinin adını, tel: və wa.me linkini görür (yalnız accepted + contacts); bildirişlər (yeni uyğun tələb
+  ≥50, qəbul, rədd; `/kabinet/bildirisler`); müştəri "Yeni" nişanı (`customer_seen_at`); şikayətlər (hər iki tərəf,
+  unikal indekslə 1 dəfə); tam admin panel; test bazası ayrıldı; startup advisory lock; debug IP səhifəsi silindi.
+- Sonrakı: Gün 5 demo məlumatlar (`seed()` hələlik `seed_minimal` ilə eynidir).
 - IP (7 noyabr): Render-in qarşısında Cloudflare var, XFF 3 hop-dur (müştəri, Cloudflare, Render daxili).
   `auth.client_ip()` — IP lazım olan HƏR YERDƏ yalnız bu (birbaşa `request.remote_addr` yox). `MAKLERHUB_BEHIND_PROXY=1`
   olanda: CF-Connecting-IP → True-Client-IP → remote_addr (ipaddress ilə yoxlanır, etibarsız → növbəti); lokalda
@@ -25,10 +28,7 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   (proxy rejimində). IP ictimai deyilsə IP limitləri tətbiq olunmur (fail-open, `auth.ip_limit_applies`, bir dəfə
   warning): `/teleb` gündəlik 3 və lisenziya kodu 10/15 dəq. Nömrə limiti qalır. Testlər: `tests/test_client_ip.py`
   (bazasız, ayrıca: `pytest tests/test_client_ip.py -p no:cacheprovider`).
-- MÜVƏQQƏTİ: `/admin/debug/ip` (yalnız admin, IP mənbəyini də göstərir) — canlıda təsdiqlənəndən sonra SİL.
-- Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək); iki proses eyni anda başlayanda
-  `create_schema` DDL-i deadlock verə bilər (deploy üst-üstə düşəndə); pytest hələ real bazada işləyir —
-  ayrıca test bazası olmadan testləri işlətmə.
+- Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
 
 ## Qaydalar (pozma)
 - `maklerhub/static/` içindəki MÖVCUD fayllara toxunma (CSS, JS, şəkillər, loqo). Lazım olsa YENİ fayl əlavə et
@@ -76,7 +76,15 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 - `helpers.py` — vaxt (`now`, `ts`, `parse`, Asia/Baku), formatlama (`rel`, `date_short`, `money`, `initials`,
   `full_name`, `az_upper`), `BAKU_DISTRICTS` (12 rayon + populyar ərazilər).
 - `seed.py` — `seed_minimal`: 1 admin + 3 istifadə olunmamış lisenziya kodu (konsola yazılır).
-- `schema.sql` — cədvəllərin mənbəyi.
+- `schema.sql` — cədvəllərin mənbəyi. Yeni sütunlar YALNIZ `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (canlı bazada
+  startup-da tətbiq olunur). Canlı bazada `init-db` İŞLƏTMƏ.
+- `db.bootstrap()` — startup: lock + sxem + (boş bazada) seed BİR tranzaksiyada, `pg_advisory_xact_lock`
+  (Neon -pooler/PgBouncer sessiya lock-unu saxlamır; xact lock commit/rollback-da buraxılır). `init_db` də lock altında.
+- `offers.py` (Gün 4) — `decide_offer` (tələb FOR UPDATE, token mütləq təklifin tələbinə aid, qəbul limiti 3),
+  `close_request`, `add_complaint`, `contacts_for` (telefon YALNIZ buradan), `notify_new_request`.
+- `admin.py` — panel (göstəricilər, son 10 tələb/təklif), `/admin/telebler` (+ detal: telefon admin üçün, bağla, sil —
+  cascade), `/admin/maklerler` (dayandır/aktivləşdir, cihazları sıfırla, lisenziyanı N gün uzat), `/admin/lisenziyalar`,
+  `/admin/sikayetler`, `/admin/loglar`, `/admin/ayarlar` (şifrə). Admin hərəkətləri loqa yazılır.
 
 ## Cədvəllər
 users (role admin|makler, status active|suspended, license_id), licenses (code, days, status new|used|revoked,
@@ -90,8 +98,12 @@ Vaxtlar TEXT "YYYY-MM-DD HH:MM:SS" (Asia/Baku, `helpers.ts()`).
 ## İşə salma
 - Windows-da Python əmrlərini `PYTHONIOENCODING=utf-8` ilə işlət, yoxsa Azərbaycan hərfləri xəta verir.
 - `python run.py [--debug] [--port N]` — server (waitress; `--debug` Flask serveri).
-- Testlər: `PYTHONIOENCODING=utf-8 python -m pytest tests -q` (pytest `requirements-dev.txt`-dədir). Axın testləri
-  .env-dəki bazada işləyir və sonda öz sətirlərini silir (id nişanı ilə); `test_matching.py` bazasızdır.
+- Testlər: `PYTHONIOENCODING=utf-8 python -m pytest tests -q -p no:cacheprovider` (~7 dəq; pytest
+  `requirements-dev.txt`-dədir). YALNIZ `.env`-dəki TEST_DATABASE_URL-də işləyir (`tests/dbguard.py`): yoxdursa və ya
+  host-u DATABASE_URL ilə eynidirsə pytest dərhal dayanır; sessiyanın əvvəlində test bazası `init_db` ilə sıfırlanır;
+  prosesdə DATABASE_URL test bazası ilə əvəz olunur. Fixture-ları skriptdən çağırmaq lazımdırsa əvvəl
+  `conftest.pytest_configure(None)` (yoxsa `app` fixture dayanır). Lokal server test bazası ilə:
+  `DATABASE_URL=<test url> python run.py` (yoxsa startup canlı bazaya sxem tətbiq edir).
 - `flask --app run init-db --yes [--demo]` — bazanı SIFIRDAN yaradır (hər şey silinir), admin və kodları konsola yazır.
   Boş bazada sxem və `seed_minimal` ilk işə salınmada avtomatik yaradılır.
 - Render (pulsuz): 15 dəq boş qalanda yatır, ayda 750 saat; Neon pulsuz limiti.

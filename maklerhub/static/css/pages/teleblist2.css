@@ -1,0 +1,22 @@
+/* Gün 4: kontakt, şikayət, şəkil linki xəbərdarlığı, bildirişlər — teleblist.css üzərində */
+@import url("teleblist.css");
+
+.contactbox{margin-top:12px;padding:12px 14px;background:#E6EFE8;border-left:3px solid var(--ok);font-size:.88rem;color:#2F5A3E;line-height:1.6;}
+.contactbox b{display:block;}
+.contactbox a{color:#2F5A3E;font-weight:600;}
+.contactrow{background:var(--panel);padding:0 20px 14px 20px;}
+.contactrow .contactbox{margin-top:0;}
+.imgwarn{margin-top:6px;font-size:.76rem;color:#8A3A28;background:#F8E6E0;padding:7px 10px;border-left:3px solid var(--bad);}
+details.complain{margin-top:18px;padding-top:12px;border-top:1px solid var(--line);}
+details.complain summary{cursor:pointer;font-size:.8rem;color:#8A8372;}
+details.complain form{margin-top:10px;}
+.mh-btn.ghost{background:none;border:1px solid var(--line);color:#6B6455;}
+
+.go{padding:9px 18px;border:none;border-radius:2px;background:var(--navy);color:#fff;font-family:var(--font-b);font-size:.84rem;font-weight:600;cursor:pointer;}
+.notifs .nrow{display:flex;justify-content:space-between;gap:14px;align-items:baseline;padding:14px 18px;background:var(--panel);
+  text-decoration:none;color:var(--ink);font-size:.88rem;border-left:3px solid transparent;}
+.notifs .nrow:hover{background:#FFFBEF;}
+.notifs .nrow.unread{border-left-color:var(--gold);font-weight:600;}
+.notifs .nrow.kind-offer_accepted{border-left-color:var(--ok);}
+.notifs .nwhen{font-size:.74rem;color:#9C9484;white-space:nowrap;font-weight:400;}
+@media(max-width:560px){.notifs .nrow{flex-direction:column;gap:4px;}.contactrow{padding:0 14px 12px;}}

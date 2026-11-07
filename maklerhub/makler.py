@@ -9,7 +9,9 @@ from .teleb import OFFER_LIMIT, ROOMS, expire_requests, request_alive, request_s
 
 bp = Blueprint("makler", __name__)
 
-NAV = [("makler.kabinet", "Tələblər"), ("makler.teklifler", "Təkliflərim"), ("makler.ayarlar", "Ayarlar")]
+NAV = [("makler.kabinet", "Tələblər"), ("makler.teklifler", "Təkliflərim"), ("makler.bildirisler", "Bildirişlər"),
+       ("makler.ayarlar", "Ayarlar")]
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 PAGE_SIZE = 20
 SORTS = {"score": "Uyğunluğa görə", "new": "Ən yeni", "urgency": "Təcililiyə görə"}
 
@@ -139,7 +141,11 @@ def _detail_ctx(db, rid):
     alive = request_alive(db, r)
     v = request_summary(r)
     v.update(id=r["id"], note=r["note"], first_name=_first_name(r["name"]))
-    return {"req": v, "score": res[0] if res else None, "reasons": res[1] if res else [],
+    contact = offers_mod.contacts_for(db, g.user["id"], [mine["id"]]).get(mine["id"]) if mine else None
+    complained = db.execute("SELECT 1 FROM complaints WHERE request_id = ? AND agent_id = ? AND from_side = 'agent'",
+                            (rid, g.user["id"])).fetchone() is not None
+    return {"req": v, "contact": contact, "complained": complained, "complaint_reasons": offers_mod.AGENT_COMPLAINTS,
+            "complaint_max": offers_mod.COMPLAINT_TEXT_MAX, "image_exts": IMAGE_EXTS, "score": res[0] if res else None, "reasons": res[1] if res else [],
             "ring": _ring(res[0], 151) if res else 151, "n_offers": n_offers, "limit": OFFER_LIMIT, "alive": alive,
             "mine": mine, "my_label": offers_mod.OFFER_STATUS.get(mine["status"]) if mine else None,
             "can_offer": alive and mine is None and n_offers < OFFER_LIMIT,
@@ -174,6 +180,8 @@ def teklif_gonder(rid):
             add_log(db, "info", "Makler", f"Təklif göndərildi: {full_name(g.user)}", f"tələb=#{rid} təklif=#{oid}")
             db.commit()
             flash("Təklif göndərildi. Müştəri onu öz səhifəsində görəcək.", "ok")
+            if clean["image_url"] and not clean["image_url"].lower().split("?")[0].endswith(IMAGE_EXTS):
+                flash("Diqqət: şəkil linki .jpg/.jpeg/.png/.webp ilə bitmir — şəkil müştəridə görünməyə bilər.", "err")
             return redirect(url_for("makler.teleb_detal", rid=rid))
         errors.append(error)
         ctx = _detail_ctx(db, rid)
@@ -219,8 +227,62 @@ def teklifler():
         items.append({"o": o, "req": req, "label": offers_mod.OFFER_STATUS.get(o["status"]),
                       "price": f"{o['price']:,}{unit}" if o["price"] else "—", "when": rel(o["created_at"]),
                       "rooms": ROOMS.get(o["rooms"], "—") if o["rooms"] else "—"})
+    contacts = offers_mod.contacts_for(db, g.user["id"], [it["o"]["id"] for it in items if it["o"]["status"] == "accepted"])
+    for it in items:
+        it["contact"] = contacts.get(it["o"]["id"])
     return render("makler/teklifler.html", "makler.teklifler", items=items, status=status, counts=counts,
                   labels=offers_mod.OFFER_STATUS, total=sum(counts.values()))
+
+
+@bp.route("/kabinet/teleb/<int:rid>/sikayet", methods=["POST"])
+@member_required
+def teleb_sikayet(rid):
+    db = get_db()
+    _detail_ctx(db, rid)  # yalnız görə bildiyi tələbə (yoxsa 404)
+    res, error = offers_mod.add_complaint(db, "agent", rid, request.form.get("reason", ""), request.form.get("text", ""),
+                                          agent_id=g.user["id"])
+    if error:
+        flash(error, "err")
+    else:
+        add_log(db, "warn", "Makler", f"Şikayət: tələb #{rid}", f"makler={g.user['email']} səbəb={request.form.get('reason')}")
+        db.commit()
+        flash("Şikayətiniz qəbul edildi. Administrator baxacaq.", "ok")
+    return redirect(url_for("makler.teleb_detal", rid=rid))
+
+
+# ---------------------------------------------------------------- bildirişlər
+@bp.route("/kabinet/bildirisler")
+@member_required
+def bildirisler():
+    db = get_db()
+    rows = db.execute("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100",
+                      (g.user["id"],)).fetchall()
+    items = [{"id": r["id"], "text": r["text"], "kind": r["kind"], "read": bool(r["is_read"]), "when": rel(r["created_at"]),
+              "has_link": bool(r["link"])} for r in rows]
+    return render("makler/bildirisler.html", "makler.bildirisler", items=items)
+
+
+@bp.route("/kabinet/bildiris/<int:nid>")
+@member_required
+def bildiris_ac(nid):
+    """Bildirişi oxunmuş edib linkinə aparır (yalnız daxili /kabinet linkləri)."""
+    db = get_db()
+    row = db.execute("SELECT link FROM notifications WHERE id = ? AND user_id = ?", (nid, g.user["id"])).fetchone()
+    if row is None:
+        abort(404)
+    db.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (nid,))
+    db.commit()
+    link = row["link"] or ""
+    return redirect(link if link.startswith("/kabinet") else url_for("makler.bildirisler"))
+
+
+@bp.route("/kabinet/bildirisler/oxundu", methods=["POST"])
+@member_required
+def bildirisler_oxundu():
+    db = get_db()
+    db.execute("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0", (g.user["id"],))
+    db.commit()
+    return redirect(url_for("makler.bildirisler"))
 
 
 @bp.route("/ayarlar")
@@ -327,7 +389,7 @@ def api_notifications():
     rows = db.execute("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 30",
                       (g.user["id"],)).fetchall()
     items = [{"id": r["id"], "title": r["text"], "body": "", "when": rel(r["created_at"]),
-              "href": r["link"] or "#", "read": bool(r["is_read"])} for r in rows]
+              "href": url_for("makler.bildiris_ac", nid=r["id"]), "read": bool(r["is_read"])} for r in rows]
     return jsonify(ok=True, unread=_unread(db, g.user["id"]), items=items)
 
 

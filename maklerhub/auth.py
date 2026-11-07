@@ -121,7 +121,7 @@ def ip_limit_applies(ip):
     if not public and not _ip_warned:
         _ip_warned = True
         current_app.logger.warning("Müştəri IP-si ictimai deyil (%r): IP limitləri tətbiq olunmur. "
-                                   "Proxy başlıqlarını yoxlayın (/admin/debug/ip).", ip)
+                                   "MAKLERHUB_BEHIND_PROXY və CF-Connecting-IP başlığını yoxlayın.", ip)
     return public
 
 
@@ -314,6 +314,9 @@ def init_app(app):
                 if is_api_request():
                     return jsonify(ok=False, error="Təhlükəsizlik tokeni etibarsızdır. Səhifəni yeniləyin."), 400
                 flash("Sessiya yeniləndi, zəhmət olmasa yenidən cəhd edin.", "err")
+                token = (request.view_args or {}).get("token")
+                if request.blueprint == "teleb" and token:  # müştəri əməliyyatları yalnız POST-dur
+                    return redirect(url_for("teleb.menim", token=token))
                 return redirect(request.path)
 
 

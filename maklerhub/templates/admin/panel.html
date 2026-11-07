@@ -1,14 +1,48 @@
 {% extends 'admin/base.html' %}
-{% set page_css = 'admin-panel.css' %}
+{% set page_css = 'admin-v2.css' %}
 {% block title %}Admin Panel{% endblock %}
 {% block shell %}
   <main>
     <div class="head reveal" style="animation-delay:.05s">
       <div><h1>Ümumi baxış</h1><p>Platformanın vəziyyəti</p></div>
     </div>
+    {% include 'admin/_flash.html' %}
 
-    <div class="section reveal" style="animation-delay:.12s">
-      <div class="mh-empty">Tezliklə: tələblər, təkliflər, lisenziyalar və şikayətlər burada görünəcək.</div>
+    <div class="kpis six reveal" style="animation-delay:.1s">
+      <div class="kpi"><div class="l">Aktiv tələblər</div><div class="n"><a href="{{ url_for('admin.telebler', status='active') }}">{{ kpi.active_req }}</a></div></div>
+      <div class="kpi"><div class="l">Son 7 gündə yeni tələb</div><div class="n">{{ kpi.new_req }}</div></div>
+      <div class="kpi"><div class="l">Təkliflər (geri çəkilməmiş)</div><div class="n">{{ kpi.offers }}</div></div>
+      <div class="kpi"><div class="l">Qəbul faizi</div><div class="n">{% if kpi.accept_rate is not none %}{{ kpi.accept_rate }}%{% else %}—{% endif %} <small>{{ kpi.accepted }}/{{ kpi.decided }} cavab</small></div></div>
+      <div class="kpi"><div class="l">Aktiv maklerlər</div><div class="n"><a href="{{ url_for('admin.maklerler') }}">{{ kpi.maklers }}</a></div></div>
+      <div class="kpi"><div class="l">Yeni şikayətlər</div><div class="n"><a href="{{ url_for('admin.sikayetler') }}">{{ kpi.complaints }}</a></div></div>
+    </div>
+
+    <div class="section reveal" style="animation-delay:.16s">
+      <div class="sh">Son 10 tələb <a href="{{ url_for('admin.telebler') }}">Hamısı →</a></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>#</th><th>Tələb</th><th>Büdcə</th><th>Status</th><th>Vaxt</th></tr></thead>
+        <tbody>
+        {%- for x in reqs %}
+          <tr><td><a href="{{ url_for('admin.teleb', rid=x.r.id) }}">#{{ x.r.id }}</a></td><td><div class="mname"><a href="{{ url_for('admin.teleb', rid=x.r.id) }}">{{ x.deal }} · {{ x.rooms }} otaq</a></div><div class="msub">{{ x.districts }}</div></td><td>{{ x.budget }}</td><td><span class="pill {{ x.pill }}">{{ x.status }}</span></td><td>{{ x.when }}</td></tr>
+        {%- else %}
+          <tr><td colspan="5" class="mh-empty">Hələ tələb yoxdur.</td></tr>
+        {%- endfor %}
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="section reveal" style="animation-delay:.2s">
+      <div class="sh">Son 10 təklif</div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Təklif</th><th>Makler</th><th>Tələb</th><th>Status</th><th>Vaxt</th></tr></thead>
+        <tbody>
+        {%- for o in offers %}
+          <tr><td><div class="mname">{{ o.title }}</div></td><td>{{ full_name(o) }}</td><td><a href="{{ url_for('admin.teleb', rid=o.request_id) }}">#{{ o.request_id }}</a></td><td>{{ offer_status.get(o.status, o.status) }}</td><td>{{ rel(o.created_at) }}</td></tr>
+        {%- else %}
+          <tr><td colspan="5" class="mh-empty">Hələ təklif yoxdur.</td></tr>
+        {%- endfor %}
+        </tbody>
+      </table></div>
     </div>
   </main>
 {% endblock %}
