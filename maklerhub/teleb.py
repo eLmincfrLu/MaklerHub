@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from flask import Blueprint, abort, g, make_response, redirect, render_template, request, url_for
 
-from .auth import client_ip
+from .auth import client_ip, ip_limit_applies
 from .db import add_log, get_db, get_setting
 from .helpers import BAKU_DISTRICTS, date_short, money, normalize_phone, now, phone_display, rel, ts
 
@@ -122,8 +122,9 @@ def forma():
             if not errors:
                 expire_requests(db)
                 since = ts(now() - timedelta(hours=24))
-                if db.execute("SELECT COUNT(*) FROM customer_requests WHERE ip = ? AND created_at >= ?",
-                              (ip, since)).fetchone()[0] >= IP_DAILY_LIMIT:
+                if ip_limit_applies(ip) and db.execute(
+                        "SELECT COUNT(*) FROM customer_requests WHERE ip = ? AND created_at >= ?",
+                        (ip, since)).fetchone()[0] >= IP_DAILY_LIMIT:
                     errors.append(f"Bir gündə ən çox {IP_DAILY_LIMIT} tələb göndərmək olar. Sabah yenidən cəhd edin.")
                 elif db.execute("SELECT COUNT(*) FROM customer_requests WHERE phone = ? AND status = 'active'",
                                 (clean["phone"],)).fetchone()[0] >= PHONE_ACTIVE_LIMIT:

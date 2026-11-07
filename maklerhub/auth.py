@@ -2,6 +2,7 @@
 CSRF qoruması və icazə dekoratorları."""
 import functools
 import hashlib
+import ipaddress
 import re
 import secrets
 import smtplib
@@ -80,6 +81,25 @@ def client_ip():
     """Müştərinin IP-si. X-Forwarded-For-u ProxyFix (x_for=1) emal edir: yalnız Render proxy-sinin
     əlavə etdiyi son dəyər götürülür, müştərinin özünün göndərdiyi saxta dəyərlər nəzərə alınmır."""
     return request.remote_addr or ""
+
+
+_ip_warned = False
+
+
+def ip_limit_applies(ip):
+    """IP əsaslı limitlər yalnız ictimai IP üçün. Loopback/private/boş IP — proxy başlıqları gəlməyib deməkdir;
+    onda limit tətbiq olunmur (fail-open), yoxsa bütün müştərilər bir "IP"-də bloklanar. Bir dəfə warning yazılır."""
+    global _ip_warned
+    try:
+        addr = ipaddress.ip_address(ip)
+        public = not (addr.is_loopback or addr.is_private or addr.is_link_local or addr.is_unspecified)
+    except ValueError:
+        public = False
+    if not public and not _ip_warned:
+        _ip_warned = True
+        current_app.logger.warning("Müştəri IP-si ictimai deyil (%r): IP limitləri tətbiq olunmur. "
+                                   "Proxy başlıqlarını yoxlayın (/admin/debug/ip).", ip)
+    return public
 
 
 def login_user(user, remember=False, session_token=None):
@@ -336,15 +356,16 @@ def _code_attempt(db, ip, ok):
 
 
 def _check_code(db, ip, raw):
-    """(lisenziya sətri, None) və ya (None, xəta). Yanlış kod cəhdləri IP üzrə sayılır."""
-    if _code_fails(db, ip) >= CODE_FAIL_LIMIT:
+    """(lisenziya sətri, None) və ya (None, xəta). Yanlış kod cəhdləri IP üzrə sayılır (yalnız ictimai IP)."""
+    limited = ip_limit_applies(ip)
+    if limited and _code_fails(db, ip) >= CODE_FAIL_LIMIT:
         return None, "Çox sayda yanlış kod cəhdi edildi. 15 dəqiqə sonra yenidən yoxlayın."
     code = licenses.normalize_code(raw)
     lic = db.execute("SELECT id, code, days, status FROM licenses WHERE code = ?", (code,)).fetchone() if code else None
     if lic is not None and lic["status"] == "new":
         return lic, None
     _code_attempt(db, ip, False)
-    if _code_fails(db, ip) >= CODE_FAIL_LIMIT:
+    if limited and _code_fails(db, ip) >= CODE_FAIL_LIMIT:
         add_log(db, "warn", "Makler", "Lisenziya kodu cəhdləri bloklandı", f"IP={ip}\n{CODE_FAIL_LIMIT} yanlış kod / 15 dəq")
     db.commit()
     if lic is None:

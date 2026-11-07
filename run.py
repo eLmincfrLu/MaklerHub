@@ -8,6 +8,7 @@
 istifadə olunur; yoxdursa Flask-ın daxili serveri işləyir.
 """
 import argparse
+import os
 import sys
 from dotenv import load_dotenv
 load_dotenv()
@@ -36,7 +37,12 @@ def main():
         return
     try:
         from waitress import serve
-        serve(app, host=args.host, port=args.port, threads=8)
+        kw = {}
+        if os.environ.get("MAKLERHUB_BEHIND_PROXY") == "1":
+            # Render: waitress 3.x X-Forwarded-* başlıqlarını defolt olaraq silir; onları Flask-a ötürürük,
+            # müştəri IP-sini ProxyFix (maklerhub/__init__.py) təyin edir — məntiq bir yerdədir və testlərlə yoxlanır.
+            kw["clear_untrusted_proxy_headers"] = False
+        serve(app, host=args.host, port=args.port, threads=8, **kw)
     except ImportError:
         app.run(host=args.host, port=args.port, debug=False, use_reloader=False)
 

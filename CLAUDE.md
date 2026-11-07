@@ -18,21 +18,29 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   geri çəkmə, Təkliflərim, müştəri səhifəsində təkliflər. pytest: `tests/` (25 test).
 - Sonrakı (Gün 4): müştəri qəbul/rədd, kontakt açılması (`contacts`), müştəri bildirişlərinin göstərilməsi, tam admin
   panel (cihaz sıfırlama UI, şikayətlər). Gün 5: demo məlumatlar (`seed()` hələlik `seed_minimal` ilə eynidir).
-- Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək); ProxyFix x_for=1 Render-də bir proxy
-  fərziyyəsinə əsaslanır — deploydan sonra real IP-nin gəldiyini loqda yoxla.
+- IP düzəlişi (7 noyabr): canlıda bütün IP-lər 127.0.0.1 idi — waitress 3.x X-Forwarded-* başlıqlarını defolt
+  silirdi. İndi: Render-də `MAKLERHUB_BEHIND_PROXY=1` → waitress başlıqları ötürür, IP-ni YALNIZ ProxyFix
+  (x_for=1) təyin edir. IP ictimai deyilsə (loopback/private) IP limitləri tətbiq olunmur (fail-open,
+  `auth.ip_limit_applies`, bir dəfə warning): `/teleb` gündəlik 3 və lisenziya kodu 10/15 dəq. Nömrə limiti qalır.
+- MÜVƏQQƏTİ: `/admin/debug/ip` (yalnız admin) — Render-də real IP və hop sayı təsdiqlənəndən sonra SİL.
+- Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək); Render-də Cloudflare varsa XFF iki hop
+  ola bilər — debug səhifəsinə baxıb x_for və ya CF-Connecting-IP qərarı ver; iki proses eyni anda başlayanda
+  `create_schema` DDL-i deadlock verə bilər (deploy üst-üstə düşəndə); pytest hələ real bazada işləyir —
+  ayrıca test bazası olmadan testləri işlətmə.
 
 ## Qaydalar (pozma)
 - `maklerhub/static/` içindəki MÖVCUD fayllara toxunma (CSS, JS, şəkillər, loqo). Lazım olsa YENİ fayl əlavə et
   (`static/css/pages/`, `static/js/pages/`), mövcud CSS-i `@import` edib dəyişənləri/sinifləri istifadə et.
 - `templates/*/base.html`, `auth/_logo.html`, naviqasiya və ümumi layout saxlanılır. Köhnə səhifə fayllarını silmə —
   içi "Tezliklə" placeholder-dir; struktur və CSS sinifləri qalır (`head`, `section`, `mh-empty`, `reveal`).
-- `run.py`, `start.sh`, `start.bat` dəyişmir.
+- `run.py`, `start.sh`, `start.bat` dəyişmir. İSTİSNA: `run.py` yalnız proxy konfiqurasiyası üçün dəyişdirilib
+  (`MAKLERHUB_BEHIND_PROXY=1` → waitress `clear_untrusted_proxy_headers=False`); başqa dəyişiklik etmə.
 - `db.py`-dakı uyğunlaşdırıcı qat (Row, Conn, Cursor, `_prepare`, pool, `get_db`) saxlanılır.
 - git push ETMƏ — yalnız lokal commit (istifadəçi özü istəməsə).
 - `init-db` bütün sxemi DROP edir: işlətməzdən əvvəl `.env`-dəki aktiv DATABASE_URL ilə şərhdəki köhnə URL-in host
   hissəsini müqayisə et (şifrəni ekrana çıxarma); eynidirsə DAYAN və istifadəçiyə de.
 - Mühit dəyişənləri yalnız `.env`-də / Render-də: DATABASE_URL, MAKLERHUB_ADMIN_EMAIL, MAKLERHUB_ADMIN_PASSWORD,
-  MAKLERHUB_SECRET, MAKLERHUB_SECURE_COOKIES. BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə, commit etmə.
+  MAKLERHUB_SECRET, MAKLERHUB_SECURE_COOKIES, MAKLERHUB_BEHIND_PROXY (yalnız Render-də =1, lokalda yox). BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə, commit etmə.
 - Müştəri nömrəsi heç vaxt kontakt (`contacts`) olmadan maklerə göstərilməməlidir.
 - Telefonlar `+994XXXXXXXXX` saxlanılır (`helpers.normalize_phone`, operatorlar 10/50/51/55/60/70/77/99).
 

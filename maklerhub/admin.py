@@ -1,4 +1,5 @@
 """Admin panel: lisenziya kodları (sadə bölmə), sistem loqları; qalan səhifələr placeholder (tam panel Gün 4-də)."""
+import os
 from datetime import timedelta
 
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
@@ -113,6 +114,26 @@ def lisenziya_legv(lid):
     else:
         flash("Kod tapılmadı və ya artıq ləğv edilib.", "err")
     return redirect(url_for("admin.lisenziyalar", status=request.args.get("status", "all")))
+
+
+# ---------------------------------------------------------------- MÜVƏQQƏTİ: IP diaqnostikası
+# Render-də real müştəri IP-si təsdiqlənəndən sonra silinəcək.
+DEBUG_IP_HEADERS = ("X-Forwarded-For", "X-Forwarded-Proto", "X-Real-IP", "True-Client-IP", "CF-Connecting-IP")
+
+
+@bp.route("/debug/ip")
+@admin_required
+def debug_ip():
+    from .auth import client_ip, ip_limit_applies
+    env = request.environ
+    rows = [("request.remote_addr (ProxyFix-dən sonra)", request.remote_addr),
+            ("client_ip()", client_ip()),
+            ("IP limiti tətbiq olunur?", "bəli" if ip_limit_applies(client_ip()) else "XEYR (fail-open)"),
+            ("ProxyFix-dən əvvəlki REMOTE_ADDR", (env.get("werkzeug.proxy_fix.orig") or {}).get("REMOTE_ADDR")),
+            ("MAKLERHUB_BEHIND_PROXY", os.environ.get("MAKLERHUB_BEHIND_PROXY", "(yoxdur)"))]
+    rows += [(h, request.headers.get(h)) for h in DEBUG_IP_HEADERS]
+    body = "\n".join(f"{k}:{v if v is not None else '(yoxdur)'}" for k, v in rows)
+    return body, 200, {"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"}
 
 
 # ---------------------------------------------------------------- loqlar API
