@@ -1,53 +1,64 @@
 # MaklerHub
 
-Bakıda daşınmaz əmlak makleri üçün Flask platforması. Elanları (bina.az, sonra tap.az; lalafo ən axırda/V2) scrape edir
-və müştərilərin axtarış profilləri ilə uyğunlaşdırır (matching.py, 0-100 bal).
-İstifadəçi azərbaycandilidir: cavabları Azərbaycan dilində, sadə və qısa yaz. VS Code + Git Bash, Windows.
-İstifadəçi addım-addım izah istəyir ("mərhələ-mərhələ"); yoxlamaları özün et, ona etdirmə.
+Bakıda daşınmaz əmlak üçün Flask platforması. İstifadəçi azərbaycandilidir: cavabları Azərbaycan dilində, sadə və qısa
+yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("mərhələ-mərhələ"); yoxlamaları özün et, ona etdirmə.
+
+## Model (noyabr 2026-dan, köhnə scraper + elan uyğunlaşdırma modeli DAYANDIRILIB və silinib)
+1. Müştəri saytda tələb yazır (kirayə/alış, rayon(lar), otaq, büdcə, təcililik) → `customer_requests`, gizli link `token`.
+2. Maklerlər kabinetdə uyğun tələbləri görür və təklif göndərir → `offers` (bir tələbə bir makler — bir təklif).
+3. Müştəri təklifi qəbul edəndə onun nömrəsi YALNIZ həmin maklerə açılır → `contacts`.
+4. Makler admin verdiyi lisenziya kodu ilə qeydiyyatdan keçir → `licenses` (MH-XXXX-XXXX-XXXX, `days` müddət).
 
 ## Plan və vəziyyət
-25 günlük plan: `docs/` qovluğundakı PDF-lərə və `25 gunluk plan` mətninə bax.
-- Gün 1-7 BİTDİ: admin/demo hesab (şifrələr `.env`-dən), qovluq təmizliyi, SQLite -> Neon PostgreSQL, 18 cədvəl,
-  Render-də deploy, UptimeRobot (`/saglamliq`, bazaya toxunmur).
-- Gün 8-9 BİTDİ: `scraper/` paketi, Bina.az dry-run işləyir (bazaya yazmır).
-- Gün 10 BİTDİ: `scraper/store.py` (elanlar Neon-a yazılır: yeni/qiymət dəyişikliyi/yoxa çıxan/geri qayıdan, sync_runs, logs,
-  matching), DemoAdapter söküldü, testlər (`tests/test_removed.py`, ROLLBACK ilə).
-- NÖVBƏTİ: Gün 11 = Tap.az (11-12). Sonra dublikatlar (13), telefon (14), avtomatik planlama (15).
-- Açıq: şübhəli qiymət hədlərinin yekunlaşdırılması (aşağıya bax); dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
+- Gün 1 BİTDİ: köhnə məntiq silindi, yeni sxem (13 cədvəl), sayt işə düşür; kabinet/panel "Tezliklə" placeholder.
+- Gün 2: makler qeydiyyatı lisenziya kodu ilə. Sonrakı: tələb forması, təkliflər, kontakt açılması, admin (lisenziyalar,
+  şikayətlər). Gün 5: demo məlumatlar (`seed()` hələlik `seed_minimal` ilə eynidir).
+- Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək); landing/giriş mətnlərində köhnə model
+  ifadələri (Bina.az/Tap.az, "elan izləyir") hələ qalır.
 
-## Texniki
-- Flask blueprints (auth, makler, admin, public), waitress, session + CSRF, Jinja.
-- `maklerhub/db.py`: Postgres üzərində sqlite-üslublu uyğunluq qatı (`?` -> `%s`, `INSERT OR IGNORE`, `lastrowid`).
-  Vaxtlar TEXT "YYYY-MM-DD HH:MM:SS" (Asia/Baku). `schema.sql` = cədvəllərin mənbəyi.
-- Əmrlər: `python run.py`, `flask init-db [--demo] [--yes]` (bütün məlumatı SİLİR), `flask sync`.
-- Windows-da Python əmrlərini PYTHONIOENCODING=utf-8 ilə işlət (məsələn: PYTHONIOENCODING=utf-8 python -m scraper.run ...), yoxsa Azərbaycan hərfləri xəta verir.
-- Render (pulsuz): 15 dəq boş qalanda yatır, ayda 750 saat limiti; Neon pulsuz limiti. Hovuz `min_size=0` (Neon yata bilsin).
-- Mühit dəyişənləri yalnız `.env`-də / Render-də: DATABASE_URL, admin/demo hesab məlumatları, MAKLERHUB_SECRET,
-  MAKLERHUB_SECURE_COOKIES. BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə, commit etmə.
+## Qaydalar (pozma)
+- `maklerhub/static/` içində heç nəyə toxunma (CSS, JS, şəkillər, loqo).
+- `templates/*/base.html`, `auth/_logo.html`, naviqasiya və ümumi layout saxlanılır. Köhnə səhifə fayllarını silmə —
+  içi "Tezliklə" placeholder-dir; struktur və CSS sinifləri qalır (`head`, `section`, `mh-empty`, `reveal`).
+- `run.py`, `start.sh`, `start.bat` dəyişmir.
+- `db.py`-dakı uyğunlaşdırıcı qat (Row, Conn, Cursor, `_prepare`, pool, `get_db`) saxlanılır.
+- git push ETMƏ — yalnız lokal commit (istifadəçi özü istəməsə).
+- `init-db` bütün sxemi DROP edir: işlətməzdən əvvəl `.env`-dəki aktiv DATABASE_URL ilə şərhdəki köhnə URL-in host
+  hissəsini müqayisə et (şifrəni ekrana çıxarma); eynidirsə DAYAN və istifadəçiyə de.
+- Mühit dəyişənləri yalnız `.env`-də / Render-də: DATABASE_URL, MAKLERHUB_ADMIN_EMAIL, MAKLERHUB_ADMIN_PASSWORD,
+  MAKLERHUB_SECRET, MAKLERHUB_SECURE_COOKIES. BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə, commit etmə.
+- Müştəri nömrəsi heç vaxt kontakt (`contacts`) olmadan maklerə göstərilməməlidir.
 
-## Scraper (Bina.az)
-- Səhifələrdə elan yoxdur; məlumat GraphQL persisted query `SearchItems`-dən gəlir (`GET https://bina.az/graphql`,
-  sha256Hash `scraper/bina.py`-dədir). Başlıqlar vacibdir (`x-platform: desktop`, content-type, referer, sec-fetch-*), yoxsa HTTP 400.
-- Kursor səhifələmə (16/səhifə), `sort: BUMPED_AT_DESC`. Filtr: cityId 1 (Bakı), categoryId 2 Yeni / 3 Köhnə tikili,
-  `leased` true/false (kirayə/satış), `locationIds`. Rayon siyahıdakı `location`-dan yox, FİLTRDƏN götürülür.
-- QAYDALAR: heç bir dəyər uydurma (yoxdursa NULL); sorğular arası 3-5 san; 401/403/429 və ya JSON olmayan cavabda DAYAN
-  (BlockedError), yan keçməyə çalışma; satıcı adı və təsvir saxlanmır; telefon yalnız ≥70% uyğunluqda.
-- `hasRepair` etibarsızdır (hamısında true) -> renovation = None.
-- Əməliyyat növü `isLeased`-dən; kirayə dövrü `isPaidDaily` -> day, əks halda month; satış -> total.
-- Şübhəli qiymət (`suspicious`): kirayə aylıq < 100 AZN və ya < 3 AZN/m²; satış < 10 000 AZN və ya < SALE_MIN_PER_M2.
-  Real ölçmə: Yasamal satış 2100-5400 AZN/m² (median ~2900), kirayə median ~11 AZN/m². SALE_MIN_PER_M2 = 400 qoyulub;
-  digər rayonlar (Qaradağ, Sabunçu, Suraxanı, Abşeron) üçün real rəqəmə baxıb yekunlaşdır.
-- Tezlik: ən tez-tez yoxlama daha yaxşıdır (saytda ~70-90 yenilənən kirayə elanı/saat). Hər axının yalnız 1-ci səhifəsi
-  (ən təzələr) hər 10-30 dəq; silinənləri tapmaq üçün gündə 1 tam sayğı. 52 axın (13 rayon x 2 kateqoriya x 2 əməliyyat) ~3,5 dəq.
-  Neon yatmasın deyə çox sıx dövr pulsuz saat limitini keçə bilər — 15-ci gündə real ölçüb seç.
-- Rayon id-ləri `scraper/bina.py` DISTRICTS-dədir. sources.py-də Abşeron və Pirallahı əlavə olunub; makler.py-dəki profil
-  formasının rayon siyahısında hələ yoxdur.
-- Çıxış: `python -m scraper.run bina [--selftest] [--deal rent|sale|both] [--category new|old|both] [--district AD|all] [--pages N]
-  [--save] [--full]`. `--save` olmadan dry-run (`numuneler/bina_dry.json`, .gitignore-dadır). `--full` = tam sayğı (kirayə ~1,5 saat,
-  satış ~4 saat); yoxa çıxan yalnız axın sonuna qədər oxunubsa (hasNextPage=false) VƏ elan 24 saatdan çox görünməyibsə işarələnir.
-- store.py: günlük kirayə (`price_period=day`) və suspicious=1 saxlanır, amma matching-ə girmir; building = property_type;
-  renovation '' (məlum deyil). Veb proses (admin düyməsi, `flask sync`, planlayıcı) heç bir elan yaratmır.
+## Struktur
+- `maklerhub/__init__.py` — `create_app`, public blueprint (`/`, `/saglamliq` — bazaya toxunmur, UptimeRobot üçün).
+- `auth.py` — giriş/çıxış, şifrə bərpası (SMTP yoxdursa link konsola), CSRF, `login_required` / `member_required` /
+  `admin_required`; `/qeydiyyat` hələlik placeholder. ROLES: admin, makler.
+- `makler.py` — kabinet (`/kabinet`, `/ayarlar`) + bildiriş API (`/api/notifications`, zəng ikonu üçün).
+  `/axtarislar`, `/elanlar`, `/musteriler`, `/analitika` — köhnə fayllar, placeholder, naviqasiyada yoxdur.
+- `admin.py` — `/admin/` panel, maklerlər, ayarlar (placeholder), loglar (işləyir, `/admin/api/logs`); `/admin/menbe` placeholder.
+- `db.py` — Postgres üzərində sqlite-üslublu qat (`?` → `%s`, `INSERT OR IGNORE`, `lastrowid` — `_ID_TABLES`),
+  `DEFAULT_SETTINGS`, `add_log`, `init-db` CLI. Hovuz `min_size=0` (Neon yata bilsin).
+- `helpers.py` — vaxt (`now`, `ts`, `parse`, Asia/Baku), formatlama (`rel`, `date_short`, `money`, `initials`,
+  `full_name`, `az_upper`), `BAKU_DISTRICTS` (12 rayon + populyar ərazilər).
+- `seed.py` — `seed_minimal`: 1 admin + 3 istifadə olunmamış lisenziya kodu (konsola yazılır); `create_licenses()`.
+- `schema.sql` — cədvəllərin mənbəyi.
+
+## Cədvəllər
+users (role admin|makler, status active|suspended, license_id), licenses (code, days, status new|used|revoked,
+user_id, activated_at, expires_at), devices, sessions, login_attempts, settings, logs, agent_areas (makler ərazisi:
+district, deal_type rent|sale, price_min/max), customer_requests (token, phone, deal_type, districts JSON mətn,
+rooms 5=5+, budget, urgency urgent|month|flexible, consent, status active|closed|expired), offers (UNIQUE request_id+
+agent_id, status sent|accepted|rejected|withdrawn), contacts (offer_id UNIQUE), notifications (user_id və ya
+request_id, is_read), complaints (from_side customer|agent, status new|reviewed).
+Vaxtlar TEXT "YYYY-MM-DD HH:MM:SS" (Asia/Baku, `helpers.ts()`).
+
+## İşə salma
+- Windows-da Python əmrlərini `PYTHONIOENCODING=utf-8` ilə işlət, yoxsa Azərbaycan hərfləri xəta verir.
+- `python run.py [--debug] [--port N]` — server (waitress; `--debug` Flask serveri).
+- `flask --app run init-db --yes [--demo]` — bazanı SIFIRDAN yaradır (hər şey silinir), admin və kodları konsola yazır.
+  Boş bazada sxem və `seed_minimal` ilk işə salınmada avtomatik yaradılır.
+- Render (pulsuz): 15 dəq boş qalanda yatır, ayda 750 saat; Neon pulsuz limiti.
 
 ## Təhlükəsizlik
-Hesab şifrələri .env-dədir, real pilotdan əvvəl dəyişdirilməlidir. Scraper məlumatı Neon-a lokal prosesdən yazır.
-Lalafo-nun şərtləri avtomatik girişi qadağan edir; bina.az/tap.az şərtləri yoxlanmayıb. İstifadəçi riski qəbul edib (10-15 makler testi).
+Admin şifrəsi `.env`-dədir, real pilotdan əvvəl dəyişdirilməlidir. Sessiya + CSRF (formlarda `csrf_token`, API-də
+`X-CSRF-Token`); 15 dəqiqədə `login_fail_limit` uğursuz cəhddən sonra blok.

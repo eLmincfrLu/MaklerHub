@@ -29,9 +29,6 @@ class Config:
     UPLOAD_DIR = os.path.join(INSTANCE_DIR, "uploads")
     TIMEZONE = os.environ.get("MAKLERHUB_TZ", "Asia/Baku")
 
-    # Fon rejimində mənbələrin avtomatik sinxronizasiyası (1 = aktiv, 0 = deaktiv)
-    SCHEDULER = os.environ.get("MAKLERHUB_SCHEDULER", "1") == "1"
-
     # Şifrə bərpası üçün e-poçt (boş qalsa, link server konsoluna və sistem loqlarına yazılır)
     MAIL_SERVER = os.environ.get("MAKLERHUB_MAIL_SERVER", "")
     MAIL_PORT = int(os.environ.get("MAKLERHUB_MAIL_PORT", "587"))

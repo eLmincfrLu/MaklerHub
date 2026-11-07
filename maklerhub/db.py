@@ -6,6 +6,7 @@ sətirlərə həm ad (`row["x"]`), həm indeks (`row[0]`) ilə müraciət etmək
 """
 import os
 import re
+import sys
 
 import click
 import psycopg
@@ -16,28 +17,11 @@ from psycopg_pool import ConnectionPool
 from .helpers import ts
 
 DEFAULT_SETTINGS = {
-    # Sinxronizasiya
-    "sync_interval": "5",          # dəqiqə
-    "rate_limit": "30",            # sorğu/dəq
-    "timeout": "10",               # saniyə
-    "retries": "3",
-    "auto_slow": "1",
     # Bildirişlər
     "notify_email": "admin@maklerhub.az",
-    "notify_source_down": "1",
     "notify_new_makler": "1",
-    "notify_daily": "0",
-    # Planlar
-    "trial_days": "14",
-    "plan_start_price": "29",
-    "plan_start_clients": "10",
-    "plan_start_profiles": "15",
-    "plan_pro_price": "59",
-    "plan_pro_clients": "50",
-    "plan_pro_profiles": "100",
     # Təhlükəsizlik
-    "admin_2fa": "1",
-    "session_timeout": "120",      # dəqiqə
+    "session_timeout": "120",      # dəqiqə (admin sessiyası)
     "login_fail_limit": "5",
 }
 
@@ -99,9 +83,8 @@ def _row_factory(cursor):
 
 
 # id sütunu olan cədvəllər (INSERT-dən sonra cur.lastrowid üçün RETURNING id əlavə olunur)
-_ID_TABLES = {"users", "clients", "profiles", "sources", "sync_runs", "listings", "price_history", "matches",
-              "logs", "login_attempts", "licenses", "license_attempts", "sessions", "devices", "phone_views",
-              "notifications"}
+_ID_TABLES = {"users", "licenses", "devices", "sessions", "login_attempts", "logs", "agent_areas",
+              "customer_requests", "offers", "contacts", "notifications", "complaints"}
 _INSERT_RE = re.compile(r"^\s*INSERT\s+(OR\s+IGNORE\s+)?INTO\s+(\w+)", re.I)
 
 
@@ -194,7 +177,7 @@ def normalize_url(url):
 
 
 def connect(url):
-    """Ayrıca (hovuzsuz) bağlantı: CLI, planlayıcı və s. üçün."""
+    """Ayrıca (hovuzsuz) bağlantı: CLI və s. üçün."""
     return Conn(psycopg.connect(normalize_url(url), connect_timeout=15))
 
 
@@ -230,19 +213,7 @@ def create_schema(con):
         con.script(fh.read())
     for k, v in DEFAULT_SETTINGS.items():
         con.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (k, v))
-    seed_plans(con)
     con.commit()
-
-
-# Planların adları dizayna uyğundur; limitlər sonra (Gün 20-22) təyin olunur (NULL = hələ təyin olunmayıb)
-DEFAULT_PLANS = [
-    ("free", "Free", 0), ("pro", "Pro", 1), ("business", "Business", 2), ("agency", "Agency", 3),
-]
-
-
-def seed_plans(con):
-    for key, name, sort in DEFAULT_PLANS:
-        con.execute("INSERT OR IGNORE INTO plans(key, name, sort, max_devices) VALUES (?,?,?,2)", (key, name, sort))
 
 
 def _schema_exists(con):
@@ -250,7 +221,7 @@ def _schema_exists(con):
 
 
 def init_db(url, seed=False):
-    """Bazanı SIFIRDAN yaradır (bütün cədvəllər silinir!). seed=True → dizayndakı nümunə məlumatlar."""
+    """Bazanı SIFIRDAN yaradır (bütün cədvəllər silinir!). seed=True → demo məlumatlar (hələlik minimal ilə eyni)."""
     con = connect(url)
     try:
         con.script("DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;")
@@ -304,30 +275,20 @@ def init_app(app):
     app.config["DATABASE"] = url
 
     @app.cli.command("init-db")
-    @click.option("--demo", is_flag=True, help="Dizayndakı nümunə məlumatlarla doldur.")
-    @click.option("--empty", is_flag=True, hidden=True, help="(köhnə seçim, artıq standartdır)")
+    @click.option("--demo", is_flag=True, help="Demo məlumatlarla doldur.")
     @click.option("--yes", is_flag=True, help="Təsdiq soruşma.")
-    def init_db_command(demo, empty, yes):
+    def init_db_command(demo, yes):
         """Verilənlər bazasını SIFIRDAN yaradır (bütün məlumat silinir!)."""
         if not yes and not click.confirm("Bütün cədvəllər və məlumat SİLİNƏCƏK. Davam edilsin?"):
             click.echo("Ləğv edildi.")
             return
-        init_db(url, seed=demo and not empty)
+        init_db(url, seed=demo)
         click.echo("Verilənlər bazası yaradıldı.")
 
-    @app.cli.command("sync")
-    def sync_command():
-        """Bütün aktiv mənbələri dərhal sinxronlaşdırır."""
-        from .sources import sync_all
-        con = connect(url)
-        try:
-            sync_all(con)
-            con.commit()
-        finally:
-            con.close()
-        click.echo("Sinxronizasiya tamamlandı.")
-
-    # İlk işə salınmada sxem avtomatik yaradılır (boş baza: yalnız mənbələr, admin və makler hesabı)
+    # İlk işə salınmada sxem avtomatik yaradılır (boş baza: admin hesabı və lisenziya kodları).
+    # `init-db` onsuz da sıfırdan yaradır — iki dəfə seed (və iki dəst kod) olmasın deyə burada ötürülür.
+    if "init-db" in sys.argv:
+        return
     con = connect(url)
     try:
         fresh = not _schema_exists(con)

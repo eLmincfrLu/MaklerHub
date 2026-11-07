@@ -37,7 +37,7 @@
 {% block modals %}{% endblock %}
 <div class="mh-overlay" id="detailModal"><div class="mh-modal mh-wide"></div></div>
 <div class="mh-toast" id="mhToast" role="status"></div>
-<script>window.MH_URLS={settings:"{{ url_for('makler.ayarlar') }}",logout:"{{ url_for('auth.cixis') }}",match:"{{ url_for('makler.api_match', mid=0) }}".replace(/0$/,''),notifs:"{{ url_for('makler.api_notifications') }}"};</script>
+<script>window.MH_URLS={settings:"{{ url_for('makler.ayarlar') }}",logout:"{{ url_for('auth.cixis') }}",notifs:"{{ url_for('makler.api_notifications') }}"};</script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>

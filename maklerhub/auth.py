@@ -1,4 +1,4 @@
-"""Giriş, qeydiyyat, çıxış, şifrə bərpası, CSRF qoruması və icazə dekoratorları."""
+"""Giriş, çıxış, şifrə bərpası, qeydiyyat (placeholder), CSRF qoruması və icazə dekoratorları."""
 import functools
 import re
 import secrets
@@ -17,7 +17,7 @@ from .helpers import full_name, now, ts
 
 bp = Blueprint("auth", __name__)
 
-ROLES = {"alici", "satici", "makler"}
+ROLES = {"admin", "makler"}
 
 
 # ---------------------------------------------------------------- köməkçilər
@@ -89,7 +89,7 @@ def login_required(view):
 
 
 def member_required(view):
-    """Makler / alıcı / satıcı kabineti."""
+    """Makler kabineti (admin öz panelinə yönləndirilir)."""
     @functools.wraps(view)
     @login_required
     def wrapped(*args, **kwargs):
@@ -175,8 +175,10 @@ def giris():
                 if user["status"] == "suspended":
                     error = "Hesabınız dayandırılıb. Administratorla əlaqə saxlayın."
                 else:
+                    stamp = ts()
                     db.execute("INSERT INTO login_attempts(email, ip, success, created_at) VALUES (?, ?, 1, ?)",
-                               (email, ip, ts()))
+                               (email, ip, stamp))
+                    db.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (stamp, user["id"]))
                     db.commit()
                     login_user(user, remember)
                     return redirect(_safe_next(request.args.get("next")) or home_url(user))
@@ -193,59 +195,12 @@ def giris():
 
 
 # ---------------------------------------------------------------- qeydiyyat
-@bp.route("/qeydiyyat", methods=["GET", "POST"])
+@bp.route("/qeydiyyat")
 def qeydiyyat():
+    """Makler qeydiyyatı lisenziya kodu ilə olacaq (Gün 2). Hələlik məlumat səhifəsi."""
     if g.user:
         return redirect(home_url(g.user))
-    form = {"role": "alici"}
-    errors = []
-    if request.method == "POST":
-        db = get_db()
-        form = {k: (request.form.get(k) or "").strip() for k in ("role", "fname", "lname", "email", "phone", "license")}
-        form["email"] = normalize_email(form["email"])
-        pw, pw2 = request.form.get("password", ""), request.form.get("password2", "")
-        if form["role"] not in ROLES:
-            form["role"] = "alici"
-        if not form["fname"] or not form["lname"]:
-            errors.append("Ad və soyad daxil edilməlidir.")
-        if not valid_email(form["email"]):
-            errors.append("E-poçt ünvanı düzgün deyil.")
-        elif db.execute("SELECT 1 FROM users WHERE email = ?", (form["email"],)).fetchone():
-            errors.append("Bu e-poçt ilə artıq hesab mövcuddur.")
-        if form["role"] == "makler" and not form["license"]:
-            errors.append("Makler üçün lisenziya nömrəsi tələb olunur.")
-        problem = password_problem(pw)
-        if problem:
-            errors.append(problem)
-        elif pw != pw2:
-            errors.append("Şifrələr üst-üstə düşmür.")
-        if request.form.get("terms") != "on":
-            errors.append("İstifadə şərtləri ilə razılaşmalısınız.")
-        if not errors:
-            stamp = now()
-            if form["role"] == "makler":
-                days = int(get_setting(db, "trial_days") or 14)
-                plan, status, trial = "pro", "trial", ts(stamp + timedelta(days=days))
-            else:
-                days, plan, status, trial = 0, "none", "active", None
-            cur = db.execute(
-                "INSERT INTO users(first_name, last_name, email, phone, password_hash, role, license_no, plan, "
-                "status, trial_ends, password_changed_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (form["fname"], form["lname"], form["email"], form["phone"], generate_password_hash(pw),
-                 form["role"], form["license"], plan, status, trial, ts(stamp), ts(stamp)),
-            )
-            name = f"{form['fname']} {form['lname']}"
-            if form["role"] == "makler":
-                add_log(db, "info", "Makler", f"Yeni makler qeydiyyatı: {name}",
-                        f"plan=Pro sınaq={days} gün\nlisenziya={form['license']}")
-            else:
-                label = "Alıcı" if form["role"] == "alici" else "Satıcı"
-                add_log(db, "info", "Sistem", f"Yeni istifadəçi qeydiyyatı ({label}): {name}", f"email={form['email']}")
-            db.commit()
-            user = db.execute("SELECT * FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
-            login_user(user)
-            return redirect(home_url(user))
-    return render_template("auth/qeydiyyat.html", form=form, errors=errors)
+    return render_template("auth/qeydiyyat.html")
 
 
 @bp.route("/cixis")

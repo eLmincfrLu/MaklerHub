@@ -1,6 +1,5 @@
-"""Tarix, qiymət, ad və elan formatlama köməkçiləri (Azərbaycan dilində)."""
-import json
-from datetime import datetime, timedelta
+"""Tarix, qiymət və ad formatlama köməkçiləri, Bakı rayonları (Azərbaycan dilində)."""
+from datetime import datetime
 
 try:
     from zoneinfo import ZoneInfo
@@ -15,9 +14,15 @@ MONTHS_FULL = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avqu
                "sentyabr", "oktyabr", "noyabr", "dekabr"]
 WEEKDAYS = ["Bazar ertəsi", "Çərşənbə axşamı", "Çərşənbə", "Cümə axşamı", "Cümə", "Şənbə", "Bazar günü"]
 
-ROLE_LABELS = {"makler": "Makler", "alici": "Alıcı", "satici": "Satıcı", "admin": "Admin"}
-PLAN_LABELS = {"start": "Başlanğıc", "pro": "Pro", "none": "—"}
-SOURCE_COLORS = {"bina": "var(--gold)", "lalafo": "var(--ok)", "tap": "var(--navy)"}
+ROLE_LABELS = {"makler": "Makler", "admin": "Admin"}
+
+# Müştəri tələbi və makler ərazisi üçün sabit siyahı: əvvəl inzibati rayonlar, sonra populyar ərazilər
+BAKU_DISTRICTS = [
+    "Binəqədi", "Qaradağ", "Xətai", "Xəzər", "Nərimanov", "Nəsimi", "Nizami", "Pirallahı", "Sabunçu", "Səbail",
+    "Suraxanı", "Yasamal",
+    "Gənclik", "28 May", "Elmlər", "Nəriman Nərimanov m.", "İçərişəhər", "Bayıl", "Badamdar", "Əhmədli",
+    "Həzi Aslanov", "Qara Qarayev", "Neftçilər", "Yeni Yasamal", "Masazır", "Xırdalan",
+]
 
 
 # ---------------------------------------------------------------- vaxt
@@ -98,21 +103,6 @@ def rel(value):
     return date_short(dt)
 
 
-def contact_rel(value):
-    """Müştəri ilə son əlaqə: 'Bu gün, 09:14', 'Dünən, 18:40', '5 saat əvvəl'..."""
-    dt = parse(value)
-    if not dt:
-        return "—"
-    n = now()
-    if dt.date() == n.date():
-        if (n - dt).total_seconds() < 6 * 3600:
-            return rel(dt)
-        return f"Bu gün, {dt:%H:%M}"
-    if dt.date() == (n - timedelta(days=1)).date():
-        return f"Dünən, {dt:%H:%M}"
-    return rel(dt)
-
-
 # ---------------------------------------------------------------- mətn
 def az_upper(s):
     return (s or "").replace("i", "İ").upper()
@@ -133,130 +123,12 @@ def money(n):
     return f"{int(round(n or 0)):,}"
 
 
-def price_str(price, deal):
-    return f"{money(price)} AZN/ay" if deal == "rent" else f"{money(price)} AZN"
-
-
-def _short(n):
-    if n >= 1_000_000:
-        v = n / 1_000_000
-        return (f"{v:.2f}".rstrip("0").rstrip(".")) + "M"
-    v = n / 1000
-    return (str(int(v)) if v == int(v) else f"{v:.1f}".rstrip("0").rstrip(".")) + "K"
-
-
-def range_str(lo, hi, deal, dash="–"):
-    if deal == "rent":
-        return f"{lo}{dash}{hi} AZN/ay"
-    a, b = _short(lo), _short(hi)
-    if a.endswith("K") and b.endswith("K"):
-        return f"{a[:-1]}{dash}{b} AZN"
-    return f"{a}{dash}{b} AZN"
-
-
-# ---------------------------------------------------------------- axtarış profili
-def rooms_label(p):
-    if p["rooms"]:
-        return f"{p['rooms']}{'+' if p['rooms_plus'] else ''} otaq"
-    return None
-
-
-def profile_crit(p, dash="–"):
-    parts = [p["district"]]
-    rl = rooms_label(p)
-    if rl:
-        parts.append(rl)
-    elif p["property_type"]:
-        parts.append(p["property_type"])
-    parts.append(range_str(p["price_min"], p["price_max"], p["deal_type"], dash))
-    return " · ".join(parts)
-
-
-def profile_tags(p):
-    tags = [p["district"]]
-    rl = rooms_label(p)
-    if rl:
-        tags.append(rl)
-    elif p["property_type"]:
-        tags.append(p["property_type"])
-    tags.append(range_str(p["price_min"], p["price_max"], p["deal_type"]))
-    if rl and p["property_type"]:
-        tags.append(p["property_type"])
-    if p["deal_type"] == "rent":
-        tags.append("Kirayə")
-    return tags
-
-
-# ---------------------------------------------------------------- elan
-def fmt_area(a):
-    return str(int(a)) if float(a) == int(a) else f"{a:.1f}"
-
-
-def listing_title(l):
-    return f"{l['title']} — {l['suffix']}" if l["suffix"] else l["title"]
-
-
-def listing_title_long(l):
-    s = f"{l['title']}, {price_str(l['price'], l['deal_type'])}"
-    if l["deal_type"] == "rent":
-        s += " kirayə"
-    return s
-
-
-def listing_meta(l):
-    parts = [f"{fmt_area(l['area'])} m²"]
-    label = l["renovation"] or l["building"]
-    if label:
-        parts.append(label)
-    if l["floor"] and l["floors"]:
-        parts.append(f"{l['floor']}/{l['floors']} mərtəbə")
-    if l["metro_m"] and l["metro_m"] <= 1500:
-        parts.append(f"metroya {l['metro_m']}m")
-    return " · ".join(parts)
-
-
-def reasons_list(raw):
-    try:
-        return json.loads(raw or "[]")
-    except ValueError:
-        return []
-
-
-def why(reasons, long=False):
-    out = []
-    for kind, short, lng in reasons:
-        out.append(("✓ " if kind == "ok" else "△ ") + (lng if long else short))
-    return " · ".join(out)
-
-
-def ring_offset(score, circ):
-    return round(circ * (1 - score / 100.0), 1)
-
-
-def price_drop_info(con, listing):
-    """(köhnə qiymət, faiz, 'N gündə K dəfə ucuzlaşıb') və ya None."""
-    rows = con.execute(
-        "SELECT price, recorded_at FROM price_history WHERE listing_id = ? AND recorded_at >= ? ORDER BY recorded_at",
-        (listing["id"], ts(now() - timedelta(days=30))),
-    ).fetchall()
-    if len(rows) < 2:
-        return None
-    drops = sum(1 for a, b in zip(rows, rows[1:]) if b["price"] < a["price"])
-    old = max(r["price"] for r in rows)
-    if drops == 0 or old <= listing["price"]:
-        return None
-    days = max(1, (now() - parse(rows[0]["recorded_at"])).days)
-    pct = round((old - listing["price"]) / old * 100)
-    return {"old": price_str(old, listing["deal_type"]), "pct": pct,
-            "text": f"{days} gündə {drops} dəfə ucuzlaşıb"}
-
-
 # ---------------------------------------------------------------- Jinja
 def init_app(app):
     app.jinja_env.filters.update(
-        rel=rel, contact_rel=contact_rel, date_short=date_short, money=money,
+        rel=rel, date_short=date_short, money=money,
         az_upper=az_upper,
     )
     app.jinja_env.globals.update(
-        initials=initials, full_name=full_name, ROLE_LABELS=ROLE_LABELS, PLAN_LABELS=PLAN_LABELS,
+        initials=initials, full_name=full_name, ROLE_LABELS=ROLE_LABELS, BAKU_DISTRICTS=BAKU_DISTRICTS,
     )
