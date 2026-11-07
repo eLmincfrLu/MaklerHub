@@ -1,0 +1,58 @@
+{% extends 'admin/base.html' %}
+{% set page_css = 'admin-lisenziya.css' %}
+{% block title %}Admin · Lisenziyalar{% endblock %}
+{% block shell %}
+  <main>
+    <div class="head reveal" style="animation-delay:.05s">
+      <div><h1>Lisenziya kodları</h1><p>Makler yalnız istifadə olunmamış kodla qeydiyyatdan keçə bilər</p></div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="lic-flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+
+    <div class="kpis reveal" style="animation-delay:.1s">
+      <div class="kpi"><div class="l">Cəmi kod</div><div class="n">{{ counts.values()|sum }}</div></div>
+      {%- for key, label in labels.items() %}
+      <div class="kpi"><div class="l">{{ label }}</div><div class="n">{{ counts.get(key, 0) }}</div></div>
+      {%- endfor %}
+    </div>
+
+    <form class="lic-form reveal" style="animation-delay:.14s" method="post" action="{{ url_for('admin.lisenziya_yarat') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mh-field"><label for="count">Say (1–{{ max_batch }})</label><input id="count" name="count" type="number" min="1" max="{{ max_batch }}" value="1" required></div>
+      <div class="mh-field"><label for="days">Müddət (gün)</label><input id="days" name="days" type="number" min="1" max="3650" value="{{ default_days }}" required></div>
+      <div class="mh-field grow"><label for="note">Qeyd (istəyə bağlı)</label><input id="note" name="note" type="text" maxlength="200" placeholder="Məs.: Rəşad M., ödəniş 15.11"></div>
+      <button class="btn" type="submit">Kod yarat</button>
+    </form>
+
+    <div class="toolbar reveal" style="animation-delay:.18s">
+      <div class="filters">
+        <a class="fchip{% if status not in labels %} active{% endif %}" href="{{ url_for('admin.lisenziyalar') }}">Hamısı</a>
+        {%- for key, label in labels.items() %}
+        <a class="fchip{% if status == key %} active{% endif %}" href="{{ url_for('admin.lisenziyalar', status=key) }}">{{ label }}</a>
+        {%- endfor %}
+      </div>
+    </div>
+
+    <div class="tablewrap reveal" style="animation-delay:.22s">
+      <table>
+        <thead><tr><th>Kod</th><th>Status</th><th>Kimə aid</th><th>Aktivləşmə</th><th>Bitmə tarixi</th><th>Müddət</th><th>Qeyd</th><th></th></tr></thead>
+        <tbody>
+          {%- for r in rows %}
+          <tr>
+            <td><span class="lic-code">{{ r.l.code }}</span><div class="msub">yaradılıb {{ r.created }}</div></td>
+            <td><span class="pill {{ r.pill }}">{{ r.label }}</span></td>
+            <td>{% if r.owner %}<div class="mname">{{ r.owner }}</div><div class="msub">{{ r.l.email }}</div>{% else %}—{% endif %}</td>
+            <td>{{ r.activated }}</td>
+            <td>{{ r.expires }}</td>
+            <td>{{ r.l.days }} gün</td>
+            <td><div class="msub">{{ r.l.note or '—' }}</div></td>
+            <td>{% if r.l.status != 'revoked' %}<form method="post" action="{{ url_for('admin.lisenziya_legv', lid=r.l.id, status=status) }}" onsubmit="return confirm('{{ r.l.code }} ləğv edilsin?{% if r.owner %} Makler kabinetə girə bilməyəcək.{% endif %}')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="lic-revoke" type="submit">Ləğv et</button></form>{% endif %}</td>
+          </tr>
+          {%- else %}
+          <tr><td colspan="8" class="mh-empty">Bu filtrdə kod yoxdur.</td></tr>
+          {%- endfor %}
+        </tbody>
+      </table>
+    </div>
+  </main>
+{% endblock %}

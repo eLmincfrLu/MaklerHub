@@ -1,4 +1,5 @@
-"""Tarix, qiymət və ad formatlama köməkçiləri, Bakı rayonları (Azərbaycan dilində)."""
+"""Tarix, qiymət, ad və telefon formatlama köməkçiləri, Bakı rayonları (Azərbaycan dilində)."""
+import re
 from datetime import datetime
 
 try:
@@ -118,6 +119,31 @@ def full_name(user):
     return f"{user['first_name']} {user['last_name']}".strip()
 
 
+# ---------------------------------------------------------------- telefon
+PHONE_OPERATORS = ("10", "50", "51", "55", "60", "70", "77", "99")
+
+
+def normalize_phone(value):
+    """'+994 50 123 45 67', '050-123-45-67', '501234567' → '+994501234567'; yanlışdırsa None."""
+    digits = re.sub(r"\D", "", value or "")
+    if digits.startswith("994"):
+        digits = digits[3:]
+    elif digits.startswith("0"):
+        digits = digits[1:]
+    if len(digits) != 9 or digits[:2] not in PHONE_OPERATORS:
+        return None
+    return "+994" + digits
+
+
+def phone_display(value):
+    """'+994501234567' → '+994 50 123 45 67'."""
+    p = normalize_phone(value)
+    if not p:
+        return value or ""
+    d = p[4:]
+    return f"+994 {d[:2]} {d[2:5]} {d[5:7]} {d[7:]}"
+
+
 # ---------------------------------------------------------------- qiymət
 def money(n):
     return f"{int(round(n or 0)):,}"
@@ -126,7 +152,7 @@ def money(n):
 # ---------------------------------------------------------------- Jinja
 def init_app(app):
     app.jinja_env.filters.update(
-        rel=rel, date_short=date_short, money=money,
+        rel=rel, date_short=date_short, money=money, phone=phone_display,
         az_upper=az_upper,
     )
     app.jinja_env.globals.update(

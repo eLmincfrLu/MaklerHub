@@ -1,5 +1,7 @@
-"""Giriş, çıxış, şifrə bərpası, qeydiyyat (placeholder), CSRF qoruması və icazə dekoratorları."""
+"""Giriş, lisenziya kodu ilə qeydiyyat, çıxış, şifrə bərpası, makler cihaz limiti və tək sessiya,
+CSRF qoruması və icazə dekoratorları."""
 import functools
+import hashlib
 import re
 import secrets
 import smtplib
@@ -7,13 +9,15 @@ import time
 from datetime import timedelta
 from email.message import EmailMessage
 
+import psycopg
 from flask import (Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request,
                    session, url_for)
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from . import licenses
 from .db import add_log, get_db, get_setting
-from .helpers import full_name, now, ts
+from .helpers import full_name, normalize_phone, now, ts
 
 bp = Blueprint("auth", __name__)
 
@@ -68,12 +72,89 @@ def _safe_next(target):
     return target if target and target.startswith("/") and not target.startswith("//") else None
 
 
-def login_user(user, remember=False):
+def client_ip():
+    return request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+
+
+def login_user(user, remember=False, session_token=None):
     session.clear()
     session["uid"] = user["id"]
     session["seen"] = time.time()
+    if session_token:
+        session["st"] = session_token
+        session["st_seen"] = time.time()
     session.permanent = bool(remember)
     csrf_token()
+
+
+# ---------------------------------------------------------------- makler: cihaz və tək sessiya
+DEVICE_COOKIE = "mh_device"
+DEVICE_COOKIE_AGE = 365 * 24 * 3600
+TOUCH_EVERY = 300  # saniyə: sessions/devices.last_seen_at bundan tez-tez yazılmır
+LICENSE_MSG = "Lisenziyanız bitib, admin ilə əlaqə saxlayın."
+DEVICE_LIMIT_MSG = "Cihaz limiti dolub, admin ilə əlaqə saxlayın."
+
+
+def _device_key(user_id, browser_id):
+    """Bazada cookie-nin özü yox, istifadəçiyə bağlı heşi saxlanılır (bir brauzer — hər makler üçün ayrı cihaz)."""
+    return hashlib.sha256(f"{user_id}:{browser_id}".encode()).hexdigest()
+
+
+def _browser_id():
+    value = request.cookies.get(DEVICE_COOKIE) or ""
+    return value if 20 <= len(value) <= 100 else secrets.token_urlsafe(24)
+
+
+def open_makler_session(db, user):
+    """Cihazı yoxlayır/qeyd edir, köhnə sessiyaları bağlayıb yenisini açır.
+    Qaytarır: (session_token, browser_id) və ya (None, xəta mətni)."""
+    browser = _browser_id()
+    key = _device_key(user["id"], browser)
+    stamp, ip, ua = ts(), client_ip(), (request.user_agent.string or "")[:300]
+    dev = db.execute("SELECT id FROM devices WHERE device_token = ?", (key,)).fetchone()
+    if dev:
+        device_id = dev["id"]
+        db.execute("UPDATE devices SET last_seen_at = ?, ip = ?, user_agent = ? WHERE id = ?", (stamp, ip, ua, device_id))
+    else:
+        limit = int(get_setting(db, "max_devices") or 2)
+        count = db.execute("SELECT COUNT(*) FROM devices WHERE user_id = ?", (user["id"],)).fetchone()[0]
+        if count >= limit:
+            add_log(db, "warn", "Makler", f"Cihaz limiti: {full_name(user)}",
+                    f"email={user['email']}\ncihaz={count}/{limit}\nIP={ip}\n{ua[:120]}")
+            db.commit()
+            return None, DEVICE_LIMIT_MSG
+        device_id = db.execute("INSERT INTO devices(user_id, device_token, user_agent, ip, created_at, last_seen_at) "
+                               "VALUES (?,?,?,?,?,?)", (user["id"], key, ua, ip, stamp, stamp)).lastrowid
+        if count:
+            add_log(db, "info", "Makler", f"Yeni cihaz: {full_name(user)}", f"cihaz={count + 1}/{limit}\nIP={ip}")
+    token = secrets.token_urlsafe(32)
+    db.execute("UPDATE sessions SET active = 0 WHERE user_id = ? AND active = 1", (user["id"],))
+    db.execute("INSERT INTO sessions(user_id, device_id, token, active, created_at, last_seen_at) VALUES (?,?,?,1,?,?)",
+               (user["id"], device_id, token, stamp, stamp))
+    return token, browser
+
+
+def finish_login(db, user, remember=False):
+    """Uğurlu yoxlamadan sonra: makler üçün cihaz + sessiya, sonra yönləndirmə. Alınmasa (None, xəta mətni)."""
+    token = browser = None
+    if user["role"] == "makler":
+        token, browser = open_makler_session(db, user)
+        if token is None:
+            return None, browser
+    db.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (ts(), user["id"]))
+    db.commit()
+    login_user(user, remember, token)
+    resp = redirect(_safe_next(request.args.get("next")) or home_url(user))
+    if browser:
+        resp.set_cookie(DEVICE_COOKIE, browser, max_age=DEVICE_COOKIE_AGE, httponly=True, samesite="Lax",
+                        secure=current_app.config.get("SESSION_COOKIE_SECURE", False))
+    return resp, None
+
+
+def license_page(status=403):
+    if is_api_request():
+        return jsonify(ok=False, error=LICENSE_MSG), status
+    return render_template("auth/lisenziya.html", message=LICENSE_MSG), status
 
 
 # ---------------------------------------------------------------- dekoratorlar
@@ -112,6 +193,33 @@ def admin_required(view):
 
 
 # ---------------------------------------------------------------- sorğu öncəsi
+def _logout(message):
+    session.clear()
+    flash(message, "err")
+    if is_api_request():
+        return jsonify(ok=False, error=message), 401
+    return redirect(url_for("auth.giris"))
+
+
+def _check_makler_session(db, user):
+    """Makler sessiyası bazada aktiv olmalıdır (başqa cihazdan giriş köhnəni bağlayır)."""
+    token = session.get("st")
+    row = db.execute("SELECT id, device_id, active FROM sessions WHERE token = ? AND user_id = ?",
+                     (token, user["id"])).fetchone() if token else None
+    if row is None:
+        return _logout("Sessiya bitib. Yenidən daxil olun.")
+    if not row["active"]:
+        return _logout("Hesabınıza başqa cihazdan daxil olundu.")
+    if time.time() - session.get("st_seen", 0) > TOUCH_EVERY:
+        stamp = ts()
+        db.execute("UPDATE sessions SET last_seen_at = ? WHERE id = ?", (stamp, row["id"]))
+        if row["device_id"]:
+            db.execute("UPDATE devices SET last_seen_at = ? WHERE id = ?", (stamp, row["device_id"]))
+        db.commit()
+        session["st_seen"] = time.time()
+    return None
+
+
 def init_app(app):
     app.permanent_session_lifetime = timedelta(days=30)
     app.jinja_env.globals["csrf_token"] = csrf_token
@@ -133,13 +241,18 @@ def init_app(app):
                     limit = int(get_setting(db, "session_timeout") or 120) * 60
                     last = session.get("seen")
                     if last and time.time() - last > limit:
-                        session.clear()
-                        flash("Sessiya vaxtı bitdi. Yenidən daxil olun.", "err")
-                        if is_api_request():
-                            return jsonify(ok=False, error="Sessiya vaxtı bitdi."), 401
-                        return redirect(url_for("auth.giris"))
+                        return _logout("Sessiya vaxtı bitdi. Yenidən daxil olun.")
+                else:
+                    stop = _check_makler_session(db, user)
+                    if stop:
+                        return stop
                 session["seen"] = time.time()
                 g.user = user
+                # lisenziyası bitmiş/ləğv olunmuş makler: kabinet və hesab API-ləri bağlıdır (çıxış açıqdır)
+                if user["role"] == "makler" and (request.blueprint == "makler"
+                                                 or request.endpoint == "auth.change_password"):
+                    if licenses.license_problem(db, user):
+                        return license_page()
 
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
             sent = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
@@ -166,22 +279,23 @@ def giris():
         since = ts(now() - timedelta(minutes=15))
         fails = db.execute("SELECT COUNT(*) FROM login_attempts WHERE email = ? AND success = 0 AND created_at >= ?",
                            (email, since)).fetchone()[0]
-        ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+        ip = client_ip()
         if fails >= limit:
             error = "Çox sayda uğursuz cəhd edildi. 15 dəqiqə sonra yenidən yoxlayın."
         else:
             user = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
             if user and check_password_hash(user["password_hash"], password):
+                db.execute("INSERT INTO login_attempts(email, ip, success, created_at) VALUES (?, ?, 1, ?)",
+                           (email, ip, ts()))
+                db.commit()
                 if user["status"] == "suspended":
                     error = "Hesabınız dayandırılıb. Administratorla əlaqə saxlayın."
+                elif licenses.license_problem(db, user):
+                    return license_page()
                 else:
-                    stamp = ts()
-                    db.execute("INSERT INTO login_attempts(email, ip, success, created_at) VALUES (?, ?, 1, ?)",
-                               (email, ip, stamp))
-                    db.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (stamp, user["id"]))
-                    db.commit()
-                    login_user(user, remember)
-                    return redirect(_safe_next(request.args.get("next")) or home_url(user))
+                    resp, error = finish_login(db, user, remember)
+                    if resp:
+                        return resp
             else:
                 db.execute("INSERT INTO login_attempts(email, ip, success, created_at) VALUES (?, ?, 0, ?)",
                            (email, ip, ts()))
@@ -195,16 +309,119 @@ def giris():
 
 
 # ---------------------------------------------------------------- qeydiyyat
-@bp.route("/qeydiyyat")
+CODE_FAIL_LIMIT = 10           # IP başına 15 dəqiqədə yanlış lisenziya kodu cəhdi
+CODE_ATTEMPT_KEY = "#license"  # login_attempts.email sütununda kod cəhdlərinin işarəsi (e-poçt ola bilməz)
+
+
+def _code_fails(db, ip):
+    since = ts(now() - timedelta(minutes=15))
+    return db.execute("SELECT COUNT(*) FROM login_attempts WHERE email = ? AND ip = ? AND success = 0 "
+                      "AND created_at >= ?", (CODE_ATTEMPT_KEY, ip, since)).fetchone()[0]
+
+
+def _code_attempt(db, ip, ok):
+    db.execute("INSERT INTO login_attempts(email, ip, success, created_at) VALUES (?, ?, ?, ?)",
+               (CODE_ATTEMPT_KEY, ip, 1 if ok else 0, ts()))
+
+
+def _check_code(db, ip, raw):
+    """(lisenziya sətri, None) və ya (None, xəta). Yanlış kod cəhdləri IP üzrə sayılır."""
+    if _code_fails(db, ip) >= CODE_FAIL_LIMIT:
+        return None, "Çox sayda yanlış kod cəhdi edildi. 15 dəqiqə sonra yenidən yoxlayın."
+    code = licenses.normalize_code(raw)
+    lic = db.execute("SELECT id, code, days, status FROM licenses WHERE code = ?", (code,)).fetchone() if code else None
+    if lic is not None and lic["status"] == "new":
+        return lic, None
+    _code_attempt(db, ip, False)
+    if _code_fails(db, ip) >= CODE_FAIL_LIMIT:
+        add_log(db, "warn", "Makler", "Lisenziya kodu cəhdləri bloklandı", f"IP={ip}\n{CODE_FAIL_LIMIT} yanlış kod / 15 dəq")
+    db.commit()
+    if lic is None:
+        return None, "Lisenziya kodu yanlışdır."
+    return None, ("Bu lisenziya kodu artıq istifadə olunub." if lic["status"] == "used"
+                  else "Bu lisenziya kodu ləğv edilib.")
+
+
+def _register(db, form, phone, pw, lic_id, ip):
+    """Kod + istifadəçi + aktivləşdirmə bir tranzaksiyada. Qaytarır: (user_id, None) və ya (None, xəta)."""
+    stamp = ts()
+    try:
+        # FOR UPDATE: eyni kodla paralel iki qeydiyyat ola bilməz
+        lic = db.execute("SELECT id, code, days, status FROM licenses WHERE id = ? FOR UPDATE", (lic_id,)).fetchone()
+        if lic["status"] != "new":
+            db.rollback()
+            return None, "Bu lisenziya kodu artıq istifadə olunub."
+        uid = db.execute(
+            "INSERT INTO users(first_name, last_name, email, phone, password_hash, role, status, license_id, "
+            "created_at, password_changed_at) VALUES (?,?,?,?,?,'makler','active',?,?,?)",
+            (form["fname"], form["lname"], form["email"], phone, generate_password_hash(pw), lic["id"],
+             stamp, stamp)).lastrowid
+        expires = licenses.activate(db, lic["id"], uid, lic["days"])
+        _code_attempt(db, ip, True)
+        add_log(db, "info", "Makler", f"Yeni makler qeydiyyatı: {form['fname']} {form['lname']}",
+                f"email={form['email']}\nlisenziya={lic['code']} ({lic['days']} gün, bitir {expires[:10]})")
+        db.commit()
+        return uid, None
+    except psycopg.errors.UniqueViolation:
+        db.rollback()
+        return None, "Bu e-poçt ilə artıq hesab mövcuddur."
+
+
+@bp.route("/qeydiyyat", methods=["GET", "POST"])
 def qeydiyyat():
-    """Makler qeydiyyatı lisenziya kodu ilə olacaq (Gün 2). Hələlik məlumat səhifəsi."""
+    """Makler qeydiyyatı: yalnız admin verdiyi istifadə olunmamış lisenziya kodu ilə."""
     if g.user:
         return redirect(home_url(g.user))
-    return render_template("auth/qeydiyyat.html")
+    form = {}
+    errors = []
+    if request.method == "POST":
+        db = get_db()
+        ip = client_ip()
+        form = {k: (request.form.get(k) or "").strip() for k in ("fname", "lname", "email", "phone", "license")}
+        form["email"] = normalize_email(form["email"])
+        pw, pw2 = request.form.get("password", ""), request.form.get("password2", "")
+        if not form["fname"] or not form["lname"]:
+            errors.append("Ad və soyad daxil edilməlidir.")
+        elif len(form["fname"]) > 40 or len(form["lname"]) > 40:
+            errors.append("Ad və soyad 40 simvoldan uzun ola bilməz.")
+        if not valid_email(form["email"]):
+            errors.append("E-poçt ünvanı düzgün deyil.")
+        elif db.execute("SELECT 1 FROM users WHERE email = ?", (form["email"],)).fetchone():
+            errors.append("Bu e-poçt ilə artıq hesab mövcuddur.")
+        phone = normalize_phone(form["phone"])
+        if not phone:
+            errors.append("Telefon nömrəsi düzgün deyil (məsələn: +994 50 123 45 67).")
+        problem = password_problem(pw)
+        if problem:
+            errors.append(problem)
+        elif pw != pw2:
+            errors.append("Şifrələr üst-üstə düşmür.")
+        if request.form.get("terms") != "on":
+            errors.append("İstifadə şərtləri ilə razılaşmalısınız.")
+        lic, code_error = _check_code(db, ip, form["license"])
+        if code_error:
+            errors.append(code_error)
+
+        if not errors:
+            uid, error = _register(db, form, phone, pw, lic["id"], ip)
+            if error:
+                errors.append(error)
+            else:
+                user = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+                resp, error = finish_login(db, user)
+                if resp:
+                    return resp
+                flash(error, "err")
+                return redirect(url_for("auth.giris"))
+    return render_template("auth/qeydiyyat.html", form=form, errors=errors)
 
 
 @bp.route("/cixis")
 def cixis():
+    if session.get("st"):
+        db = get_db()
+        db.execute("UPDATE sessions SET active = 0 WHERE token = ?", (session["st"],))
+        db.commit()
     session.clear()
     return redirect(url_for("public.landing"))
 

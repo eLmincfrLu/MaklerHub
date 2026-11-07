@@ -1,0 +1,44 @@
+{% extends 'teleb/_layout.html' %}
+{% block title %}Mənim tələbim{% endblock %}
+{% block meta %}<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">{% endblock %}
+{% block showcase %}
+      <div class="eyebrow">Tələbin qəbul olundu</div>
+      <h1>
+        <span class="line"><span>Maklerlər tələbini</span></span>
+        <span class="line line2"><span>artıq görür.</span></span>
+      </h1>
+      <p>Təkliflər gəldikcə bu səhifədə görünəcək. Bəyəndiyin təklifi qəbul edəndə yalnız həmin makler nömrəni görəcək.</p>
+{% endblock %}
+{% block card %}
+      <div class="kicker">Mənim tələbim</div>
+      <h1>{{ r.deal }} · <i>{{ r.districts|join(', ') }}</i></h1>
+      <div class="underline"></div>
+
+      <div class="savebox">
+        <b>Bu linki saxla, təkliflər burada görünəcək</b>
+        <p>Link yalnız səndədir — qeydiyyat olmadığı üçün tələbinə ancaq bu linklə qayıda bilərsən. Başqası ilə paylaşma.</p>
+        <div class="linkrow">
+          <input id="myLink" type="text" value="{{ link }}" readonly aria-label="Tələbin linki" onfocus="this.select()">
+          <button class="btn" type="button" id="copyLink">Linki kopyala</button>
+        </div>
+      </div>
+
+      <div class="sum">
+        <div class="sum-row"><span>Status</span><span><span class="st {{ r.status }}">{{ r.status_label }}</span></span></div>
+        <div class="sum-row"><span>Əməliyyat</span><span>{{ r.deal }}</span></div>
+        <div class="sum-row"><span>Rayon</span><span>{{ r.districts|join(', ') }}</span></div>
+        <div class="sum-row"><span>Otaq sayı</span><span>{{ r.rooms }}</span></div>
+        <div class="sum-row"><span>Büdcə</span><span>{{ r.budget }}</span></div>
+        <div class="sum-row"><span>Nə vaxt</span><span>{{ r.urgency }}</span></div>
+        {% if r.note %}<div class="sum-row"><span>Qeyd</span><span>{{ r.note }}</span></div>{% endif %}
+        <div class="sum-row"><span>Ad, telefon</span><span>{{ r.name }}, {{ r.phone }}</span></div>
+        <div class="sum-row"><span>Yaradılıb</span><span>{{ r.created }}, {{ r.created_time }}</span></div>
+      </div>
+
+      <div class="offers-h">Təkliflər</div>
+      {%- for o in offers %}
+      {%- else %}
+      <div class="empty">Hələ təklif yoxdur. Maklerlər tələbini görür.<br>Təkliflər gələndə bu səhifədə görünəcək.</div>
+      {%- endfor %}
+{% endblock %}

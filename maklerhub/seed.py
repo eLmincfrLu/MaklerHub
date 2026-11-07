@@ -12,15 +12,9 @@ from werkzeug.security import generate_password_hash
 
 from .db import add_log
 from .helpers import ts
+from .licenses import DEFAULT_DAYS, create_licenses
 
-LICENSE_DAYS = 30
 SEED_LICENSES = 3
-_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # qarışdırılan simvollar yoxdur (0/O, 1/I)
-
-
-def gen_license_code():
-    """MH-XXXX-XXXX-XXXX"""
-    return "MH-" + "-".join("".join(secrets.choice(_CODE_ALPHABET) for _ in range(4)) for _ in range(3))
 
 
 def _gen_password():
@@ -29,17 +23,6 @@ def _gen_password():
         pw = "".join(secrets.choice(alphabet) for _ in range(12))
         if any(c.isdigit() for c in pw):
             return pw
-
-
-def create_licenses(con, count, days=LICENSE_DAYS, note=""):
-    codes = []
-    while len(codes) < count:
-        code = gen_license_code()
-        cur = con.execute("INSERT OR IGNORE INTO licenses(code, days, status, note, created_at) VALUES (?,?,'new',?,?)",
-                          (code, days, note, ts()))
-        if cur.lastrowid:
-            codes.append(code)
-    return codes
 
 
 def seed_minimal(con):
@@ -60,7 +43,7 @@ def seed_minimal(con):
 
     print("\n  Admin:", email)
     print("  Şifrə:", password if generated else "(.env-dəki MAKLERHUB_ADMIN_PASSWORD)")
-    print(f"  Lisenziya kodları ({LICENSE_DAYS} gün):")
+    print(f"  Lisenziya kodları ({DEFAULT_DAYS} gün):")
     for code in codes:
         print("   ", code)
     print()

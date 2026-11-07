@@ -24,11 +24,11 @@
         <span class="line"><span>Əmlak dünyanız,</span></span>
         <span class="line line2"><span>bir addımda.</span></span>
       </h1>
-      <p>Elanlarınızı izləyin, müştərilərinizlə əlaqəni itirməyin və bütün sövdələşmələrinizi tək bir yerdən idarə edin.</p>
+      <p>Müştərilərin tələblərini görün, uyğun təklif göndərin — müştəri təklifinizi qəbul edəndə nömrəsi sizə açılır.</p>
       <div class="stats-row">
-        <div class="stat-chip"><span class="num">1,240+</span><span class="lbl">Aktiv elan</span></div>
-        <div class="stat-chip"><span class="num">310</span><span class="lbl">Təsdiqlənmiş makler</span></div>
-        <div class="stat-chip"><span class="num">98%</span><span class="lbl">Məmnuniyyət</span></div>
+        <div class="stat-chip"><span class="num">Tələb</span><span class="lbl">Müştəri yazır</span></div>
+        <div class="stat-chip"><span class="num">Təklif</span><span class="lbl">Siz göndərirsiniz</span></div>
+        <div class="stat-chip"><span class="num">Əlaqə</span><span class="lbl">Qəbuldan sonra</span></div>
       </div>
     </div>
   </aside>
@@ -76,7 +76,8 @@
         Bütün əlaqələr 256-bit şifrələmə ilə qorunur
       </div>
 
-      <div class="switch">Hesabınız yoxdur? <a href="{{ url_for('auth.qeydiyyat') }}">Qeydiyyatdan keçin</a></div>
+      <div class="switch">Lisenziya kodunuz var? <a href="{{ url_for('auth.qeydiyyat') }}">Qeydiyyatdan keçin</a></div>
+      <div class="switch" style="margin-top:10px">Ev axtarırsınız? <a href="{{ url_for('teleb.forma') }}">Tələbinizi yazın</a></div>
       {% endblock %}
     </div>
   </main>

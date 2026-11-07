@@ -1,0 +1,20 @@
+/* Admin · Lisenziya kodları — maklerlər səhifəsinin cədvəl/KPI/çip stillərinə əsaslanır */
+@import url("admin-maklerler.css");
+
+.lic-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;background:var(--navy2);border:1px solid var(--line);
+  border-radius:6px;padding:18px 20px;margin-bottom:22px;}
+.lic-form .mh-field{margin:0;}
+.lic-form .mh-field input{width:110px;}
+.lic-form .mh-field.grow{flex:1 1 220px;}
+.lic-form .mh-field.grow input{width:100%;}
+.lic-flash{padding:12px 16px;border-radius:4px;margin-bottom:18px;font-size:.84rem;line-height:1.6;border:1px solid var(--line);
+  background:rgba(201,162,39,.08);color:var(--txt);word-break:break-word;}
+.lic-flash.err{border-color:rgba(196,106,86,.5);background:rgba(196,106,86,.12);}
+.lic-flash.ok{border-color:rgba(201,162,39,.45);}
+.lic-flash code,.lic-code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--gold);letter-spacing:.04em;}
+.lic-code{user-select:all;white-space:nowrap;}
+.lic-revoke{all:unset;cursor:pointer;font-size:.76rem;color:var(--mut);border:1px solid var(--line);border-radius:4px;padding:5px 10px;
+  transition:all .2s ease;}
+.lic-revoke:hover{color:#E79A86;border-color:rgba(196,106,86,.6);}
+.filters a.fchip{text-decoration:none;}
+@media(max-width:820px){.tablewrap{overflow-x:auto;}.tablewrap table{min-width:720px;}}

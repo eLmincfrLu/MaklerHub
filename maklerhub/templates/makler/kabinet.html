@@ -3,10 +3,19 @@
 {% block title %}Kabinet{% endblock %}
 {% block main %}
   <div class="head reveal" style="animation-delay:.05s">
-    <div><h1>Xoş gəldiniz, {{ current_user.first_name }}</h1><p>{{ today_long }}</p></div>
+    <div><h1>Xoş gəldiniz, {{ current_user.first_name }}</h1><p>{{ today_long }}{% if lic %} · lisenziya {{ lic.days_left }} gün qalıb{% endif %}</p></div>
   </div>
 
-  <div class="section reveal" style="animation-delay:.12s">
-    <div class="mh-empty">Tezliklə: burada müştəri tələblərini görüb təklif göndərə biləcəksiniz.</div>
+  {% if not has_area %}
+  <div class="section reveal" style="animation-delay:.1s">
+    <div class="mh-empty" style="border-left:3px solid var(--gold);text-align:left">
+      <b>Tələbləri görmək üçün xidmət sahənizi doldurun.</b><br>
+      Kirayə və/və ya satış, qiymət aralığı və rayonları seçin — <a href="{{ url_for('makler.ayarlar') }}#saha" style="color:var(--gold-dim);font-weight:600">Ayarlar → Xidmət sahəsi</a>.
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="section reveal" style="animation-delay:.16s">
+    <div class="mh-empty">Tezliklə: burada xidmət sahənizə uyğun müştəri tələblərini görüb təklif göndərə biləcəksiniz.</div>
   </div>
 {% endblock %}

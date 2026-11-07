@@ -1,12 +1,90 @@
 {% extends 'makler/base.html' %}
-{% set page_css = 'ayarlar.css' %}
+{% set page_css = 'makler-ayarlar.css' %}
 {% block title %}Ayarlar{% endblock %}
 {% block main %}
-  <div class="head reveal" style="animation-delay:.05s">
-    <div><h1>Ayarlar</h1><p>Profil və xidmət əraziləri</p></div>
-  </div>
+  <div class="head reveal" style="animation-delay:.05s"><h1>Ayarlar</h1></div>
 
-  <div class="section reveal" style="animation-delay:.12s">
-    <div class="mh-empty">Tezliklə — bu bölmə yeni modelə uyğun hazırlanır.</div>
+  <div class="wrap reveal" style="animation-delay:.12s">
+    <div class="tabs">
+      <button class="active" data-t="profil">Profil</button>
+      <button data-t="saha">Xidmət sahəsi</button>
+      <button data-t="lisenziya">Lisenziya</button>
+      <button data-t="sifre">Şifrə</button>
+    </div>
+
+    <div>
+      <form class="panel show" id="p-profil" autocomplete="off" novalidate>
+        <h2>Profil məlumatları</h2>
+        <div class="desc">Təklif göndərdiyiniz müştərilər adınızı görəcək.</div>
+        <div class="mh-err"></div>
+        <div class="two">
+          <div class="field"><label for="first_name">Ad</label><input id="first_name" type="text" name="first_name" value="{{ current_user.first_name }}" maxlength="40"></div>
+          <div class="field"><label for="last_name">Soyad</label><input id="last_name" type="text" name="last_name" value="{{ current_user.last_name }}" maxlength="40"></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="phone">Telefon</label><input id="phone" type="tel" name="phone" value="{{ phone }}" placeholder="+994 50 123 45 67" maxlength="25"></div>
+          <div class="field"><label>E-poçt</label><div class="static">{{ current_user.email }}</div></div>
+        </div>
+        <button class="btn" type="submit">Dəyişiklikləri yadda saxla</button>
+      </form>
+
+      <form class="panel" id="p-saha" autocomplete="off" novalidate>
+        <h2>Xidmət sahəsi</h2>
+        <div class="desc">Hansı əməliyyatlarla və hansı rayonlarda işlədiyinizi seçin — tələbləri buna görə görəcəksiniz.</div>
+        <div class="mh-err"></div>
+        {%- for key, label in deals.items() %}
+        {%- set a = areas[key] %}
+        <div class="deal{% if not a.on %} off{% endif %}" data-deal="{{ key }}">
+          <div class="deal-head">
+            <div><div class="tname">{{ label }}</div><div class="tsub">{{ 'Kirayə tələbləri (AZN/ay)' if key == 'rent' else 'Alış tələbləri (AZN)' }}</div></div>
+            <label class="switch"><input type="checkbox" data-on{% if a.on %} checked{% endif %} aria-label="{{ label }}"><span class="slider"></span></label>
+          </div>
+          <div class="deal-body">
+            <div class="two">
+              <div class="field"><label>Minimum qiymət</label><input type="text" inputmode="numeric" data-min value="{{ a.min if a.min is not none else '' }}" placeholder="həd yoxdur"><div class="unit">{{ 'AZN/ay' if key == 'rent' else 'AZN' }}</div></div>
+              <div class="field"><label>Maksimum qiymət</label><input type="text" inputmode="numeric" data-max value="{{ a.max if a.max is not none else '' }}" placeholder="həd yoxdur"><div class="unit">{{ 'AZN/ay' if key == 'rent' else 'AZN' }}</div></div>
+            </div>
+            <label>Rayonlar</label>
+            <div class="chips">
+              {%- for d in districts %}
+              {%- if loop.index0 == 12 %}<div class="sep"></div>{% endif %}
+              <label><input type="checkbox" value="{{ d }}" data-district{% if d in a.districts %} checked{% endif %}><span>{{ d }}</span></label>
+              {%- endfor %}
+            </div>
+            <div class="picked" data-picked></div>
+          </div>
+        </div>
+        {%- endfor %}
+        <button class="btn" type="submit">Xidmət sahəsini yadda saxla</button>
+      </form>
+
+      <div class="panel" id="p-lisenziya">
+        <h2>Lisenziya</h2>
+        <div class="desc">Lisenziya bitəndə kabinet bağlanır. Uzatmaq üçün administratorla əlaqə saxlayın.</div>
+        {% if lic %}
+        <div class="lic-rows">
+          <div class="lic-row"><span>Kod</span><span><code>{{ lic.code }}</code></span></div>
+          <div class="lic-row"><span>Aktivləşdirilib</span><span>{{ lic.activated }}</span></div>
+          <div class="lic-row"><span>Bitmə tarixi</span><span>{{ lic.expires }}</span></div>
+          <div class="lic-row"><span>Qalan müddət</span><span{% if lic.days_left <= 5 %} class="warn"{% endif %}>{{ lic.days_left }} gün</span></div>
+        </div>
+        {% else %}
+        <div class="mh-empty">Lisenziya məlumatı tapılmadı.</div>
+        {% endif %}
+      </div>
+
+      <form class="panel" id="p-sifre" autocomplete="off" novalidate>
+        <h2>Şifrəni dəyiş</h2>
+        <div class="desc">Minimum 8 simvol, ən azı bir rəqəm.</div>
+        <div class="mh-err"></div>
+        <div class="field"><label>Cari şifrə</label><input type="password" name="current" placeholder="••••••••" autocomplete="current-password"></div>
+        <div class="two">
+          <div class="field"><label>Yeni şifrə</label><input type="password" name="new" placeholder="Minimum 8 simvol" autocomplete="new-password"></div>
+          <div class="field"><label>Yeni şifrə (təkrar)</label><input type="password" name="new2" placeholder="Təkrar daxil edin" autocomplete="new-password"></div>
+        </div>
+        <button class="btn" type="submit">Şifrəni yenilə</button>
+      </form>
+    </div>
   </div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/makler-ayarlar.js') }}"></script>{% endblock %}

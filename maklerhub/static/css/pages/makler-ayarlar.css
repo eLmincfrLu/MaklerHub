@@ -1,0 +1,35 @@
+/* Makler · Ayarlar (profil, xidmət sahəsi, lisenziya) — köhnə ayarlar səhifəsinin stillərinə əsaslanır */
+@import url("ayarlar.css");
+
+/* rayon çipləri (çoxlu seçim) */
+.chips{display:flex;flex-wrap:wrap;gap:8px;}
+.chips label{position:relative;display:inline-flex;margin:0;font-weight:400;}
+.chips input{position:absolute;opacity:0;pointer-events:none;width:auto;}
+.chips span{display:inline-block;padding:8px 13px;border:1px solid var(--line);border-radius:20px;font-size:.82rem;color:#6B6455;
+  background:var(--cream);cursor:pointer;transition:border-color .2s ease,color .2s ease,background .2s ease;user-select:none;}
+.chips label:hover span{border-color:var(--gold-dim);}
+.chips input:checked + span{border-color:var(--gold-dim);background:#FBF4DE;color:var(--navy);font-weight:600;}
+.chips input:focus-visible + span{box-shadow:0 0 0 3px rgba(201,162,39,.2);}
+.chips .sep{flex-basis:100%;height:0;margin:2px 0;}
+
+.deal{border:1px solid var(--line);border-radius:3px;padding:18px 18px 8px;margin-bottom:18px;background:var(--cream);}
+.deal.off .deal-body{display:none;}
+.deal-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;}
+.deal.off .deal-head{margin-bottom:10px;}
+.deal-head .tname{font-size:.95rem;font-weight:600;color:var(--navy);}
+.deal-head .tsub{font-size:.78rem;color:#8A8372;margin-top:2px;}
+.deal .chips span{background:var(--panel);}
+.deal input[type=text]{background:var(--panel);}
+.unit{font-size:.74rem;color:#8A8372;margin-top:6px;}
+.picked{font-size:.76rem;color:#8A8372;margin:10px 0 12px;}
+
+.lic-rows{border:1px solid var(--line);margin-bottom:6px;}
+.lic-row{display:flex;justify-content:space-between;gap:14px;padding:13px 16px;border-bottom:1px solid var(--line);font-size:.88rem;}
+.lic-row:last-child{border-bottom:none;}
+.lic-row span:first-child{color:#8A8372;}
+.lic-row span:last-child{font-weight:600;color:var(--navy);text-align:right;}
+.lic-row code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.04em;user-select:all;}
+.lic-row .warn{color:#B4543F;}
+.static{padding:12px 14px;border:1px dashed var(--line);border-radius:2px;color:#6B6455;font-size:.9rem;}
+
+@media(max-width:560px){.two{grid-template-columns:1fr;gap:0;}.panel{padding:22px 18px;}}

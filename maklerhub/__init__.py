@@ -43,11 +43,13 @@ def create_app(overrides=None):
 
     from .admin import bp as admin_bp
     from .makler import bp as makler_bp
+    from .teleb import bp as teleb_bp
 
     app.register_blueprint(public)
     app.register_blueprint(auth.bp)
     app.register_blueprint(makler_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(teleb_bp)
 
     @app.errorhandler(403)
     def forbidden(_e):

@@ -23,6 +23,7 @@ DEFAULT_SETTINGS = {
     # Təhlükəsizlik
     "session_timeout": "120",      # dəqiqə (admin sessiyası)
     "login_fail_limit": "5",
+    "max_devices": "2",            # makler başına cihaz limiti
 }
 
 

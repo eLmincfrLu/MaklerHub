@@ -11,13 +11,16 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 
 ## Plan və vəziyyət
 - Gün 1 BİTDİ: köhnə məntiq silindi, yeni sxem (13 cədvəl), sayt işə düşür; kabinet/panel "Tezliklə" placeholder.
-- Gün 2: makler qeydiyyatı lisenziya kodu ilə. Sonrakı: tələb forması, təkliflər, kontakt açılması, admin (lisenziyalar,
-  şikayətlər). Gün 5: demo məlumatlar (`seed()` hələlik `seed_minimal` ilə eynidir).
-- Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək); landing/giriş mətnlərində köhnə model
-  ifadələri (Bina.az/Tap.az, "elan izləyir") hələ qalır.
+- Gün 2 BİTDİ: lisenziya kodu ilə qeydiyyat, admin "Lisenziyalar" bölməsi, cihaz limiti + tək sessiya, makler xidmət
+  sahəsi (Ayarlar), müştəri tələb forması `/teleb` və "Mənim tələbim" `/teleb/<token>`, landing yeni modelə keçdi.
+- Sonrakı: kabinetdə tələblər + təklif göndərmə, Gün 4: qəbul/rədd, kontakt açılması, tam admin panel (cihaz sıfırlama
+  UI, şikayətlər). Gün 5: demo məlumatlar (`seed()` hələlik `seed_minimal` ilə eynidir).
+- Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək); IP `X-Forwarded-For`-un ilk dəyərindən
+  götürülür (saxtalaşdırıla bilər) — Render-də real başlığa baxıb yekunlaşdır.
 
 ## Qaydalar (pozma)
-- `maklerhub/static/` içində heç nəyə toxunma (CSS, JS, şəkillər, loqo).
+- `maklerhub/static/` içindəki MÖVCUD fayllara toxunma (CSS, JS, şəkillər, loqo). Lazım olsa YENİ fayl əlavə et
+  (`static/css/pages/`, `static/js/pages/`), mövcud CSS-i `@import` edib dəyişənləri/sinifləri istifadə et.
 - `templates/*/base.html`, `auth/_logo.html`, naviqasiya və ümumi layout saxlanılır. Köhnə səhifə fayllarını silmə —
   içi "Tezliklə" placeholder-dir; struktur və CSS sinifləri qalır (`head`, `section`, `mh-empty`, `reveal`).
 - `run.py`, `start.sh`, `start.bat` dəyişmir.
@@ -28,19 +31,29 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 - Mühit dəyişənləri yalnız `.env`-də / Render-də: DATABASE_URL, MAKLERHUB_ADMIN_EMAIL, MAKLERHUB_ADMIN_PASSWORD,
   MAKLERHUB_SECRET, MAKLERHUB_SECURE_COOKIES. BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə, commit etmə.
 - Müştəri nömrəsi heç vaxt kontakt (`contacts`) olmadan maklerə göstərilməməlidir.
+- Telefonlar `+994XXXXXXXXX` saxlanılır (`helpers.normalize_phone`, operatorlar 10/50/51/55/60/70/77/99).
 
 ## Struktur
 - `maklerhub/__init__.py` — `create_app`, public blueprint (`/`, `/saglamliq` — bazaya toxunmur, UptimeRobot üçün).
-- `auth.py` — giriş/çıxış, şifrə bərpası (SMTP yoxdursa link konsola), CSRF, `login_required` / `member_required` /
-  `admin_required`; `/qeydiyyat` hələlik placeholder. ROLES: admin, makler.
-- `makler.py` — kabinet (`/kabinet`, `/ayarlar`) + bildiriş API (`/api/notifications`, zəng ikonu üçün).
+- `auth.py` — giriş/çıxış, şifrə bərpası (SMTP yoxdursa link konsola), CSRF, dekoratorlar; `/qeydiyyat` lisenziya
+  kodu ilə (bir tranzaksiya, `FOR UPDATE`; IP başına 15 dəq-də 10 səhv kod → blok, `login_attempts.email='#license'`).
+  Makler: `mh_device` cookie (httponly, 1 il; bazada `sha256(user_id:cookie)`), limit `settings.max_devices`=2,
+  hər girişdə yeni `sessions` sətri, köhnələri `active=0`; session["st"] hər sorğuda yoxlanır. Lisenziya bitib/ləğv →
+  `auth/lisenziya.html` (makler blueprint-i və /api/password bağlı). Admin: köhnə timeout, cihaz limiti yoxdur.
+- `licenses.py` — kod yaratma/normallaşdırma (MH-XXXX-XXXX-XXXX), `activate`, `revoke`, `license_problem`,
+  `reset_devices` (admin UI Gün 4-də).
+- `teleb.py` — `/teleb` (honeypot `website`, IP başına 24 saatda 3, nömrə başına 2 aktiv tələb, 1-3 rayon, razılıq),
+  `/teleb/<token>` (noindex, Referrer-Policy: no-referrer).
+- `makler.py` — kabinet (xidmət sahəsi boşdursa xəbərdarlıq), `/ayarlar` (profil, xidmət sahəsi → `agent_areas`,
+  lisenziya, şifrə; JS `makler-ayarlar.js`), API `/api/me/profile`, `/api/me/areas`, `/api/notifications`.
   `/axtarislar`, `/elanlar`, `/musteriler`, `/analitika` — köhnə fayllar, placeholder, naviqasiyada yoxdur.
-- `admin.py` — `/admin/` panel, maklerlər, ayarlar (placeholder), loglar (işləyir, `/admin/api/logs`); `/admin/menbe` placeholder.
+- `admin.py` — `/admin/lisenziyalar` (yaratma 1-20, ləğv), loglar (`/admin/api/logs`); panel, maklerlər, ayarlar,
+  `/admin/menbe` — placeholder.
 - `db.py` — Postgres üzərində sqlite-üslublu qat (`?` → `%s`, `INSERT OR IGNORE`, `lastrowid` — `_ID_TABLES`),
   `DEFAULT_SETTINGS`, `add_log`, `init-db` CLI. Hovuz `min_size=0` (Neon yata bilsin).
 - `helpers.py` — vaxt (`now`, `ts`, `parse`, Asia/Baku), formatlama (`rel`, `date_short`, `money`, `initials`,
   `full_name`, `az_upper`), `BAKU_DISTRICTS` (12 rayon + populyar ərazilər).
-- `seed.py` — `seed_minimal`: 1 admin + 3 istifadə olunmamış lisenziya kodu (konsola yazılır); `create_licenses()`.
+- `seed.py` — `seed_minimal`: 1 admin + 3 istifadə olunmamış lisenziya kodu (konsola yazılır).
 - `schema.sql` — cədvəllərin mənbəyi.
 
 ## Cədvəllər

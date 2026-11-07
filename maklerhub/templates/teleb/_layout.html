@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+{% block meta %}{% endblock %}
+<title>MaklerHub — {% block title %}{% endblock %}</title>
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.png') }}">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/teleb.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auth-extra.css') }}">
+</head>
+<body>
+<div class="wrap">
+  <aside class="showcase">
+    <div class="showcase-photo"></div>
+    <div class="showcase-scrim"></div>
+    <div class="aurora"></div>
+    <div class="s-top">
+{% include 'auth/_logo.html' %}
+    </div>
+    <div class="s-body">
+      {% block showcase %}{% endblock %}
+    </div>
+  </aside>
+
+  <main class="stage">
+    <div class="card">
+      <div class="top-link"><a class="backlink" href="{{ url_for('public.landing') }}">← Ana səhifə</a></div>
+      {% block card %}{% endblock %}
+    </div>
+  </main>
+</div>
+<script src="{{ url_for('static', filename='js/pages/teleb.js') }}"></script>
+</body>
+</html>
