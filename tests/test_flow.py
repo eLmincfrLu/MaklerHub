@@ -202,13 +202,15 @@ def teleb_post(client, tok, phone, headers=None):
     return client.post("/teleb", data=data, headers=headers or {})
 
 
-def test_spoofed_xff_does_not_bypass_ip_limit(app):
+def test_spoofed_xff_does_not_bypass_ip_limit(app, monkeypatch):
+    monkeypatch.setenv("MAKLERHUB_BEHIND_PROXY", "1")
     c = app.test_client()
     tok = csrf(c, "/teleb")
     codes = []
     for i in range(4):
-        # müştəri özü saxta IP göndərir, Render proxy-si real IP-ni (9.9.9.9) sona əlavə edir
-        r = teleb_post(c, tok, f"050 444 55 {60 + i}", {"X-Forwarded-For": f"6.6.6.{i}, 9.9.9.9"})
+        # müştəri hər dəfə başqa saxta XFF göndərir; real IP-ni Cloudflare CF-Connecting-IP-də yazır
+        r = teleb_post(c, tok, f"050 444 55 {60 + i}",
+                       {"X-Forwarded-For": f"6.6.6.{i}, 162.158.111.145, 10.197.71.38", "CF-Connecting-IP": "9.9.9.9"})
         codes.append(r.status_code)
     assert codes == [302, 302, 302, 200]
 

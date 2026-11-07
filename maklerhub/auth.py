@@ -3,6 +3,7 @@ CSRF qoruması və icazə dekoratorları."""
 import functools
 import hashlib
 import ipaddress
+import os
 import re
 import secrets
 import smtplib
@@ -77,10 +78,32 @@ def _safe_next(target):
     return target if target and target.startswith("/") and not target.startswith("//") else None
 
 
+# Render-in qarşısında Cloudflare var (XFF: müştəri, Cloudflare, Render daxili — 3 hop). Cloudflare bu başlıqları
+# özü yazır və müştərinin göndərdiyini əvəz edir, ona görə etibarlıdır. Yalnız MAKLERHUB_BEHIND_PROXY=1 olanda.
+TRUSTED_IP_HEADERS = ("CF-Connecting-IP", "True-Client-IP")
+
+
+def _valid_ip(value):
+    try:
+        return str(ipaddress.ip_address((value or "").strip()))
+    except ValueError:
+        return None
+
+
+def client_ip_source():
+    """(IP, mənbə). Proxy rejimində: CF-Connecting-IP → True-Client-IP → remote_addr; etibarsız dəyər ötürülür.
+    Lokalda bu başlıqlara baxılmır (saxtalaşdırıla bilər), yalnız remote_addr."""
+    if os.environ.get("MAKLERHUB_BEHIND_PROXY") == "1":
+        for header in TRUSTED_IP_HEADERS:
+            ip = _valid_ip(request.headers.get(header))
+            if ip:
+                return ip, header
+    return request.remote_addr or "", "remote_addr"
+
+
 def client_ip():
-    """Müştərinin IP-si. X-Forwarded-For-u ProxyFix (x_for=1) emal edir: yalnız Render proxy-sinin
-    əlavə etdiyi son dəyər götürülür, müştərinin özünün göndərdiyi saxta dəyərlər nəzərə alınmır."""
-    return request.remote_addr or ""
+    """Müştərinin IP-si. IP lazım olan hər yerdə yalnız bu funksiya istifadə olunur."""
+    return client_ip_source()[0]
 
 
 _ip_warned = False

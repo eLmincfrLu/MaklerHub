@@ -40,8 +40,9 @@ def avatar(filename):
 
 def create_app(overrides=None):
     app = Flask(__name__)
-    # Render bir proxy arxasındadır: X-Forwarded-For/Proto-nun yalnız son (proxy-nin yazdığı) dəyəri etibarlıdır
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+    # ProxyFix yalnız sxem (https) üçün. Müştəri IP-si X-Forwarded-For-dan YOX, auth.client_ip()-dən gəlir
+    # (Cloudflare → Render: XFF 3 hop-dur, x_for=1 Render-in daxili IP-sini verirdi).
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=0, x_proto=1)
     app.config.from_object(Config)
     if overrides:
         app.config.update(overrides)

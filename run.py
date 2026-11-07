@@ -39,8 +39,8 @@ def main():
         from waitress import serve
         kw = {}
         if os.environ.get("MAKLERHUB_BEHIND_PROXY") == "1":
-            # Render: waitress 3.x X-Forwarded-* başlıqlarını defolt olaraq silir; onları Flask-a ötürürük,
-            # müştəri IP-sini ProxyFix (maklerhub/__init__.py) təyin edir — məntiq bir yerdədir və testlərlə yoxlanır.
+            # Render: waitress 3.x X-Forwarded-* başlıqlarını defolt olaraq silir; onları Flask-a ötürürük
+            # (X-Forwarded-Proto → ProxyFix https üçün). Müştəri IP-si: maklerhub/auth.py client_ip() (CF-Connecting-IP).
             kw["clear_untrusted_proxy_headers"] = False
         serve(app, host=args.host, port=args.port, threads=8, **kw)
     except ImportError:

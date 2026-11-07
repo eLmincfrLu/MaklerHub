@@ -124,15 +124,15 @@ DEBUG_IP_HEADERS = ("X-Forwarded-For", "X-Forwarded-Proto", "X-Real-IP", "True-C
 @bp.route("/debug/ip")
 @admin_required
 def debug_ip():
-    from .auth import client_ip, ip_limit_applies
-    env = request.environ
-    rows = [("request.remote_addr (ProxyFix-dən sonra)", request.remote_addr),
-            ("client_ip()", client_ip()),
-            ("IP limiti tətbiq olunur?", "bəli" if ip_limit_applies(client_ip()) else "XEYR (fail-open)"),
-            ("ProxyFix-dən əvvəlki REMOTE_ADDR", (env.get("werkzeug.proxy_fix.orig") or {}).get("REMOTE_ADDR")),
+    from .auth import client_ip_source, ip_limit_applies
+    ip, source = client_ip_source()
+    rows = [("client_ip()", ip),
+            ("client_ip() mənbəyi", source),
+            ("IP limiti tətbiq olunur?", "bəli" if ip_limit_applies(ip) else "XEYR (fail-open)"),
+            ("request.remote_addr (debug üçün xam)", request.remote_addr),
             ("MAKLERHUB_BEHIND_PROXY", os.environ.get("MAKLERHUB_BEHIND_PROXY", "(yoxdur)"))]
     rows += [(h, request.headers.get(h)) for h in DEBUG_IP_HEADERS]
-    body = "\n".join(f"{k}:{v if v is not None else '(yoxdur)'}" for k, v in rows)
+    body = "\n".join(f"{k}: {v if v is not None else '(yoxdur)'}" for k, v in rows)
     return body, 200, {"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"}
 
 

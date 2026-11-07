@@ -18,13 +18,15 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   geri çəkmə, Təkliflərim, müştəri səhifəsində təkliflər. pytest: `tests/` (25 test).
 - Sonrakı (Gün 4): müştəri qəbul/rədd, kontakt açılması (`contacts`), müştəri bildirişlərinin göstərilməsi, tam admin
   panel (cihaz sıfırlama UI, şikayətlər). Gün 5: demo məlumatlar (`seed()` hələlik `seed_minimal` ilə eynidir).
-- IP düzəlişi (7 noyabr): canlıda bütün IP-lər 127.0.0.1 idi — waitress 3.x X-Forwarded-* başlıqlarını defolt
-  silirdi. İndi: Render-də `MAKLERHUB_BEHIND_PROXY=1` → waitress başlıqları ötürür, IP-ni YALNIZ ProxyFix
-  (x_for=1) təyin edir. IP ictimai deyilsə (loopback/private) IP limitləri tətbiq olunmur (fail-open,
-  `auth.ip_limit_applies`, bir dəfə warning): `/teleb` gündəlik 3 və lisenziya kodu 10/15 dəq. Nömrə limiti qalır.
-- MÜVƏQQƏTİ: `/admin/debug/ip` (yalnız admin) — Render-də real IP və hop sayı təsdiqlənəndən sonra SİL.
-- Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək); Render-də Cloudflare varsa XFF iki hop
-  ola bilər — debug səhifəsinə baxıb x_for və ya CF-Connecting-IP qərarı ver; iki proses eyni anda başlayanda
+- IP (7 noyabr): Render-in qarşısında Cloudflare var, XFF 3 hop-dur (müştəri, Cloudflare, Render daxili).
+  `auth.client_ip()` — IP lazım olan HƏR YERDƏ yalnız bu (birbaşa `request.remote_addr` yox). `MAKLERHUB_BEHIND_PROXY=1`
+  olanda: CF-Connecting-IP → True-Client-IP → remote_addr (ipaddress ilə yoxlanır, etibarsız → növbəti); lokalda
+  başlıqlara baxılmır. ProxyFix yalnız proto üçün (x_for=0, x_proto=1); waitress `clear_untrusted_proxy_headers=False`
+  (proxy rejimində). IP ictimai deyilsə IP limitləri tətbiq olunmur (fail-open, `auth.ip_limit_applies`, bir dəfə
+  warning): `/teleb` gündəlik 3 və lisenziya kodu 10/15 dəq. Nömrə limiti qalır. Testlər: `tests/test_client_ip.py`
+  (bazasız, ayrıca: `pytest tests/test_client_ip.py -p no:cacheprovider`).
+- MÜVƏQQƏTİ: `/admin/debug/ip` (yalnız admin, IP mənbəyini də göstərir) — canlıda təsdiqlənəndən sonra SİL.
+- Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək); iki proses eyni anda başlayanda
   `create_schema` DDL-i deadlock verə bilər (deploy üst-üstə düşəndə); pytest hələ real bazada işləyir —
   ayrıca test bazası olmadan testləri işlətmə.
 
