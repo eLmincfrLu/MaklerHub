@@ -21,6 +21,9 @@ p{color:#8A8372;font-size:.92rem;line-height:1.6;}
 .line{width:46px;height:2px;background:linear-gradient(90deg,var(--gold),transparent);margin:22px auto;}
 .btn{position:relative;overflow:hidden;display:inline-block;text-decoration:none;padding:12px 24px;border-radius:2px;background:var(--gold);color:#201803;font-weight:600;font-size:.88rem;transition:transform .2s ease,box-shadow .2s ease;}
 .btn:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(201,162,39,.32);}
+.btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+.btn.ghost{background:transparent;color:var(--navy);border:1px solid var(--line);}
+.btn.ghost:hover{box-shadow:none;border-color:var(--gold-dim);}
 </style>
 </head>
 <body>
@@ -30,7 +33,10 @@ p{color:#8A8372;font-size:.92rem;line-height:1.6;}
   <h1>{{ title }}</h1>
   <p>{{ text }}</p>
   <div class="line"></div>
-  <a class="btn" href="{{ url_for('public.landing') }}">Ana səhifəyə qayıt</a>
+  <div class="btns">
+    <a class="btn" href="{{ url_for('public.landing') }}">Ana səhifəyə qayıt</a>
+    {% if teleb_link %}<a class="btn ghost" href="{{ url_for('teleb.forma') }}">Tələb yaz</a>{% endif %}
+  </div>
 </div>
 </body>
 </html>

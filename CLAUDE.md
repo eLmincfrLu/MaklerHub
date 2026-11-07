@@ -20,7 +20,9 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   → makler müştərinin adını, tel: və wa.me linkini görür (yalnız accepted + contacts); bildirişlər (yeni uyğun tələb
   ≥50, qəbul, rədd; `/kabinet/bildirisler`); müştəri "Yeni" nişanı (`customer_seen_at`); şikayətlər (hər iki tərəf,
   unikal indekslə 1 dəfə); tam admin panel; test bazası ayrıldı; startup advisory lock; debug IP səhifəsi silindi.
-- Sonrakı: Gün 5 demo məlumatlar (`seed()` hələlik `seed_minimal` ilə eynidir).
+- Gün 5 BİTDİ: avtomatik təmizlik (`maintenance.py`), demo rejimi (`demo.py`, `is_demo`), təhlükəsizlik başlıqları,
+  `/robots.txt`, 404/500 mətnləri, Sentry (`monitoring.py`), köhnə placeholder marşrut/şablonları silindi, README +
+  `docs/screenshots/`. pytest: `tests/test_gun5.py`.
 - IP (7 noyabr): Render-in qarşısında Cloudflare var, XFF 3 hop-dur (müştəri, Cloudflare, Render daxili).
   `auth.client_ip()` — IP lazım olan HƏR YERDƏ yalnız bu (birbaşa `request.remote_addr` yox). `MAKLERHUB_BEHIND_PROXY=1`
   olanda: CF-Connecting-IP → True-Client-IP → remote_addr (ipaddress ilə yoxlanır, etibarsız → növbəti); lokalda
@@ -33,8 +35,12 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 ## Qaydalar (pozma)
 - `maklerhub/static/` içindəki MÖVCUD fayllara toxunma (CSS, JS, şəkillər, loqo). Lazım olsa YENİ fayl əlavə et
   (`static/css/pages/`, `static/js/pages/`), mövcud CSS-i `@import` edib dəyişənləri/sinifləri istifadə et.
-- `templates/*/base.html`, `auth/_logo.html`, naviqasiya və ümumi layout saxlanılır. Köhnə səhifə fayllarını silmə —
-  içi "Tezliklə" placeholder-dir; struktur və CSS sinifləri qalır (`head`, `section`, `mh-empty`, `reveal`).
+  İSTİSNA (Gün 5, istifadəçinin icazəsi ilə): `static/js/app.js`-də yalnız bildiriş zənginin boş mətni dəyişdirilib
+  ("Hələ bildiriş yoxdur. Yeni uyğun tələb gələndə burada görünəcək."); başqa heç nə.
+- `templates/*/base.html`, `auth/_logo.html`, naviqasiya və ümumi layout saxlanılır (`makler/base.html`-ə yalnız
+  `css/pages/makler-mobile.css` linki əlavə olunub — 375px-də ad ellipsis). Köhnə placeholder marşrut və şablonları
+  (elanlar, axtarislar, musteriler, analitika, admin menbe, `_detail`, `_elan_cards`) Gün 5-də silindi; onların
+  static faylları qalır (toxunma).
 - `run.py`, `start.sh`, `start.bat` dəyişmir. İSTİSNA: `run.py` yalnız proxy konfiqurasiyası üçün dəyişdirilib
   (`MAKLERHUB_BEHIND_PROXY=1` → waitress `clear_untrusted_proxy_headers=False`); başqa dəyişiklik etmə.
 - `db.py`-dakı uyğunlaşdırıcı qat (Row, Conn, Cursor, `_prepare`, pool, `get_db`) saxlanılır.
@@ -42,7 +48,12 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 - `init-db` bütün sxemi DROP edir: işlətməzdən əvvəl `.env`-dəki aktiv DATABASE_URL ilə şərhdəki köhnə URL-in host
   hissəsini müqayisə et (şifrəni ekrana çıxarma); eynidirsə DAYAN və istifadəçiyə de.
 - Mühit dəyişənləri yalnız `.env`-də / Render-də: DATABASE_URL, MAKLERHUB_ADMIN_EMAIL, MAKLERHUB_ADMIN_PASSWORD,
-  MAKLERHUB_SECRET, MAKLERHUB_SECURE_COOKIES, MAKLERHUB_BEHIND_PROXY (yalnız Render-də =1, lokalda yox). BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə, commit etmə.
+  MAKLERHUB_SECRET, MAKLERHUB_SECURE_COOKIES, MAKLERHUB_BEHIND_PROXY (yalnız Render-də =1, lokalda yox),
+  MAKLERHUB_DEMO_PASSWORD (yoxdursa "Demo12345"), SENTRY_DSN (yoxdursa Sentry söndürülüb). BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə,
+  commit etmə.
+- Demo izolyasiyası: makler tərəfində tələb seçən HƏR sorğu `is_demo`-nu maklerinki ilə müqayisə etməlidir
+  (`offers.SAME_KIND`, `_detail_ctx`, `send_offer`); bildiriş `notify_new_request` yalnız eyni növə; admin
+  göstəriciləri demo-suz (`/admin?demo=1` — ayrıca). Canlı bazada `seed-demo`-nu yalnız istifadəçi işlədir.
 - Müştəri nömrəsi heç vaxt kontakt (`contacts`) olmadan maklerə göstərilməməlidir.
 - Telefonlar `+994XXXXXXXXX` saxlanılır (`helpers.normalize_phone`, operatorlar 10/50/51/55/60/70/77/99).
 
@@ -68,14 +79,24 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 - `makler.py` — menyu: Tələblər (`/kabinet`), Təkliflərim (`/kabinet/teklifler`), Ayarlar. `/kabinet/teleb/<id>`
   (detal + forma), `/kabinet/teleb/<id>/teklif`, `/kabinet/teklif/<id>/geri-cek`. Makler tərəfinə tələbin telefonu
   HEÇ VAXT seçilmir (`offers.REQ_COLS`), ad yalnız ilk ad. `/ayarlar`, API `/api/me/*`, `/api/notifications`.
-  `/axtarislar`, `/elanlar`, `/musteriler`, `/analitika` — köhnə fayllar, placeholder, naviqasiyada yoxdur.
-- `admin.py` — `/admin/lisenziyalar` (yaratma 1-20, ləğv), loglar (`/admin/api/logs`); panel, maklerlər, ayarlar,
-  `/admin/menbe` — placeholder.
+  Demo makler: `/api/me/*` və `/api/password` → 403, ayarlar səhifəsi oxu rejimi.
+- `admin.py` — `/admin/lisenziyalar` (yaratma 1-20, ləğv), loglar (`/admin/api/logs`); `/admin/ayarlar` — şifrə +
+  "Təmizliyi indi işlət" (`/admin/ayarlar/temizlik`), son təmizləmə vaxtı və saylar.
+- `maintenance.py` — `run_cleanup` (oxunmuş bildiriş 30 gün, oxunmamış 90, login_attempts 7, logs 90, active=0
+  sessiyalar 30 gün + 30 gün görünməyən demo sessiyaları); `after_request` → `response.call_on_close` (cavabdan sonra,
+  ayrı bağlantı, yalnız bazaya toxunan sorğularda, saatda 1 dəfə — settings `last_cleanup_at` atomik UPSERT; xəta
+  loqa). `lazy_expire(db)` — `expire_requests` dəqiqədə 1 dəfə (`last_expire_at`); birbaşa `expire_requests` çağırma.
+  Testlərdə `CLEANUP_DISABLED=True`, conftest hər testdə tezlik məhdudiyyətini sıfırlayır.
+- `demo.py` — `seed-demo` / `clear-demo` CLI; demo tələblərin müddəti bitmir (`request_alive`, `expire_requests`);
+  demo makler cihaz limiti və tək sessiyadan azad, uğursuz giriş bloku tətbiq olunmur; `/giris?demo=1`.
+- `monitoring.py` — Sentry yalnız `SENTRY_DSN` ilə; `before_send` forma/cookie/query/başlıqları silir, telefon,
+  e-poçt, `/teleb/<token>` maskalanır; `include_local_variables=False`.
+- `__init__.py` — `security_headers` (nosniff, DENY, Referrer-Policy setdefault, proxy-də HSTS), `/robots.txt`.
 - `db.py` — Postgres üzərində sqlite-üslublu qat (`?` → `%s`, `INSERT OR IGNORE`, `lastrowid` — `_ID_TABLES`),
   `DEFAULT_SETTINGS`, `add_log`, `init-db` CLI. Hovuz `min_size=0` (Neon yata bilsin).
 - `helpers.py` — vaxt (`now`, `ts`, `parse`, Asia/Baku), formatlama (`rel`, `date_short`, `money`, `initials`,
   `full_name`, `az_upper`), `BAKU_DISTRICTS` (12 rayon + populyar ərazilər).
-- `seed.py` — `seed_minimal`: 1 admin + 3 istifadə olunmamış lisenziya kodu (konsola yazılır).
+- `seed.py` — `seed_minimal`: 1 admin + 3 istifadə olunmamış lisenziya kodu (konsola yazılır). Demo — `demo.py`.
 - `schema.sql` — cədvəllərin mənbəyi. Yeni sütunlar YALNIZ `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (canlı bazada
   startup-da tətbiq olunur). Canlı bazada `init-db` İŞLƏTMƏ.
 - `db.bootstrap()` — startup: lock + sxem + (boş bazada) seed BİR tranzaksiyada, `pg_advisory_xact_lock`
@@ -87,10 +108,10 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   `/admin/sikayetler`, `/admin/loglar`, `/admin/ayarlar` (şifrə). Admin hərəkətləri loqa yazılır.
 
 ## Cədvəllər
-users (role admin|makler, status active|suspended, license_id), licenses (code, days, status new|used|revoked,
+users (role admin|makler, status active|suspended, license_id, is_demo 0|1), licenses (code, days, status new|used|revoked,
 user_id, activated_at, expires_at), devices, sessions, login_attempts, settings, logs, agent_areas (makler ərazisi:
 district, deal_type rent|sale, price_min/max), customer_requests (token, phone, deal_type, districts JSON mətn,
-rooms 5=5+, budget, urgency urgent|month|flexible, consent, status active|closed|expired), offers (UNIQUE request_id+
+rooms 5=5+, budget, urgency urgent|month|flexible, consent, status active|closed|expired, is_demo 0|1), offers (UNIQUE request_id+
 agent_id, status sent|accepted|rejected|withdrawn), contacts (offer_id UNIQUE), notifications (user_id və ya
 request_id, is_read), complaints (from_side customer|agent, status new|reviewed).
 Vaxtlar TEXT "YYYY-MM-DD HH:MM:SS" (Asia/Baku, `helpers.ts()`).

@@ -5,7 +5,8 @@ from . import matching, offers as offers_mod
 from .auth import member_required
 from .db import add_log, get_db
 from .helpers import BAKU_DISTRICTS, date_short, full_name, long_date, normalize_phone, now, parse, phone_display, rel
-from .teleb import OFFER_LIMIT, ROOMS, expire_requests, request_alive, request_summary
+from .maintenance import lazy_expire
+from .teleb import OFFER_LIMIT, ROOMS, request_alive, request_summary
 
 bp = Blueprint("makler", __name__)
 
@@ -17,6 +18,7 @@ SORTS = {"score": "Uyğunluğa görə", "new": "Ən yeni", "urgency": "Təcilili
 
 DEALS = {"rent": "Kirayə", "sale": "Satış"}
 PRICE_LIMIT = 100_000_000  # AZN, ağlabatan yuxarı həd
+DEMO_READONLY = "Demo hesabda profil, xidmət sahəsi və şifrə dəyişdirilmir."
 
 
 def _unread(db, user_id):
@@ -30,6 +32,11 @@ def render(template, active, **ctx):
 
 def err(message, code=400):
     return jsonify(ok=False, error=message), code
+
+
+def demo_readonly():
+    """Demo makler: profil/sahə/şifrə yalnız oxu rejimindədir (server 403)."""
+    return err(DEMO_READONLY, 403) if g.user["is_demo"] else None
 
 
 def load_areas(db, user_id):
@@ -103,8 +110,7 @@ def offer_stats(db, user_id):
 @member_required
 def kabinet():
     db, u = get_db(), g.user
-    expire_requests(db)
-    db.commit()
+    lazy_expire(db)
     areas = agent_areas(db, u["id"])
     sent, accepted = offer_stats(db, u["id"])
     ctx = {"today_long": long_date(), "lic": license_info(db, u), "has_area": bool(areas), "sent": sent,
@@ -130,7 +136,7 @@ def kabinet():
 def _detail_ctx(db, rid):
     """Tələb + uyğunluq + öz təklifim. Makler həmin əməliyyatla işləmirsə və təklifi yoxdursa — 404."""
     r = db.execute(f"SELECT {offers_mod.REQ_COLS} FROM customer_requests r WHERE r.id = ?", (rid,)).fetchone()
-    if r is None:
+    if r is None or r["is_demo"] != g.user["is_demo"]:  # demo ↔ real bir-birini görmür
         abort(404)
     mine = db.execute("SELECT * FROM offers WHERE request_id = ? AND agent_id = ?", (rid, g.user["id"])).fetchone()
     res = matching.score(r, agent_areas(db, g.user["id"]))
@@ -294,35 +300,13 @@ def ayarlar():
                   phone=phone_display(g.user["phone"]))
 
 
-# Köhnə səhifələr: fayllar saxlanılır, içi "Tezliklə" (naviqasiyada görünmür, köhnə linklər qırılmasın)
-@bp.route("/axtarislar")
-@member_required
-def axtarislar():
-    return render("makler/axtarislar.html", "makler.kabinet")
-
-
-@bp.route("/elanlar")
-@member_required
-def elanlar():
-    return render("makler/elanlar.html", "makler.kabinet")
-
-
-@bp.route("/musteriler")
-@member_required
-def musteriler():
-    return render("makler/musteriler.html", "makler.kabinet")
-
-
-@bp.route("/analitika")
-@member_required
-def analitika():
-    return render("makler/analitika.html", "makler.kabinet")
-
-
 # ---------------------------------------------------------------- ayarlar API
 @bp.route("/api/me/profile", methods=["POST"])
 @member_required
 def api_me_profile():
+    stop = demo_readonly()
+    if stop:
+        return stop
     d = request.get_json(silent=True) or {}
     first, last = (d.get("first_name") or "").strip(), (d.get("last_name") or "").strip()
     if not first or not last:
@@ -352,6 +336,9 @@ def _int_or_none(value):
 @member_required
 def api_me_areas():
     """Xidmət sahəsi: köhnə sətirlər silinir, seçilən hər (əməliyyat, rayon) üçün yeni sətir yazılır."""
+    stop = demo_readonly()
+    if stop:
+        return stop
     d = request.get_json(silent=True) or {}
     rows = []
     for deal, label in DEALS.items():

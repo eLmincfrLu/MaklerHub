@@ -179,3 +179,9 @@ CREATE INDEX IF NOT EXISTS ix_offers_request ON offers(request_id, status);
 -- şikayət: eyni obyekt üçün eyni tərəfdən 1 dəfə (müştəri → təklif, makler → tələb)
 CREATE UNIQUE INDEX IF NOT EXISTS ux_complaints_customer ON complaints(offer_id) WHERE from_side = 'customer';
 CREATE UNIQUE INDEX IF NOT EXISTS ux_complaints_agent ON complaints(request_id, agent_id) WHERE from_side = 'agent';
+
+-- ------------------------------------------------------------ Gün 5: demo rejimi (portfolio; real məlumatla qarışmır)
+-- INTEGER 0/1 (layihədəki digər bayraqlar kimi: active, is_read): db._prepare bool parametrləri int-ə çevirir.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_demo INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS is_demo INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS ix_requests_demo ON customer_requests(is_demo, status);

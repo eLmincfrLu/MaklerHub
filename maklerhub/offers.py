@@ -16,7 +16,9 @@ OFFER_STATUS = {"sent": "Göndərilib", "accepted": "Qəbul edildi", "rejected":
 
 # Makler tərəfinə tələbdən gedən sütunlar — telefon və IP burada YOXDUR (heç vaxt seçilmir)
 REQ_COLS = ("r.id, r.name, r.deal_type, r.districts, r.rooms, r.budget_min, r.budget_max, r.urgency, r.note, "
-            "r.status, r.created_at")
+            "r.status, r.created_at, r.is_demo")
+# Demo izolyasiyası: makler yalnız öz növündən (demo ↔ demo, real ↔ real) olan tələbləri görür
+SAME_KIND = "r.is_demo = (SELECT u.is_demo FROM users u WHERE u.id = ?)"
 
 
 def _int(value):
@@ -72,10 +74,13 @@ def validate_offer(form, deal_type):
 def send_offer(db, request_id, agent_id, clean):
     """Bir tranzaksiyada: tələb sətri FOR UPDATE ilə kilidlənir, şərtlər yoxlanır, təklif və müştəri bildirişi yazılır.
     Qaytarır: (offer_id, None) və ya (None, xəta). Uğurda commit edir, xətada rollback."""
-    req = db.execute("SELECT id, status, created_at FROM customer_requests WHERE id = ? FOR UPDATE",
+    req = db.execute("SELECT id, status, created_at, is_demo FROM customer_requests WHERE id = ? FOR UPDATE",
                      (request_id,)).fetchone()
+    agent = db.execute("SELECT is_demo FROM users WHERE id = ?", (agent_id,)).fetchone()
     error = None
-    if req is None or not request_alive(db, req):
+    if req is None or agent is None or req["is_demo"] != agent["is_demo"]:
+        error = "Tələb tapılmadı."
+    elif not request_alive(db, req):
         error = "Bu tələb bağlanıb — təklif göndərmək olmur."
     elif db.execute("SELECT 1 FROM offers WHERE request_id = ? AND agent_id = ?", (request_id, agent_id)).fetchone():
         error = "Bu tələbə artıq təklif göndərmisiniz (geri çəkilmiş təklif də sayılır)."
@@ -116,8 +121,8 @@ def load_ranked(db, agent_id, areas):
         f"SELECT {REQ_COLS}, "
         "(SELECT COUNT(*) FROM offers o WHERE o.request_id = r.id AND o.status != 'withdrawn') AS n_offers, "
         "(SELECT o.status FROM offers o WHERE o.request_id = r.id AND o.agent_id = ?) AS my_status "
-        f"FROM customer_requests r WHERE r.status = 'active' AND r.deal_type IN ({marks})",
-        (agent_id, *deals)).fetchall()
+        f"FROM customer_requests r WHERE r.status = 'active' AND {SAME_KIND} AND r.deal_type IN ({marks})",
+        (agent_id, agent_id, *deals)).fetchall()
     out = []
     for r, sc, reasons in matching.rank(rows, areas):
         if r["n_offers"] >= OFFER_LIMIT and not r["my_status"]:
@@ -167,7 +172,7 @@ COMPLAINT_TEXT_MAX = 300
 
 def _locked_request(db, token):
     """Tələb sətri token ilə FOR UPDATE (təklif qərarları bir-birinə qarışmasın)."""
-    return db.execute("SELECT id, status, created_at FROM customer_requests WHERE token = ? FOR UPDATE",
+    return db.execute("SELECT id, status, created_at, is_demo FROM customer_requests WHERE token = ? FOR UPDATE",
                       (token,)).fetchone()
 
 
@@ -259,12 +264,13 @@ def contacts_for(db, agent_id, offer_ids):
 
 
 def notify_new_request(db, req):
-    """Yeni tələb: aktiv lisenziyalı və aktiv maklerlərdən bal ≥ GOOD_SCORE olanlara bildiriş (bir sorğu + toplu yazma)."""
+    """Yeni tələb: aktiv lisenziyalı və aktiv maklerlərdən bal ≥ GOOD_SCORE olanlara bildiriş (bir sorğu + toplu yazma).
+    Demo tələb yalnız demo maklerlərə, real tələb yalnız real maklerlərə."""
     rows = db.execute(
         "SELECT a.user_id, a.deal_type, a.district, a.price_min, a.price_max FROM agent_areas a "
         "JOIN users u ON u.id = a.user_id JOIN licenses l ON l.id = u.license_id "
         "WHERE u.role = 'makler' AND u.status = 'active' AND l.status = 'used' AND l.expires_at > ? "
-        "AND a.deal_type = ?", (ts(), req["deal_type"])).fetchall()
+        "AND a.deal_type = ? AND u.is_demo = ?", (ts(), req["deal_type"], int(bool(req.get("is_demo"))))).fetchall()
     by_user = {}
     for r in rows:
         by_user.setdefault(r["user_id"], []).append(r)

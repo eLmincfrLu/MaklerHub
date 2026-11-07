@@ -2,7 +2,9 @@
 {% set page_css = 'makler-ayarlar.css' %}
 {% block title %}Ayarlar{% endblock %}
 {% block main %}
+  {%- set ro = current_user.is_demo %}
   <div class="head reveal" style="animation-delay:.05s"><h1>Ayarlar</h1></div>
+  {% if ro %}<div class="mh-empty reveal" style="animation-delay:.08s;margin-bottom:18px">Demo hesab: ayarlar yalnız baxış üçündür — profil, xidmət sahəsi və şifrə dəyişdirilmir.</div>{% endif %}
 
   <div class="wrap reveal" style="animation-delay:.12s">
     <div class="tabs">
@@ -17,6 +19,7 @@
         <h2>Profil məlumatları</h2>
         <div class="desc">Təklif göndərdiyiniz müştərilər adınızı görəcək.</div>
         <div class="mh-err"></div>
+        <fieldset{% if ro %} disabled{% endif %} style="border:0;padding:0;margin:0;min-width:0">
         <div class="two">
           <div class="field"><label for="first_name">Ad</label><input id="first_name" type="text" name="first_name" value="{{ current_user.first_name }}" maxlength="40"></div>
           <div class="field"><label for="last_name">Soyad</label><input id="last_name" type="text" name="last_name" value="{{ current_user.last_name }}" maxlength="40"></div>
@@ -25,13 +28,15 @@
           <div class="field"><label for="phone">Telefon</label><input id="phone" type="tel" name="phone" value="{{ phone }}" placeholder="+994 50 123 45 67" maxlength="25"></div>
           <div class="field"><label>E-poçt</label><div class="static">{{ current_user.email }}</div></div>
         </div>
-        <button class="btn" type="submit">Dəyişiklikləri yadda saxla</button>
+        </fieldset>
+        {% if not ro %}<button class="btn" type="submit">Dəyişiklikləri yadda saxla</button>{% endif %}
       </form>
 
       <form class="panel" id="p-saha" autocomplete="off" novalidate>
         <h2>Xidmət sahəsi</h2>
         <div class="desc">Hansı əməliyyatlarla və hansı rayonlarda işlədiyinizi seçin — tələbləri buna görə görəcəksiniz.</div>
         <div class="mh-err"></div>
+        <fieldset{% if ro %} disabled{% endif %} style="border:0;padding:0;margin:0;min-width:0">
         {%- for key, label in deals.items() %}
         {%- set a = areas[key] %}
         <div class="deal{% if not a.on %} off{% endif %}" data-deal="{{ key }}">
@@ -55,7 +60,8 @@
           </div>
         </div>
         {%- endfor %}
-        <button class="btn" type="submit">Xidmət sahəsini yadda saxla</button>
+        </fieldset>
+        {% if not ro %}<button class="btn" type="submit">Xidmət sahəsini yadda saxla</button>{% endif %}
       </form>
 
       <div class="panel" id="p-lisenziya">
@@ -75,6 +81,7 @@
 
       <form class="panel" id="p-sifre" autocomplete="off" novalidate>
         <h2>Şifrəni dəyiş</h2>
+        {% if ro %}<div class="mh-empty">Demo hesabın şifrəsi dəyişdirilmir.</div>{% else %}
         <div class="desc">Minimum 8 simvol, ən azı bir rəqəm.</div>
         <div class="mh-err"></div>
         <div class="field"><label>Cari şifrə</label><input type="password" name="current" placeholder="••••••••" autocomplete="current-password"></div>
@@ -83,6 +90,7 @@
           <div class="field"><label>Yeni şifrə (təkrar)</label><input type="password" name="new2" placeholder="Təkrar daxil edin" autocomplete="new-password"></div>
         </div>
         <button class="btn" type="submit">Şifrəni yenilə</button>
+        {% endif %}
       </form>
     </div>
   </div>

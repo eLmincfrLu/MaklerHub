@@ -2,10 +2,10 @@
 import logging
 import os
 
-from flask import Blueprint, Flask, g, render_template, send_from_directory
+from flask import Blueprint, Flask, g, render_template, request, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import auth, db as dbmod, helpers
+from . import auth, db as dbmod, demo, helpers, maintenance, monitoring
 from .config import Config
 
 public = Blueprint("public", __name__)
@@ -32,6 +32,35 @@ def health():
     return "ok", 200, {"Cache-Control": "no-store"}
 
 
+ROBOTS = "\n".join([
+    "User-agent: *",
+    "Allow: /",
+    "Disallow: /teleb/",
+    "Disallow: /kabinet",
+    "Disallow: /admin",
+    "Disallow: /giris",
+    "Disallow: /qeydiyyat",
+    "",
+])
+
+
+@public.route("/robots.txt")
+def robots():
+    return ROBOTS, 200, {"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=86400"}
+
+
+def security_headers(response):
+    """Bütün cavablara: nosniff, iframe qadağası, referrer siyasəti (görünüş özü təyin edibsə — məs. /teleb/<token>
+    no-referrer — toxunulmur), proxy (Render, https) arxasında HSTS."""
+    h = response.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("X-Frame-Options", "DENY")
+    h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    if os.environ.get("MAKLERHUB_BEHIND_PROXY") == "1":
+        h.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
+
+
 @public.route("/media/avatars/<path:filename>")
 def avatar(filename):
     from flask import current_app
@@ -46,6 +75,7 @@ def create_app(overrides=None):
     app.config.from_object(Config)
     if overrides:
         app.config.update(overrides)
+    monitoring.init_sentry()  # yalnız SENTRY_DSN varsa
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     os.makedirs(app.config["UPLOAD_DIR"], exist_ok=True)
@@ -54,6 +84,9 @@ def create_app(overrides=None):
     helpers.init_app(app)
     dbmod.init_app(app)
     auth.init_app(app)
+    maintenance.init_app(app)
+    demo.init_app(app)
+    app.after_request(security_headers)
 
     from .admin import bp as admin_bp
     from .makler import bp as makler_bp
@@ -72,12 +105,13 @@ def create_app(overrides=None):
 
     @app.errorhandler(404)
     def not_found(_e):
-        return render_template("error.html", code=404, title="Səhifə tapılmadı",
-                               text="Axtardığınız səhifə mövcud deyil və ya köçürülüb."), 404
+        return render_template("error.html", code=404, title="Səhifə tapılmadı", teleb_link=True,
+                               text="Bu səhifə mövcud deyil və ya köçürülüb. Ev axtarırsınızsa, tələbinizi yazın — "
+                                    "maklerlər sizə uyğun təklif göndərsin."), 404
 
     @app.errorhandler(500)
     def server_error(_e):
-        return render_template("error.html", code=500, title="Xəta baş verdi",
+        return render_template("error.html", code=500, title="Xəta baş verdi", teleb_link=True,
                                text="Gözlənilməz xəta baş verdi. Bir az sonra yenidən cəhd edin."), 500
 
     @app.context_processor

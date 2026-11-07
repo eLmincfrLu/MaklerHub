@@ -1,0 +1,10 @@
+/* Makler kabineti, dar ekran (≤600px, məs. 375px): naviqasiyada uzun ad sığmayanda kəsilməsin —
+   ad və rol bir sətirdə, ellipsis ilə. base.html layout-u dəyişmir; yalnız mövcud siniflərə əlavə qaydalar. */
+@media (max-width:600px){
+  .nav-in{gap:12px;}
+  .brand{flex-shrink:0;}
+  .mh-bell{margin-left:auto;}
+  .user{flex-shrink:1;min-width:0;max-width:56vw;}
+  .user > div:last-child{min-width:0;overflow:hidden;}
+  .user .uname,.user .urole{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;}
+}

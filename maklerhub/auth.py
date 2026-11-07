@@ -156,8 +156,14 @@ def _browser_id():
 
 def open_makler_session(db, user):
     """Cihazı yoxlayır/qeyd edir, köhnə sessiyaları bağlayıb yenisini açır.
+    Demo makler: cihaz limiti və tək sessiya qaydası yoxdur (README-dəki hesabla çox adam eyni anda girir).
     Qaytarır: (session_token, browser_id) və ya (None, xəta mətni)."""
     browser = _browser_id()
+    if user["is_demo"]:
+        token, stamp = secrets.token_urlsafe(32), ts()
+        db.execute("INSERT INTO sessions(user_id, device_id, token, active, created_at, last_seen_at) "
+                   "VALUES (?,NULL,?,1,?,?)", (user["id"], token, stamp, stamp))
+        return token, browser
     key = _device_key(user["id"], browser)
     stamp, ip, ua = ts(), client_ip(), (request.user_agent.string or "")[:300]
     dev = db.execute("SELECT id FROM devices WHERE device_token = ?", (key,)).fetchone()
@@ -337,10 +343,11 @@ def giris():
         fails = db.execute("SELECT COUNT(*) FROM login_attempts WHERE email = ? AND success = 0 AND created_at >= ?",
                            (email, since)).fetchone()[0]
         ip = client_ip()
-        if fails >= limit:
+        user = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        # demo hesabın şifrəsi açıqdır — kimsə səhv şifrələrlə onu hamı üçün bloklaya bilməsin
+        if fails >= limit and not (user and user["is_demo"]):
             error = "Çox sayda uğursuz cəhd edildi. 15 dəqiqə sonra yenidən yoxlayın."
         else:
-            user = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
             if user and check_password_hash(user["password_hash"], password):
                 db.execute("INSERT INTO login_attempts(email, ip, success, created_at) VALUES (?, ?, 1, ?)",
                            (email, ip, ts()))
@@ -356,13 +363,27 @@ def giris():
             else:
                 db.execute("INSERT INTO login_attempts(email, ip, success, created_at) VALUES (?, ?, 0, ?)",
                            (email, ip, ts()))
-                if fails + 1 >= limit:
+                if fails + 1 >= limit and not (user and user["is_demo"]):
                     masked = ".".join(ip.split(".")[:1] + ["xxx", "xx"] + ip.split(".")[3:]) if ip.count(".") == 3 else ip
                     add_log(db, "warn", "Makler", f"{limit} uğursuz giriş cəhdi: {email}",
                             f"IP={masked} cəhd={limit}\nhesab 15 dəq müddətinə bloklandı")
                 db.commit()
                 error = "E-poçt və ya şifrə yanlışdır."
-    return render_template("auth/giris.html", email=email, error=error)
+    demo = None
+    if request.args.get("demo") == "1":
+        demo = {"email": DEMO_EMAIL, "password": demo_password(),
+                "ready": get_db().execute("SELECT 1 FROM users WHERE email = ? AND is_demo = 1",
+                                          (DEMO_EMAIL,)).fetchone() is not None}
+        email = email or DEMO_EMAIL
+    return render_template("auth/giris.html", email=email, error=error, demo=demo)
+
+
+DEMO_EMAIL = "demo1@maklerhub.az"
+
+
+def demo_password():
+    """Demo maklerlərin ümumi şifrəsi (açıq, README-də göstərilir)."""
+    return os.environ.get("MAKLERHUB_DEMO_PASSWORD") or "Demo12345"
 
 
 # ---------------------------------------------------------------- qeydiyyat
@@ -513,7 +534,7 @@ def sifre_berpa():
         db = get_db()
         email = normalize_email(request.form.get("email"))
         user = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-        if user:
+        if user and not user["is_demo"]:  # demo hesabın şifrəsi dəyişdirilmir
             token = _serializer().dumps({"id": user["id"], "h": user["password_hash"][-12:]})
             link = url_for("auth.sifre_yenile", token=token, _external=True)
             try:
@@ -544,7 +565,7 @@ def sifre_yenile(token):
     except BadSignature:
         abort(404)
     user = db.execute("SELECT * FROM users WHERE id = ?", (data.get("id"),)).fetchone()
-    if not user or user["password_hash"][-12:] != data.get("h"):
+    if not user or user["is_demo"] or user["password_hash"][-12:] != data.get("h"):
         flash("Bu link artıq istifadə olunub.", "err")
         return redirect(url_for("auth.sifre_berpa"))
     error = None
@@ -564,6 +585,8 @@ def sifre_yenile(token):
 @bp.route("/api/password", methods=["POST"])
 @login_required
 def change_password():
+    if g.user["is_demo"]:
+        return jsonify(ok=False, error="Demo hesabda profil, xidmət sahəsi və şifrə dəyişdirilmir."), 403
     data = request.get_json(silent=True) or {}
     current, new, new2 = data.get("current", ""), data.get("new", ""), data.get("new2", "")
     if not check_password_hash(g.user["password_hash"], current):

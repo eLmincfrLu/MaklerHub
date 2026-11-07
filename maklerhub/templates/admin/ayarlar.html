@@ -4,8 +4,9 @@
 {% block shell %}
   <main>
     <div class="head reveal" style="animation-delay:.05s">
-      <div><h1>Ayarlar</h1><p>Admin hesabı</p></div>
+      <div><h1>Ayarlar</h1><p>Admin hesabı və texniki xidmət</p></div>
     </div>
+    {% include 'admin/_flash.html' %}
 
     <div class="box pwform reveal" style="animation-delay:.1s">
       <h2>Şifrəni dəyiş</h2>
@@ -16,6 +17,17 @@
         <div class="mh-field"><label for="pw-new">Yeni şifrə</label><input id="pw-new" type="password" name="new" autocomplete="new-password" required></div>
         <div class="mh-field"><label for="pw-new2">Yeni şifrə (təkrar)</label><input id="pw-new2" type="password" name="new2" autocomplete="new-password" required></div>
         <button class="btn" type="submit">Şifrəni yenilə</button>
+      </form>
+    </div>
+
+    <div class="box pwform reveal" style="animation-delay:.16s;margin-top:22px">
+      <h2>Avtomatik təmizlik</h2>
+      <p class="msub" style="margin-bottom:14px">Saatda ən çox bir dəfə, sorğudan sonra özü işləyir: oxunmuş bildirişlər (30 gün), oxunmamışlar (90 gün), giriş cəhdləri (7 gün), loqlar (90 gün), bağlı sessiyalar (30 gün).</p>
+      <p class="msub" style="margin-bottom:10px">Son təmizlik: <b>{% if cleanup_at %}{{ cleanup_at }} ({{ cleanup_when }}){% else %}hələ olmayıb{% endif %}</b></p>
+      {% if cleanup_stats %}<ul class="msub" style="margin:0 0 14px 18px">{% for label, n in cleanup_stats %}<li>{{ label }}: {{ n }} sətir</li>{% endfor %}</ul>{% endif %}
+      <form method="post" action="{{ url_for('admin.temizlik') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn" type="submit">Təmizliyi indi işlət</button>
       </form>
     </div>
   </main>

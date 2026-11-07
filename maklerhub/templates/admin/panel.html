@@ -4,7 +4,7 @@
 {% block shell %}
   <main>
     <div class="head reveal" style="animation-delay:.05s">
-      <div><h1>Ümumi baxış</h1><p>Platformanın vəziyyəti</p></div>
+      <div><h1>Ümumi baxış</h1><p>{% if demo %}<b>Demo məlumat</b> (portfolio) — real göstəricilərə daxil deyil · <a href="{{ url_for('admin.panel') }}">Real məlumata qayıt</a>{% else %}Platformanın vəziyyəti (demo məlumat çıxarılıb){% if demo_total %} · <a href="{{ url_for('admin.panel', demo=1) }}">Demo: {{ demo_total }} tələb →</a>{% endif %}{% endif %}</p></div>
     </div>
     {% include 'admin/_flash.html' %}
 

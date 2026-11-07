@@ -27,7 +27,7 @@
       <tbody>
       {%- for x in items %}
         <tr>
-          <td><a href="{{ url_for('admin.teleb', rid=x.r.id) }}">#{{ x.r.id }}</a></td>
+          <td><a href="{{ url_for('admin.teleb', rid=x.r.id) }}">#{{ x.r.id }}</a>{% if x.demo %} <span class="pill trial">demo</span>{% endif %}</td>
           <td><div class="mname"><a href="{{ url_for('admin.teleb', rid=x.r.id) }}">{{ x.deal }} · {{ x.rooms }} otaq</a></div><div class="msub">{{ x.districts }}</div></td>
           <td>{{ x.r.name or '—' }}</td>
           <td>{{ x.budget }}</td>

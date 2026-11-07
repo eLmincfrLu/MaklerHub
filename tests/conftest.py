@@ -40,11 +40,24 @@ def app():
     if real_host is None or url != (os.environ.get("TEST_DATABASE_URL") or "").strip() or dbguard.host_of(url) == real_host:
         raise RuntimeError("TƏHLÜKƏSİZLİK: app fixture yalnız qoruyucudan keçmiş test bazası ilə işləyir.")
     dbmod.init_db(url)  # test bazası sıfırdan
-    application = create_app({"TESTING": True, "DATABASE": url})
+    # avtomatik (sorğudan sonrakı) təmizlik testlərdə söndürülüb — test_gun5 onu ayrıca yandırır
+    application = create_app({"TESTING": True, "DATABASE": url, "CLEANUP_DISABLED": True})
     yield application
     if dbmod._pool is not None:
         dbmod._pool.close()
         dbmod._pool = None
+
+
+@pytest.fixture(autouse=True)
+def fresh_throttle(request):
+    """Hər test lazy yeniləmələrin (dəqiqədə 1 dəfə) məhdudiyyətindən təmiz başlasın."""
+    if "app" in request.fixturenames or "db" in request.fixturenames:
+        from maklerhub import maintenance
+        maintenance.reset_throttle()
+        con = request.getfixturevalue("db")
+        con.execute("DELETE FROM settings WHERE key IN ('last_expire_at', 'last_cleanup_at')")
+        con.commit()
+    yield
 
 
 @pytest.fixture

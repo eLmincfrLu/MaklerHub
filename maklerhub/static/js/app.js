@@ -146,7 +146,7 @@
       });
       head.appendChild(all);
     }
-    if(!j.items.length){listEl.appendChild(el('div','mh-notifs-e','Hələ bildiriş yoxdur. Profil yaradılandan sonra yeni uyğun elan gələndə burada görünəcək.'));return;}
+    if(!j.items.length){listEl.appendChild(el('div','mh-notifs-e','Hələ bildiriş yoxdur. Yeni uyğun tələb gələndə burada görünəcək.'));return;}
     j.items.forEach(it=>{
       const a=el('a','mh-notif'+(it.read?'':' unread'));a.href=it.href;
       a.appendChild(el('div','t',it.title));a.appendChild(el('div','b',it.body));a.appendChild(el('div','w',it.when));

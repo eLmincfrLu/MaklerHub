@@ -5,12 +5,12 @@ from datetime import timedelta
 
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from . import licenses
+from . import licenses, maintenance
 from .auth import admin_required
 from .db import add_log, get_db
 from .helpers import date_short, full_name, log_time, now, parse, phone_display, rel, ts
 from .offers import AGENT_COMPLAINTS, CLOSE_REASONS, CUSTOMER_COMPLAINTS, OFFER_STATUS
-from .teleb import DEALS, ROOMS, STATUS as REQ_STATUS, URGENCY, budget_str, expire_requests
+from .teleb import DEALS, ROOMS, STATUS as REQ_STATUS, URGENCY, budget_str
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -24,7 +24,9 @@ CLOSE_REASONS_ALL = {**CLOSE_REASONS, "admin": "Admin bağladı"}
 
 
 def render(template, active, **ctx):
-    new_complaints = get_db().execute("SELECT COUNT(*) FROM complaints WHERE status = 'new'").fetchone()[0]
+    new_complaints = get_db().execute(
+        "SELECT COUNT(*) FROM complaints c JOIN customer_requests r ON r.id = c.request_id "
+        "WHERE c.status = 'new' AND r.is_demo = 0").fetchone()[0]
     return render_template(template, nav=NAV, active=active, new_complaints=new_complaints, **ctx)
 
 
@@ -46,7 +48,8 @@ def _req_row(r):
             "rooms": ROOMS.get(r["rooms"], "—") if r["rooms"] else "—",
             "budget": budget_str(r["deal_type"], r["budget_min"], r["budget_max"]),
             "status": REQ_STATUS.get(r["status"], r["status"]), "when": rel(r["created_at"]),
-            "pill": "active" if r["status"] == "active" else "susp" if r["status"] == "closed" else "trial"}
+            "pill": "active" if r["status"] == "active" else "susp" if r["status"] == "closed" else "trial",
+            "demo": bool(r.get("is_demo"))}
 
 
 # ---------------------------------------------------------------- ümumi baxış
@@ -54,28 +57,35 @@ def _req_row(r):
 @bp.route("/")
 @admin_required
 def panel():
+    """Göstəricilər YALNIZ real məlumatdan; ?demo=1 — eyni göstəricilər yalnız demo məlumatdan (ayrıca)."""
     db = get_db()
-    expire_requests(db)
-    db.commit()
+    maintenance.lazy_expire(db)
+    demo = 1 if request.args.get("demo") == "1" else 0
     week = ts(now() - timedelta(days=7))
+    offers_of = "FROM offers o JOIN customer_requests r ON r.id = o.request_id WHERE r.is_demo = ? AND "
     k = db.execute(
-        "SELECT (SELECT COUNT(*) FROM customer_requests WHERE status = 'active') AS active_req, "
-        "(SELECT COUNT(*) FROM customer_requests WHERE created_at >= ?) AS new_req, "
-        "(SELECT COUNT(*) FROM offers WHERE status != 'withdrawn') AS offers, "
-        "(SELECT COUNT(*) FROM offers WHERE status = 'accepted') AS accepted, "
-        "(SELECT COUNT(*) FROM offers WHERE status IN ('accepted', 'rejected')) AS decided, "
-        "(SELECT COUNT(*) FROM users u JOIN licenses l ON l.id = u.license_id WHERE u.role = 'makler' "
+        "SELECT (SELECT COUNT(*) FROM customer_requests WHERE status = 'active' AND is_demo = ?) AS active_req, "
+        "(SELECT COUNT(*) FROM customer_requests WHERE created_at >= ? AND is_demo = ?) AS new_req, "
+        f"(SELECT COUNT(*) {offers_of} o.status != 'withdrawn') AS offers, "
+        f"(SELECT COUNT(*) {offers_of} o.status = 'accepted') AS accepted, "
+        f"(SELECT COUNT(*) {offers_of} o.status IN ('accepted', 'rejected')) AS decided, "
+        "(SELECT COUNT(*) FROM users u JOIN licenses l ON l.id = u.license_id WHERE u.role = 'makler' AND u.is_demo = ? "
         " AND u.status = 'active' AND l.status = 'used' AND l.expires_at > ?) AS maklers, "
-        "(SELECT COUNT(*) FROM complaints WHERE status = 'new') AS complaints", (week, ts())).fetchone()
+        "(SELECT COUNT(*) FROM complaints c JOIN customer_requests r ON r.id = c.request_id "
+        " WHERE c.status = 'new' AND r.is_demo = ?) AS complaints",
+        (demo, week, demo, demo, demo, demo, demo, ts(), demo)).fetchone()
     kpi = dict(k)
     # qəbul faizi: cavab verilmiş (qəbul + rədd) təkliflər arasında qəbul olunanlar
     kpi["accept_rate"] = round(100 * k["accepted"] / k["decided"]) if k["decided"] else None
-    reqs = [_req_row(r) for r in db.execute("SELECT * FROM customer_requests ORDER BY id DESC LIMIT 10")]
+    reqs = [_req_row(r) for r in db.execute(
+        "SELECT * FROM customer_requests WHERE is_demo = ? ORDER BY id DESC LIMIT 10", (demo,))]
     offers = db.execute(
         "SELECT o.id, o.title, o.status, o.created_at, o.request_id, u.first_name, u.last_name FROM offers o "
-        "JOIN users u ON u.id = o.agent_id ORDER BY o.id DESC LIMIT 10").fetchall()
+        "JOIN users u ON u.id = o.agent_id JOIN customer_requests r ON r.id = o.request_id WHERE r.is_demo = ? "
+        "ORDER BY o.id DESC LIMIT 10", (demo,)).fetchall()
+    demo_total = db.execute("SELECT COUNT(*) FROM customer_requests WHERE is_demo = 1").fetchone()[0]
     return render("admin/panel.html", "admin.panel", kpi=kpi, reqs=reqs, offers=offers, offer_status=OFFER_STATUS,
-                  rel=rel, full_name=full_name)
+                  rel=rel, full_name=full_name, demo=demo, demo_total=demo_total)
 
 
 # ---------------------------------------------------------------- tələblər
@@ -83,8 +93,7 @@ def panel():
 @admin_required
 def telebler():
     db = get_db()
-    expire_requests(db)
-    db.commit()
+    maintenance.lazy_expire(db)
     status = request.args.get("status") if request.args.get("status") in REQ_STATUS else ""
     q = (request.args.get("q") or "").strip()[:60]
     where, params = [], []
@@ -182,12 +191,14 @@ def maklerler():
     items = []
     for u in rows:
         lic_ok = u["lic_status"] == "used" and u["expires_at"] and u["expires_at"] > stamp
-        items.append({"u": u, "name": full_name(u), "phone": phone_display(u["phone"]), "lic_ok": lic_ok,
+        items.append({"u": u, "name": full_name(u) + (" (demo)" if u["is_demo"] else ""),
+                      "phone": phone_display(u["phone"]), "lic_ok": lic_ok,
                       "expires": date_short(u["expires_at"]) if u["expires_at"] else "—",
                       "lic_label": "Ləğv edilib" if u["lic_status"] == "revoked" else ("Aktiv" if lic_ok else "Bitib")})
-    kpi = {"all": len(items), "active": sum(1 for x in items if x["u"]["status"] == "active" and x["lic_ok"]),
-           "susp": sum(1 for x in items if x["u"]["status"] == "suspended"),
-           "expired": sum(1 for x in items if not x["lic_ok"])}
+    real = [x for x in items if not x["u"]["is_demo"]]  # göstəricilər demo-suz
+    kpi = {"all": len(real), "active": sum(1 for x in real if x["u"]["status"] == "active" and x["lic_ok"]),
+           "susp": sum(1 for x in real if x["u"]["status"] == "suspended"),
+           "expired": sum(1 for x in real if not x["lic_ok"])}
     return render("admin/maklerler.html", "admin.maklerler", items=items, kpi=kpi)
 
 
@@ -296,14 +307,24 @@ def loglar():
 @admin_required
 def ayarlar():
     changed = g.user["password_changed_at"]
-    return render("admin/ayarlar.html", "admin.ayarlar", pw_changed=rel(changed) if changed else "məlum deyil")
+    last_at, last_stats = maintenance.last_cleanup(get_db())
+    return render("admin/ayarlar.html", "admin.ayarlar", pw_changed=rel(changed) if changed else "məlum deyil",
+                  cleanup_when=rel(last_at) if last_at else None, cleanup_at=last_at, cleanup_stats=last_stats)
 
 
-# Köhnə "Mənbə statusu": fayl saxlanılır, içi "Tezliklə" (naviqasiyada görünmür)
-@bp.route("/menbe")
+@bp.route("/ayarlar/temizlik", methods=["POST"])
 @admin_required
-def menbe():
-    return render("admin/menbe.html", "admin.panel")
+def temizlik():
+    """Təmizliyi indi işlət (saatlıq məhdudiyyətə baxmadan)."""
+    db = get_db()
+    counts = maintenance.run_cleanup(db)
+    total = sum(counts.values())
+    details = "\n".join(f"{maintenance.LABELS[k]}: {v}" for k, v in counts.items())
+    add_log(db, "info", "Sistem", f"Təmizlik əl ilə işlədildi: {total} sətir silindi",
+            f"{details}\nicra edən={g.user['email']}")
+    db.commit()
+    flash(f"Təmizlik tamamlandı: {total} sətir silindi.", "ok")
+    return redirect(url_for("admin.ayarlar"))
 
 
 # ---------------------------------------------------------------- lisenziya kodları

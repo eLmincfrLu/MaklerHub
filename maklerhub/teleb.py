@@ -8,6 +8,7 @@ from flask import Blueprint, abort, flash, g, make_response, redirect, render_te
 from .auth import client_ip, ip_limit_applies
 from .db import add_log, get_db, get_setting
 from .helpers import BAKU_DISTRICTS, date_short, money, normalize_phone, now, phone_display, phone_masked, rel, ts
+from .maintenance import lazy_expire
 
 bp = Blueprint("teleb", __name__)
 
@@ -30,10 +31,12 @@ OFFER_LIMIT = 5          # bir tələbə aktiv (geri çəkilməmiş) təklif lim
 
 def expire_requests(db):
     """Lazy yeniləmə (cron yoxdur): müddəti keçən aktiv tələblər 'expired' olur; bağlanandan/bitəndən
-    ANON_DAYS gün sonra ad, telefon, qeyd və IP silinir. Çağıran tərəf commit etməlidir."""
+    ANON_DAYS gün sonra ad, telefon, qeyd və IP silinir. Demo tələblərin müddəti bitmir (portfolio canlı qalsın).
+    Çağıran tərəf commit etməlidir. Sorğularda birbaşa yox, maintenance.lazy_expire ilə (dəqiqədə ən çox 1 dəfə)."""
     ttl = int(get_setting(db, "request_ttl_days") or 30)
     stamp = now()
-    db.execute("UPDATE customer_requests SET status = 'expired', closed_at = ? WHERE status = 'active' AND created_at < ?",
+    db.execute("UPDATE customer_requests SET status = 'expired', closed_at = ? WHERE status = 'active' AND is_demo = 0 "
+               "AND created_at < ?",
                (ts(stamp), ts(stamp - timedelta(days=ttl))))
     db.execute("UPDATE customer_requests SET name = '', phone = '', note = '', ip = '' "
                "WHERE status IN ('closed', 'expired') AND closed_at < ? AND phone != ''",
@@ -41,7 +44,9 @@ def expire_requests(db):
 
 
 def request_alive(db, req):
-    """Tələb aktivdir və müddəti keçməyib (lazy yeniləmə hələ işləməsə də)."""
+    """Tələb aktivdir və müddəti keçməyib (lazy yeniləmə hələ işləməsə də). Demo tələbin müddəti bitmir."""
+    if req.get("is_demo"):
+        return req["status"] == "active"
     ttl = int(get_setting(db, "request_ttl_days") or 30)
     return req["status"] == "active" and req["created_at"] >= ts(now() - timedelta(days=ttl))
 
@@ -120,13 +125,14 @@ def forma():
         else:
             clean, errors = validate(form)
             if not errors:
-                expire_requests(db)
+                lazy_expire(db)
                 since = ts(now() - timedelta(hours=24))
                 if ip_limit_applies(ip) and db.execute(
                         "SELECT COUNT(*) FROM customer_requests WHERE ip = ? AND created_at >= ?",
                         (ip, since)).fetchone()[0] >= IP_DAILY_LIMIT:
                     errors.append(f"Bir gündə ən çox {IP_DAILY_LIMIT} tələb göndərmək olar. Sabah yenidən cəhd edin.")
-                elif db.execute("SELECT COUNT(*) FROM customer_requests WHERE phone = ? AND status = 'active'",
+                elif db.execute("SELECT COUNT(*) FROM customer_requests WHERE phone = ? AND status = 'active' "
+                                "AND is_demo = 0",
                                 (clean["phone"],)).fetchone()[0] >= PHONE_ACTIVE_LIMIT:
                     errors.append(f"Bu nömrə ilə artıq {PHONE_ACTIVE_LIMIT} aktiv tələb var. "
                                   "Yenisi üçün köhnə tələblərdən birinin bağlanmasını gözləyin.")
@@ -141,7 +147,7 @@ def forma():
                      json.dumps(clean["districts"], ensure_ascii=False), clean["rooms"], clean["budget_min"],
                      clean["budget_max"], clean["urgency"], clean["note"], stamp, ip, stamp)).lastrowid
                 from .offers import notify_new_request
-                notify_new_request(db, {"id": rid, "deal_type": clean["deal"], "districts": clean["districts"],
+                notify_new_request(db, {"id": rid, "is_demo": 0, "deal_type": clean["deal"], "districts": clean["districts"],
                                         "budget_min": clean["budget_min"], "budget_max": clean["budget_max"],
                                         "summary": f"{DEALS[clean['deal']]}, {', '.join(clean['districts'])}, "
                                                    f"{ROOMS[clean['rooms']]} otaq"})
@@ -225,8 +231,7 @@ def menim(token):
     if len(token) > 64:
         abort(404)
     db = get_db()
-    expire_requests(db)
-    db.commit()
+    lazy_expire(db)
     r = db.execute("SELECT * FROM customer_requests WHERE token = ?", (token,)).fetchone()
     if r is None:
         abort(404)

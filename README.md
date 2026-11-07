@@ -1,125 +1,247 @@
-# MaklerHub — işlək platforma
+# MaklerHub
 
-Daşınmaz əmlak maklerləri üçün elan izləmə və müştəri-elan uyğunlaşdırma platforması.
-Bütün səhifələr göndərdiyiniz dizayn fayllarının **eyni HTML/CSS/animasiyaları** ilə qurulub —
-fərq ondadır ki, indi arxada real server (Python/Flask), verilənlər bazası (SQLite),
-giriş sistemi və işlək API-lər var.
+**Siz ev axtarmırsınız — maklerlər sizin üçün axtarır.**
 
-## 1. İşə salmaq (3 addım)
+MaklerHub Bakı üçün "tərs" daşınmaz əmlak platformasıdır: müştəri nə istədiyini bir dəfə yazır, lisenziyalı
+maklerlər uyğun evləri ona özləri təklif edir. Müştərinin nömrəsi heç kimə görünmür — yalnız təklifi qəbul etdiyi
+maklerə açılır.
 
-Kompüterdə **Python 3.9+** olmalıdır.
+🔗 **Canlı versiya:** https://maklerhub.onrender.com
+👤 **Demo makler girişi:** `demo1@maklerhub.az` / `Demo12345` (və ya ana səhifənin altındakı "Demo: makler kimi bax")
 
-**Windows:** `start.bat` faylına iki dəfə klikləyin.
-**macOS / Linux:** terminalda `./start.sh`
+> Sayt pulsuz hostinqdədir (Render + Neon): bir müddət boş qalandan sonra ilk açılış 30–60 saniyə çəkə bilər.
+> Demo məlumatlar realdan tam ayrıdır: demo makler yalnız demo tələbləri görür, demo hesabda ayarlar dəyişdirilmir.
 
-və ya əl ilə:
+---
+
+## Problem
+
+Bakıda ev axtaran adam bu gün elan saytlarında saatlarla eyni şəkilləri, köhnəlmiş və "yem" elanları vərəqləyir,
+nömrəsini onlarla maklerə verir, sonra günlərlə zəng qəbul edir. Makler isə müştəri tapmaq üçün yüzlərlə elan
+yerləşdirir və "ev hələ var?" zənglərinə cavab verir. Hər iki tərəf vaxt itirir, nömrə isə nəzarətsiz yayılır.
+
+## Həll
+
+MaklerHub axını tərsinə çevirir:
+
+1. **Müştəri** qeydiyyatsız, 1 dəqiqəlik forma ilə tələbini yazır: kirayə/alış, 1–3 rayon, otaq sayı, büdcə,
+   təcililik. Ona gizli link verilir — "Mənim tələbim" səhifəsi.
+2. **Maklerlər** kabinetdə öz xidmət sahələrinə uyğun tələbləri uyğunluq faizi ilə görür və konkret evi təklif
+   edir (başlıq, qiymət, rayon, otaq, sahə, şəkil, təsvir). Bir tələbə ən çox 5 təklif gəlir.
+3. **Müştəri** təklifləri öz səhifəsində müqayisə edir: "Maraqlıdır" və ya "Maraqlı deyil".
+4. Qəbul olunan təklifin **maklerinə müştərinin adı və nömrəsi açılır** (zəng və WhatsApp linki). Digər
+   maklerlər nömrəni heç vaxt görmür.
+
+## Necə işləyir
+
+```mermaid
+sequenceDiagram
+    actor M as Müştəri
+    participant H as MaklerHub
+    actor K as Makler
+    M->>H: Tələb yazır (/teleb)
+    H-->>M: Gizli link: /teleb/<token>
+    H->>K: Bildiriş: yeni uyğun tələb (≥50%)
+    K->>H: Təklif göndərir
+    H-->>M: Yeni təklif ("Yeni" nişanı)
+    M->>H: Qəbul edir
+    H->>K: Müştərinin adı + telefonu açılır
+    K-->>M: Zəng / WhatsApp
+```
+
+| | Bina.az / Tap.az (elan saytları) | MaklerHub |
+|---|---|---|
+| Kim kimi axtarır | Müştəri elanları vərəqləyir | Maklerlər müştərinin tələbinə gəlir |
+| Müştərinin nömrəsi | Müştəri özü onlarla nömrəyə zəng edir, nömrəsi hamıda qalır | Yalnız qəbul etdiyi maklerə açılır |
+| Uyğunluq | Filtrlər; nəticədə çoxlu təkrar elan | Hər tələb üçün rayon + büdcə üzrə uyğunluq faizi |
+| Spam | Elan yerləşdirmək asandır | Makler yalnız lisenziya kodu ilə; tələbə 5 təklif limiti, şikayət sistemi |
+| Müştəri üçün qeydiyyat | Elan üçün lazım ola bilər | Yoxdur — gizli link kifayətdir |
+| Kimin üçün | Hamı (satıcı, makler, alıcı) | Ev axtaran müştəri ↔ peşəkar makler |
+
+## Əsas funksiyalar
+
+- **Uyğunluq mühərriki** (`maklerhub/matching.py`) — təmiz funksiyalar: əvvəl qapı (makler bu əməliyyat növü ilə
+  işləyirmi), sonra **rayon 55 bal + büdcə 45 bal** × kəsişmə nisbəti. Müştəri minimum büdcə yazmayıbsa aralıq
+  `[max × 0.7, max]` götürülür. 50%-dən yuxarı tələblər "uyğun" sayılır və maklerə bildiriş gedir. Hər balın
+  yanında səbəb yazılır ("✓ Yasamal sizin rayonunuzdur", "△ Büdcə qismən uyğundur"...).
+- **Nömrə qorunur** — makler tərəfinə gedən SQL sorğularında telefon sütunu ümumiyyətlə seçilmir; nömrə yalnız
+  `contacts` cədvəlində sətir olanda (müştəri qəbul edəndə) bir funksiyadan oxunur. Müştərinin öz səhifəsində
+  belə nömrə maskalanır (`+994 50 *** ** 35`).
+- **Spam qoruması** — honeypot sahəsi, IP başına gündə 3 tələb, nömrə başına 2 aktiv tələb, CSRF; qeyri-ictimai
+  IP gələndə limitlər "fail-open" olur (proxy səhv qurulsa bütün müştərilər bloklanmasın).
+- **Lisenziya + cihaz limiti** — makler admin verdiyi `MH-XXXX-XXXX-XXXX` kodu ilə qeydiyyatdan keçir (kod
+  `FOR UPDATE` ilə bir dəfəlik), hesab ən çox 2 cihazda və bir anda tək sessiyada işləyir; yanlış kod cəhdləri
+  IP üzrə məhdudlaşdırılır.
+- **Yarış vəziyyətləri** — təklif limiti, qəbul limiti (bir tələbdə 3) və bağlama tələb sətri kilidlənərək
+  (`SELECT ... FOR UPDATE`) yoxlanır; `UNIQUE(request_id, agent_id)` bir maklerə bir təklif verir.
+- **Admin panel** — göstəricilər, tələblər (telefon yalnız admin üçün), maklerlər (dayandır, cihazları sıfırla,
+  lisenziyanı uzat), lisenziya kodları, şikayətlər, sistem loqları, avtomatik təmizlik.
+- **Məxfilik** — bağlanan/bitən tələbin adı, nömrəsi, qeydi və IP-si 90 gün sonra silinir; köhnə bildiriş, loq,
+  giriş cəhdi və sessiyalar saatda bir dəfə avtomatik təmizlənir (pulsuz Neon yaddaşı üçün də).
+- **Demo rejimi** — `is_demo` bayrağı ilə tam izolyasiya; `flask --app run seed-demo` bir əmrlə hazırlayır.
+
+## Ekran görüntüləri
+
+| Ana səhifə | Makler kabineti |
+|---|---|
+| ![Ana səhifə](docs/screenshots/01-ana-sehife.png) | ![Makler kabineti](docs/screenshots/04-makler-kabinet.png) |
+
+| Tələb forması (mobil) | Müştərinin təklifləri (mobil) |
+|---|---|
+| <img src="docs/screenshots/02-teleb-mobil.png" width="300" alt="Tələb forması"> | <img src="docs/screenshots/03-musteri-teklifler-mobil.png" width="300" alt="Təkliflər"> |
+
+| Tələb detalı və təklif forması | Admin panel |
+|---|---|
+| ![Tələb detalı](docs/screenshots/05-teleb-detal.png) | ![Admin panel](docs/screenshots/06-admin-panel.png) |
+
+Bütün şəkillər demo məlumatla çəkilib (adlar uydurmadır, telefonlar `+994 50 000 00 0X`).
+
+## Texnologiyalar və arxitektura
+
+- **Backend:** Python 3, Flask 3 (blueprint-lər: public, auth, teleb, makler, admin), waitress (WSGI).
+- **Baza:** PostgreSQL ([Neon](https://neon.tech), pulsuz plan) — `psycopg` 3 + connection pool (`min_size=0`,
+  Neon yata bilsin). Kiçik uyğunlaşdırıcı qat (`db.py`) `?` parametrlərini və sqlite üslubunu saxlayır.
+- **Frontend:** server tərəfində Jinja şablonları, saf CSS/JS (framework yoxdur), mobil-əvvəl.
+- **Hostinq:** Render (pulsuz web service) + Cloudflare.
+- **Monitorinq:** Sentry (yalnız `SENTRY_DSN` varsa; şəxsi məlumat göndərilmir), UptimeRobot.
+- **Testlər:** pytest, ayrıca test bazasında (real bazaya qoşulmağa qoruyucu var).
+
+**Cloudflare və müştəri IP-si.** Sorğu belə gəlir: müştəri → Cloudflare → Render proxy → waitress. `X-Forwarded-For`
+3 hop olur və saxtalaşdırıla bilir, ona görə IP yalnız Cloudflare-in özünün yazdığı `CF-Connecting-IP`
+başlığından götürülür (`auth.client_ip()`, yalnız `MAKLERHUB_BEHIND_PROXY=1` olanda). `ProxyFix` yalnız https
+sxemi üçündür. Startup-da sxem `pg_advisory_xact_lock` altında tətbiq olunur (iki nüsxə eyni anda başlasa da).
+
+**Təhlükəsizlik başlıqları:** `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: strict-origin-when-cross-origin` (müştəri linkində `no-referrer`), proxy arxasında HSTS;
+`robots.txt` gizli və şəxsi səhifələri bağlayır.
+
+### Verilənlər bazası
+
+```mermaid
+erDiagram
+    licenses ||--o| users : "aktivləşdirir"
+    users ||--o{ devices : "cihaz"
+    users ||--o{ sessions : "sessiya"
+    users ||--o{ agent_areas : "xidmət sahəsi"
+    users ||--o{ offers : "göndərir"
+    customer_requests ||--o{ offers : "alır"
+    offers ||--o| contacts : "qəbulda"
+    customer_requests ||--o{ notifications : "müştəriyə"
+    users ||--o{ notifications : "maklerə"
+    customer_requests ||--o{ complaints : "şikayət"
+    licenses {
+        text code "MH-XXXX-XXXX-XXXX"
+        int days
+        text status "new, used, revoked"
+        text expires_at
+    }
+    users {
+        text email
+        text role "admin, makler"
+        text status
+        int is_demo
+    }
+    agent_areas {
+        text district
+        text deal_type "rent, sale"
+        int price_min
+        int price_max
+    }
+    customer_requests {
+        text token "gizli link"
+        text phone
+        text deal_type
+        text districts "JSON"
+        int rooms
+        int budget_max
+        text urgency
+        text status
+        int is_demo
+    }
+    offers {
+        int request_id
+        int agent_id
+        text title
+        int price
+        text status "sent, accepted, rejected, withdrawn"
+    }
+    contacts {
+        int offer_id "UNIQUE"
+        int request_id
+        int agent_id
+    }
+    notifications {
+        int user_id
+        int request_id
+        text kind
+        int is_read
+    }
+    complaints {
+        text from_side "customer, agent"
+        text reason
+        text status
+    }
+```
+
+Digər cədvəllər: `login_attempts`, `settings`, `logs`. Sxemin mənbəyi: `maklerhub/schema.sql` (yeni sütunlar
+yalnız `ADD COLUMN IF NOT EXISTS` — canlı bazada startup-da tətbiq olunur).
+
+## Lokal quraşdırma
+
+Python 3.11+ və PostgreSQL bazası lazımdır (ən asanı — Neon-da pulsuz iki baza: əsas və test).
 
 ```bash
+git clone <repo> && cd MaklerHub
 python -m venv .venv
 # Windows: .venv\Scripts\activate      macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-python run.py
+pip install -r requirements.txt -r requirements-dev.txt
+# .env faylı yaradın (aşağıdakı cədvəl)
+python run.py                      # http://127.0.0.1:5000  (--debug, --port N)
+flask --app run seed-demo          # demo maklerlər, tələblər, təkliflər (təkrar işlətmək olar)
+flask --app run clear-demo         # demo məlumatı sil
 ```
 
-Brauzerdə açın: **http://127.0.0.1:5000**
+Boş bazada ilk işə salınmada sxem, admin hesabı və 3 lisenziya kodu avtomatik yaradılır (kodlar konsola yazılır).
+Windows-da konsol üçün `PYTHONIOENCODING=utf-8` tövsiyə olunur.
 
-İlk işə salınmada `instance/maklerhub.db` bazası avtomatik yaradılır və dizaynlardakı
-nümunə məlumatlarla doldurulur.
+### Mühit dəyişənləri (`.env` və ya Render → Environment)
 
-Giriş hesabları `.env` faylındakı (və ya Render Environment-dəki) `MAKLERHUB_ADMIN_*` və
-`MAKLERHUB_DEMO_*` dəyişənləri ilə yaradılır. Şifrələr kodda saxlanmır.
+| Dəyişən | Məcburi | Təsvir |
+|---|---|---|
+| `DATABASE_URL` | bəli | PostgreSQL bağlantısı (`postgresql://...?sslmode=require`) |
+| `TEST_DATABASE_URL` | testlər üçün | Ayrıca test bazası; host-u `DATABASE_URL` ilə eyni olarsa testlər işləmir |
+| `MAKLERHUB_SECRET` | bəli (canlıda) | Sessiya imzası üçün uzun təsadüfi sətir |
+| `MAKLERHUB_ADMIN_EMAIL` | yox | İlk admin e-poçtu (defolt `admin@maklerhub.az`) |
+| `MAKLERHUB_ADMIN_PASSWORD` | tövsiyə | İlk admin şifrəsi (yoxdursa təsadüfi yaradılıb konsola yazılır) |
+| `MAKLERHUB_BEHIND_PROXY` | yalnız Render | `1` — IP `CF-Connecting-IP`-dən, HSTS aktiv. Lokalda qoymayın |
+| `MAKLERHUB_SECURE_COOKIES` | canlıda `1` | Cookie-lər yalnız https ilə |
+| `MAKLERHUB_DEMO_PASSWORD` | yox | Demo maklerlərin şifrəsi (defolt `Demo12345`) |
+| `SENTRY_DSN` | yox | Varsa xətalar Sentry-yə gedir (şəxsi məlumatsız); yoxdursa monitorinq söndürülüb |
 
-## 2. Səhifələr
-
-| Ünvan | Dizayn faylı | Nə işləyir |
-|-------|--------------|------------|
-| `/` | Landing Page | Giriş/Qeydiyyat düymələri (şəkil keçidi + qaralma animasiyası ilə) səhifələrə aparır |
-| `/giris` | Giriş | Real giriş, "Məni xatırla" (30 gün), uğursuz cəhd limiti, şifrə bərpası |
-| `/qeydiyyat` | Qeydiyyat | Alıcı / Satıcı / Makler; makler üçün lisenziya, sınaq müddəti avtomatik başlayır |
-| `/kabinet` | Kabinet | Bugünkü ən uyğun elanlar, statistika, aktiv profillər; karta klik → elanın detalları |
-| `/axtarislar` | Axtarışlar | Profil yarat / redaktə et / dayandır / sil; yaradılan kimi uyğun elanlar tapılır |
-| `/elanlar` | Elanlar | Mənbə filtri, sıralama, "Daha çox göstər", qiymət düşməsi, detallar + WhatsApp ilə göndər |
-| `/musteriler` | Müştərilər | Əlavə et, redaktə, "sövdə bağlandı", arxiv, sil, axtarış və filtr |
-| `/analitika` | Analitika | Son 7/30/90 gün göstəriciləri, 14 günlük qrafik, mənbə bölgüsü, reytinq |
-| `/ayarlar` | Ayarlar | Profil, avatar yükləmə, bildirişlər, mənbə seçimi, şifrə dəyişmə, plan seçimi |
-| `/admin` | Admin Panel | Canlı statistika, mənbə statusu, son maklerlər, son loqlar |
-| `/admin/maklerler` | Admin · Maklerlər | Makler əlavə et, dayandır/aktivləşdir, plan dəyiş, sınağı uzat, şifrə sıfırla, sil |
-| `/admin/menbe` | Admin · Mənbə statusu | Uptime, cavab vaxtı, xətalar, 14 günlük qrafik; "İndi sinxronlaşdır", tənzimləmələr |
-| `/admin/loglar` | Admin · Sistem loqları | Bazadan canlı loqlar, filtr, axtarış, səhifələmə, CSV yükləmə |
-| `/admin/ayarlar` | Admin · Ayarlar | Bütün parametrlər bazada saxlanır və sistemə təsir edir |
-
-## 3. Necə işləyir
-
-- **Uyğunlaşdırma mühərriki** (`maklerhub/matching.py`) — hər elanı hər aktiv axtarış profili ilə
-  müqayisə edib 0–100 bal verir (rayon, büdcə, otaq sayı, tikili tipi, təmir, metro, mərtəbə) və
-  "✓ Rayon uyğundur · △ Metro məsafəsi bir az uzaq" kimi səbəbləri yazır.
-- **Mənbə sinxronizasiyası** (`maklerhub/sources.py`) — fon axını hər *N* dəqiqədən bir
-  (admin ayarlarındakı "Yoxlama intervalı") Bina.az, Tap.az və Lalafo adapterlərini işə salır,
-  yeni elanları bazaya yazır, qiymət dəyişikliklərini izləyir, uyğunluqları hesablayır, loq yaradır.
-  Yavaş mənbədə sorğu limiti avtomatik azaldılır, uğursuz sorğular təkrar cəhd olunur.
-- **Təhlükəsizlik** — şifrələr hash-lənir (Werkzeug scrypt), bütün POST sorğularında CSRF qoruması,
-  admin sessiyası passivlikdə bitir, uğursuz giriş limiti aşıldıqda 15 dəq blok.
-
-### Real elan mənbəyinə qoşulmaq
-
-Standart olaraq `DemoAdapter` işləyir — real bazar qiymətlərinə yaxın nümunə elanlar yaradır ki,
-platforma dərhal canlı görünsün. Bina.az / Tap.az / Lalafo-nun rəsmi API-si və ya partnyor feed-i
-(XML/JSON) əldə edildikdə `sources.py`-da `BaseAdapter`-dən sinif yaradıb `fetch()` metodunu yazmaq
-və `ADAPTERS` lüğətində qeyd etmək kifayətdir. Qalan hər şey (baza, uyğunlaşdırma, admin statistikası,
-loqlar) dəyişmədən işləyəcək. Saytları icazəsiz "scrape" etmək onların istifadə şərtlərinə zidd ola
-bilər — rəsmi razılaşma tövsiyə olunur.
-
-## 4. Konfiqurasiya (mühit dəyişənləri)
-
-| Dəyişən | Standart | Təsvir |
-|---------|----------|--------|
-| `MAKLERHUB_DB` | `instance/maklerhub.db` | Baza faylı |
-| `MAKLERHUB_SECRET` | avtomatik | Sessiya açarı (istehsalda mütləq təyin edin) |
-| `MAKLERHUB_TZ` | `Asia/Baku` | Saat qurşağı |
-| `MAKLERHUB_SCHEDULER` | `1` | Fon sinxronizasiyası (0 = söndür) |
-| `MAKLERHUB_MAIL_SERVER`, `_PORT`, `_USERNAME`, `_PASSWORD`, `_FROM` | — | Şifrə bərpası e-poçtu üçün SMTP. Qurulmayıbsa link server konsoluna yazılır |
-| `MAKLERHUB_SECURE_COOKIES` | `0` | HTTPS arxasında `1` edin |
-
-## 5. Faydalı əmrlər
+### Testlər
 
 ```bash
-python run.py --port 8080            # başqa port
-python run.py --host 0.0.0.0         # yerli şəbəkədəki digər cihazlar üçün
-flask --app maklerhub init-db        # bazanı sıfırla (nümunə məlumatlarla)
-flask --app maklerhub init-db --empty   # boş baza (yalnız admin hesabı)
-flask --app maklerhub sync           # mənbələri dərhal sinxronlaşdır
+PYTHONIOENCODING=utf-8 python -m pytest tests -q -p no:cacheprovider
 ```
 
-## 6. Layihə strukturu
+Testlər YALNIZ `TEST_DATABASE_URL` bazasında işləyir və hər sessiyanın əvvəlində onu sıfırlayır;
+`TEST_DATABASE_URL` yoxdursa və ya real baza ilə eyni host-dadırsa pytest dərhal dayanır.
+Əhatə: uyğunluq balı, tələb forması və limitlər, təklif/qəbul axını və nömrənin açılması, yarış vəziyyətləri,
+admin panel, IP həlli, təmizlik, demo izolyasiyası, təhlükəsizlik başlıqları (~70 test, ~11 dəqiqə — uzaq baza).
 
-```
-MaklerHub/
-├── run.py                  # serveri işə salır (waitress, yoxdursa Flask)
-├── requirements.txt
-├── start.bat / start.sh    # bir kliklə quraşdırma + işə salma
-├── instance/               # baza, sessiya açarı, yüklənmiş avatarlar (avtomatik)
-└── maklerhub/
-    ├── __init__.py         # tətbiq fabriki
-    ├── config.py
-    ├── schema.sql          # baza sxemi
-    ├── db.py               # baza, ayarlar, loqlar
-    ├── seed.py             # nümunə məlumatlar
-    ├── helpers.py          # Azərbaycan dilində tarix/qiymət formatları
-    ├── auth.py             # giriş, qeydiyyat, CSRF, şifrə bərpası
-    ├── makler.py           # makler kabineti + API
-    ├── admin.py            # admin panel + API
-    ├── matching.py         # uyğunlaşdırma mühərriki
-    ├── sources.py          # mənbə adapterləri + fon sinxronizasiyası
-    ├── templates/          # Jinja şablonları (dizaynlarla eyni HTML)
-    └── static/
-        ├── css/pages/      # hər səhifənin orijinal CSS-i (dəyişdirilməyib)
-        ├── css/app-*.css   # modal, menyu, bildiriş komponentləri (eyni dizayn dilində)
-        ├── js/             # ümumi JS + hər səhifənin skripti
-        └── img/            # loqo, mənbə ikonları, fon şəkilləri
-```
+## Monitorinq
 
-## 7. İstehsala (serverə) yerləşdirmək
+- **UptimeRobot:** YALNIZ `https://maklerhub.onrender.com/saglamliq` ünvanını yoxlasın (5 dəqiqədə bir).
+  Bu səhifə bazaya toxunmur — Neon-u oyatmır və pulsuz limiti xərcləmir. Ana səhifəni və ya başqa səhifəni
+  monitorinqə qoymayın.
+- **Sentry:** `SENTRY_DSN` təyin olunanda işə düşür. `send_default_pii=False`, lokal dəyişənlər göndərilmir,
+  forma məlumatı, cookie və query string silinir, mətnlərdəki telefon, e-poçt və müştəri linkinin tokeni
+  maskalanır.
 
-1. `MAKLERHUB_SECRET` təyin edin, `MAKLERHUB_SECURE_COOKIES=1` edin.
-2. `python run.py --host 0.0.0.0 --port 8000` (waitress ilə) və qarşısına Nginx/Caddy (HTTPS) qoyun.
-3. Boş bazadan başlamaq üçün: `flask --app maklerhub init-db --empty`, sonra admin şifrəsini dəyişin.
+## V2 planı
+
+- Makler reytinqi (qəbul faizi, müştəri rəyi, şikayətlər əsasında).
+- Müştəri nömrəsinin SMS kodu ilə təsdiqi.
+- WhatsApp / Telegram bildirişləri (yeni təklif — müştəriyə, yeni uyğun tələb — maklerə).
+- Lisenziya üçün onlayn ödəniş.
+- Təklifə şəkil yükləmə (indi yalnız https link).
