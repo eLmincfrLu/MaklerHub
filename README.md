@@ -233,6 +233,7 @@ Windows-da konsol üçün `PYTHONIOENCODING=utf-8` tövsiyə olunur.
 | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | şəkillər üçün | Cloudinary hesabı (pulsuz plan kifayətdir). Yoxdursa təklif şəkilsiz göndərilir |
 | `BREVO_API_KEY` | e-poçt üçün | Brevo HTTP API açarı (SMTP YOX — Render pulsuz planı SMTP portlarını bloklayır). Yoxdursa məktublar göndərilmir, məzmun server loquna yazılır |
 | `MAKLERHUB_MAIL_FROM` | tövsiyə | Göndərən ünvan (Brevo-da təsdiqlənmiş olmalıdır). Yoxdursa admin əlaqə e-poçtu |
+| `MAKLERHUB_BASE_URL` | tövsiyə | Məktublardakı linklər və loqo üçün saytın ünvanı, məs. `https://maklerhub.onrender.com` (sondakı `/` atılır). Yoxdursa sorğunun host ünvanı |
 
 ### Testlər
 

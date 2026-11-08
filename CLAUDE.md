@@ -106,8 +106,9 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   MAKLERHUB_SECRET, MAKLERHUB_SECURE_COOKIES, MAKLERHUB_BEHIND_PROXY (yalnız Render-də =1, lokalda yox),
   MAKLERHUB_DEMO_PASSWORD (yoxdursa "Demo12345"), SENTRY_DSN (yoxdursa Sentry söndürülüb), CLOUDINARY_CLOUD_NAME,
   CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET, BREVO_API_KEY, MAKLERHUB_MAIL_FROM (yoxdursa şəkil yükləmə / e-poçt
-  söndürülür; açarlar loqa/HTML-ə/Sentry-yə
-  getmir — `monitoring.scrub_text` mühitdəki açar dəyərlərini maskalayır). BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə,
+  söndürülür), MAKLERHUB_BASE_URL (məktub linkləri/loqo, məs. https://maklerhub.onrender.com; yoxdursa sorğunun
+  host_url-u — `mailer.base_url`). Açarlar loqa/HTML-ə/Sentry-yə
+  getmir — `monitoring.scrub_text` mühitdəki açar dəyərlərini maskalayır. BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə,
   commit etmə.
 - Demo izolyasiyası: makler tərəfində tələb seçən HƏR sorğu `is_demo`-nu maklerinki ilə müqayisə etməlidir
   (`offers.SAME_KIND`, `_detail_ctx`, `send_offer`); bildiriş `notify_new_request` yalnız eyni növə; admin
