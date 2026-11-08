@@ -99,6 +99,18 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   favicon `favicon.ico`/`favicon-32/48.png`, `apple-touch-icon` və `icon-192` logo-mark-dan, `icon-512` logo-big-dən,
   maskable `icon-512-maskable.png` (80% zona); e-poçt başlığı `logo-big-192.png` (96px). Mənbə: `logo-mark.png`,
   `logo-big.png` (1024px).
+- Paket M (9 noyabr): mobil responsivlik. `static/css/mobile.css` + `static/js/mobile.js` (defer) bütün base
+  şablonlarda `ui.css`-dən SONRA. ≤640px: ana səhifə başlığı fixed (sürüşəndə `.mm-solid` tünd fon), solda loqo (≤360
+  yalnız ikon), sağda kompakt "Tələbini yaz" + ☰ (`[data-mm]`, landing.html-də: Makler girişi, Maklerlər üçün,
+  Linkimi itirdim); başlıqdakı düymə hero CTA görünəndə gizlənir (IntersectionObserver → `.cta-seen`; JS-siz ikisi də
+  görünür). Hero axında (`.content` relative, banner `.mhb-slot.dark` static, 2 sətirlik grid), göstəricilər 3 sütun.
+  `.navbtns` animasiyası mobildə söndürülüb (transform fixed menyunu sıxırdı). Eyebrow-un `.reveal` transform-u
+  sıfırlandı (hər ölçüdə). Input/select/textarea 16px (!important), toxunma hədəfləri ≥44px, `/teleb` "Göndər"
+  sticky, təklif şəkilləri `.mh-fr` (contain + bulanıq fon, JS ilə bükülür), qalereya nöqtələri 44px. mobile.js:
+  overlay-lər (dialog, ☰, avatar menyusu, `.dp-sheet`) açıq olanda `html.mh-lock` + "geri" bağlayır; klaviaturada
+  aktiv sahə `scrollIntoView`. Kabinetdə district-picker.css body-də yüklənir — selektorlar `.dp .dp-*`.
+  `tests/test_mobile.py` — Playwright (Chrome mühərriki, iPhone 13 profili), yoxdursa skip; Playwright `requirements-dev`.
+  Playwright WebKit bu Windows-da işə düşmür — iPhone Chrome mühərriki ilə emulyasiya olunur.
 - Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
 
 ## Qaydalar (pozma)

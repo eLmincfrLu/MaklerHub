@@ -69,6 +69,30 @@ def test_customer_page_no_overflow(live, iphone, make_request):
     _no_overflow(iphone, f"{live}/teleb/{token}")
 
 
+def _as_browser(page, client, live):
+    """Flask test client-in sessiya cookie-lərini Playwright kontekstinə köçürür."""
+    page.context.clear_cookies()
+    page.context.add_cookies([{"name": c.key, "value": c.value, "url": live} for c in client._cookies.values()])
+
+
+@pytest.mark.parametrize("path", ["/kabinet", "/kabinet/teklifler", "/kabinet/bildirisler", "/ayarlar", "/kabinet/teleb/{rid}"])
+def test_makler_pages_no_overflow(live, iphone, make_makler, make_request, path):
+    rid, _ = make_request(districts=("Yasamal", "Nəsimi"))
+    client, _ = make_makler(areas=[("rent", ["Yasamal", "Nəsimi"], 300, 1500)])
+    _as_browser(iphone, client, live)
+    _no_overflow(iphone, live + path.format(rid=rid))
+    iphone.context.clear_cookies()
+
+
+@pytest.mark.parametrize("path", ["/admin", "/admin/telebler", "/admin/teleb/{rid}", "/admin/maklerler", "/admin/lisenziyalar",
+                                  "/admin/sikayetler", "/admin/loglar", "/admin/ayarlar"])
+def test_admin_pages_no_overflow(live, iphone, admin_client, make_request, path):
+    rid, _ = make_request()
+    _as_browser(iphone, admin_client, live)
+    _no_overflow(iphone, live + path.format(rid=rid))
+    iphone.context.clear_cookies()
+
+
 def _overlaps(a, b):
     return a[0] < b[2] - 1 and b[0] < a[2] - 1 and a[1] < b[3] - 1 and b[1] < a[3] - 1
 

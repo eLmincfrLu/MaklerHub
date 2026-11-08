@@ -27,7 +27,7 @@ html.mh-lock, html.mh-lock body{overflow:hidden;}
 
   /* --- 16px input (iPhone avtomatik zoom etməsin) --- */
   body input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),
-  body select, body textarea, .input-line textarea, .input-line input{font-size:16px;}
+  body select, body textarea, .input-line textarea, .input-line input{font-size:16px!important;}
   a.brand{display:inline-flex;align-items:center;min-height:44px;}
 
   /* ===== ANA SƏHİFƏ ===== */
@@ -108,6 +108,9 @@ html.mh-lock, html.mh-lock body{overflow:hidden;}
   .lx-actions .btn, .lx-btn{min-height:48px;display:flex;align-items:center;justify-content:center;}
 
   /* ===== AUTH / TƏLƏB SƏHİFƏLƏRİ (sol panel + kart) ===== */
+  /* dekorativ işıq qatı (inset:-25% + animasiyalı scale) mobil layout-u 4px genişləndirirdi */
+  .aurora{inset:0;animation:none;transform:none;}
+  .showcase{contain:paint;}
   .s-top{padding:calc(10px + env(safe-area-inset-top,0px)) 16px 0;}
   .s-top .brand, .wrap .brand{min-height:44px;}
   .s-body{padding:12px 16px 18px;}
@@ -122,7 +125,7 @@ html.mh-lock, html.mh-lock body{overflow:hidden;}
   .remember, .forgot{display:inline-flex;align-items:center;min-height:44px;}
   .terms{min-height:44px;align-items:center;}
   .terms input{width:20px;height:20px;margin-top:0;flex-shrink:0;}
-  .switch a{display:inline-flex;align-items:center;min-height:44px;}
+  .switch a{display:inline-block;padding:13px 0;line-height:18px;}
 
   /* /teleb forması: tək sütun, seçim düymələri grid, "Göndər" aşağıda sticky */
   .roles.two{grid-template-columns:1fr 1fr;}
@@ -151,6 +154,50 @@ html.mh-lock, html.mh-lock body{overflow:hidden;}
   /* tipoqrafiya */
   h1, h2{overflow-wrap:anywhere;}
   .lx-sec h2{font-size:clamp(1.5rem,7vw,2rem);text-wrap:balance;}
+}
+
+/* ===== M2: makler kabineti və admin (≤640px) ===== */
+@media (max-width:640px){
+  /* makler: başlıq, filtrlər, çiplər */
+  .mh-bell{width:44px;height:44px;}
+  body > main .fchip, .shell .fchip{min-height:44px;padding-top:0;padding-bottom:0;}
+  body > main .filters, .shell .filters{gap:8px;}
+  .toolbar .filters{flex-wrap:wrap;}
+  .fbar label, .fbar .fl-dp{flex:1 1 100%;}
+  .fbar .reset{min-width:44px;justify-content:center;}
+  .dp .dp-toggle{min-height:44px;}
+  .dp-single .dp-field, .dp .dp-field{min-height:46px;}
+  .dp .dp-x{width:44px;height:44px;margin:-10px -10px -10px -8px;}
+  a.back, .back{display:inline-flex;align-items:center;min-height:44px;}
+  .linkbtn{min-height:44px;display:inline-flex;align-items:center;}
+  /* ayarlar: bölmə düymələri və açarlar */
+  .tabs button{min-height:44px;display:inline-flex;align-items:center;}
+  .tabs{gap:6px;}
+  label.switch::after{content:"";position:absolute;inset:-10px -4px;} /* görünən açar kiçik, toxunma sahəsi 44px */
+  .mh-contact a, .mhc-meta a{display:inline-flex;align-items:center;min-height:44px;}
+  .mhc-btn{min-height:44px;}
+
+  /* admin: naviqasiya, düymələr, cədvəl kartlarında linklər */
+  .shell .snav a{min-height:44px;}
+  .shell .logout{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;}
+  .shell .sbtn, .shell .lic-revoke, .shell #prev, .shell #next{min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 12px;box-sizing:border-box;}
+  .shell input.days{min-height:44px;}
+  .shell .acts{gap:8px;}
+  .shell .head{flex-wrap:wrap;gap:12px;}
+  /* admin-loglar.css-də mobil qaydalar yox idi: tək sütun, kpi 2 sütun */
+  .shell{grid-template-columns:minmax(0,1fr);align-content:start;}
+  .shell > main, .shell .side{min-width:0;}
+  .shell .kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .shell .snav{display:flex;gap:4px;}
+  .shell .snav a{white-space:nowrap;}
+  .shell .head > *{min-width:0;}
+  .shell .headbtns{flex-wrap:wrap;gap:8px;}
+  .shell .kpi .n a{display:inline-flex;align-items:center;min-width:44px;min-height:44px;}
+  .shell .sh a, .shell .head a{display:inline-flex;align-items:center;min-height:44px;}
+  .shell .tablewrap td a, .shell .row a{display:inline-flex;align-items:center;min-height:44px;}
+  .shell .tablewrap td a{min-width:44px;}
+  .shell .tablewrap td{padding-top:4px;padding-bottom:4px;}
+  .shell .tablewrap td::before{top:16px;}
 }
 
 /* ≤360px: başlıqda yalnız loqo ikonu */
