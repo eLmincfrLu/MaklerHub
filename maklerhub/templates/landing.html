@@ -67,6 +67,7 @@
       </div>
       {%- if not current_user %}
       <div class="hero-note reveal" style="animation-delay:1.12s">1 dəqiqə · qeydiyyatsız · pulsuz</div>
+      <a class="lost-link reveal" style="animation-delay:1.2s" href="{{ url_for('teleb.berpa') }}">Tələb yazmısan, linkini itirmisən?</a>
       {%- endif %}
       <div class="underline"></div>
     </div>
@@ -153,7 +154,7 @@
     <h2 data-reveal>Nə axtardığını yaz — <i>qalanını maklerlər etsin</i></h2>
     <a class="lx-btn shine" href="{{ url_for('teleb.forma') }}" data-reveal>Tələbini yaz →</a>
   </div>
-  <footer class="lx-foot">© MaklerHub · Bakı · <a href="{{ url_for('public.sertler') }}" style="color:inherit">İstifadə şərtləri</a> · <a href="{{ url_for('public.mexfilik') }}" style="color:inherit">Məxfilik</a><br><span class="lx-contact">Əlaqə: {{ admin_contact.name }} · {{ obf_phone(admin_contact) }} · {{ obf_email(admin_contact) }}</span></footer>
+  <footer class="lx-foot">© MaklerHub · Bakı · <a href="{{ url_for('public.sertler') }}" style="color:inherit">İstifadə şərtləri</a> · <a href="{{ url_for('public.mexfilik') }}" style="color:inherit">Məxfilik</a> · <a href="{{ url_for('teleb.berpa') }}" style="color:inherit">Linkimi itirdim</a><br><span class="lx-contact">Əlaqə: {{ admin_contact.name }} · {{ obf_phone(admin_contact) }} · {{ obf_email(admin_contact) }}</span></footer>
 </section>
 <div class="fade" id="fade"></div>
 

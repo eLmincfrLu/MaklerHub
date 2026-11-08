@@ -7,6 +7,7 @@
       <div><h1>Ümumi baxış</h1><p>{% if demo %}<b>Demo məlumat</b> (portfolio) — real göstəricilərə daxil deyil · <a href="{{ url_for('admin.panel') }}">Real məlumata qayıt</a>{% else %}Platformanın vəziyyəti (demo məlumat çıxarılıb){% if demo_total %} · <a href="{{ url_for('admin.panel', demo=1) }}">Demo: {{ demo_total }} tələb →</a>{% endif %}{% endif %}</p></div>
     </div>
     {% include 'admin/_flash.html' %}
+    {% if mail_full %}<div class="mh-mail-full" role="alert" style="margin:0 0 18px;padding:12px 16px;border:1px solid #E2B4AE;border-left:3px solid #B3261E;background:#FBECEA;color:#7A1C15;font-size:.88rem;line-height:1.5;"><b>E-poçt limiti doldu:</b> bu gün {{ mail_sent }}/{{ mail_limit }} məktub göndərilib. Sabaha qədər müştəri bildirişləri, link bərpası və şifrə bərpası məktubları göndərilməyəcək.</div>{% endif %}
 
     <div class="kpis six reveal" style="animation-delay:.1s">
       <div class="kpi"><div class="l">Aktiv tələblər</div><div class="n"><a href="{{ url_for('admin.telebler', status='active') }}">{{ kpi.active_req }}</a></div></div>

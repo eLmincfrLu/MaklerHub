@@ -1,0 +1,27 @@
+/* Paket C2: müştəri səhifəsində e-poçt bloku, /teleb/berpa, bildiriş dayandırma səhifəsi. teleb.css dəyişənləri. */
+.em{border:1px solid var(--line);background:var(--panel,#fff);padding:14px 16px;margin:0 0 22px;border-radius:4px;}
+.em-h{display:flex;align-items:center;gap:8px;font-weight:600;font-size:.9rem;color:var(--navy);margin:0 0 4px;}
+.em-h svg{flex-shrink:0;stroke:var(--gold-dim);}
+.em-p{font-size:.8rem;color:#6B6450;line-height:1.5;margin:0 0 10px;}
+.em-row{display:flex;gap:8px;}
+.em-row input{flex:1;min-width:0;border:1px solid var(--line);background:#fff;padding:10px 12px;border-radius:3px;
+  font:400 .88rem var(--font-b);color:var(--ink);}
+.em-row input:focus{outline:2px solid var(--gold);outline-offset:1px;border-color:var(--gold-dim);}
+.em-btn{border:0;background:var(--navy);color:#fff;padding:10px 16px;border-radius:3px;font:600 .82rem var(--font-b);
+  cursor:pointer;white-space:nowrap;}
+.em-btn:hover{background:#1B2A3A;}
+.em-on{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:.86rem;}
+.em-on b{font-family:ui-monospace,Consolas,monospace;font-weight:500;color:var(--navy);}
+.em-state{font-size:.74rem;padding:2px 8px;border-radius:999px;background:#E6EFE8;color:#2F5A3E;margin-left:6px;}
+.em-state.off{background:#F1ECE0;color:#8A8262;}
+.em-ghost{border:1px solid var(--line);background:transparent;color:var(--navy);padding:8px 12px;border-radius:3px;
+  font:500 .8rem var(--font-b);cursor:pointer;}
+.em-ghost:hover{border-color:var(--gold-dim);}
+.em-note{font-size:.84rem;color:#6B6450;line-height:1.6;margin:0 0 18px;}
+.em-note a{color:var(--gold-dim);}
+.em-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+.em-actions .btn{width:auto;padding:12px 20px;text-decoration:none;display:inline-block;}
+.berpa-done{animation:emIn .45s cubic-bezier(.16,.84,.3,1) both;}
+@keyframes emIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+@media(max-width:560px){.em-row{flex-direction:column;}.em-btn{padding:12px;}}
+@media (prefers-reduced-motion:reduce){.berpa-done{animation:none;}}

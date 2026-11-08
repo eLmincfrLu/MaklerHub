@@ -222,6 +222,9 @@ def teklif_gonder(rid):
             add_log(db, "info", "Makler", f"Təklif göndərildi: {full_name(g.user)}",
                     f"tələb=#{rid} təklif=#{oid} şəkil={len(uploaded)}")
             db.commit()
+            from .customer_mail import offer_sent
+            from .mailer import base_url
+            offer_sent(db, rid, base_url())  # e-poçt varsa: saatda 1, gündə 3 (xəta təsir etmir)
             flash("Təklif göndərildi. Müştəri onu öz səhifəsində görəcək.", "ok")
             return redirect(url_for("makler.teleb_detal", rid=rid))
         images_mod.destroy([u["public_id"] for u in uploaded], db)  # son yoxlama keçmədi → Cloudinary-dən sil

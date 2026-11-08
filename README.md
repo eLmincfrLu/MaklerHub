@@ -231,6 +231,8 @@ Windows-da konsol üçün `PYTHONIOENCODING=utf-8` tövsiyə olunur.
 | `MAKLERHUB_DEMO_PASSWORD` | yox | Demo maklerlərin şifrəsi (defolt `Demo12345`) |
 | `SENTRY_DSN` | yox | Varsa xətalar Sentry-yə gedir (şəxsi məlumatsız); yoxdursa monitorinq söndürülüb |
 | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | şəkillər üçün | Cloudinary hesabı (pulsuz plan kifayətdir). Yoxdursa təklif şəkilsiz göndərilir |
+| `BREVO_API_KEY` | e-poçt üçün | Brevo HTTP API açarı (SMTP YOX — Render pulsuz planı SMTP portlarını bloklayır). Yoxdursa məktublar göndərilmir, məzmun server loquna yazılır |
+| `MAKLERHUB_MAIL_FROM` | tövsiyə | Göndərən ünvan (Brevo-da təsdiqlənmiş olmalıdır). Yoxdursa admin əlaqə e-poçtu |
 
 ### Testlər
 

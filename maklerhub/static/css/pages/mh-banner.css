@@ -61,3 +61,8 @@
   .mhb-new{padding:3px 7px;}
 }
 @media (prefers-reduced-motion:reduce){.mhb,.mhb.mhb-out,.mhb-new{animation:none;}.mhb-go{transition:none;}}
+
+/* ana səhifə: "Tələb yazmısan, linkini itirmisən?" (Paket C2) */
+.lost-link{display:inline-block;margin-top:10px;font-size:.82rem;color:#D8DEE3;text-decoration:none;
+  border-bottom:1px solid rgba(216,222,227,.35);}
+.lost-link:hover{color:#F1E2B8;border-bottom-color:rgba(241,226,184,.6);}

@@ -6,10 +6,8 @@ import ipaddress
 import os
 import re
 import secrets
-import smtplib
 import time
 from datetime import timedelta
-from email.message import EmailMessage
 
 import psycopg
 from flask import (Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request,
@@ -56,7 +54,7 @@ def password_problem(pw):
 
 
 # CSRF uğursuz olanda yönləndirilməyən, g.csrf_failed ilə özü idarə edən görünüşlər (forma dəyərləri itməsin)
-CSRF_SOFT_ENDPOINTS = {"teleb.forma", "auth.giris", "auth.qeydiyyat"}
+CSRF_SOFT_ENDPOINTS = {"teleb.forma", "teleb.berpa", "auth.giris", "auth.qeydiyyat"}
 CSRF_RETRY = "Səhifə yeniləndi, zəhmət olmasa yenidən göndərin."
 # CSRF tokeni yoxlanmayan POST-lar: özləri Origin/Referer yoxlayır (teleb.status_api — yalnız oxu)
 CSRF_EXEMPT_ENDPOINTS = {"teleb.status_api"}
@@ -519,22 +517,6 @@ def _serializer():
     return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt="maklerhub-reset")
 
 
-def _send_mail(to, subject, body):
-    cfg = current_app.config
-    if not cfg.get("MAIL_SERVER"):
-        return False
-    msg = EmailMessage()
-    msg["Subject"], msg["From"], msg["To"] = subject, cfg["MAIL_FROM"], to
-    msg.set_content(body)
-    with smtplib.SMTP(cfg["MAIL_SERVER"], cfg["MAIL_PORT"], timeout=15) as smtp:
-        if cfg.get("MAIL_TLS"):
-            smtp.starttls()
-        if cfg.get("MAIL_USERNAME"):
-            smtp.login(cfg["MAIL_USERNAME"], cfg["MAIL_PASSWORD"])
-        smtp.send_message(msg)
-    return True
-
-
 @bp.route("/sifre-berpa", methods=["GET", "POST"])
 def sifre_berpa():
     sent = False
@@ -545,19 +527,21 @@ def sifre_berpa():
         user = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
         if user and not user["is_demo"]:  # demo hesabın şifrəsi dəyişdirilmir
             token = _serializer().dumps({"id": user["id"], "h": user["password_hash"][-12:]})
-            link = url_for("auth.sifre_yenile", token=token, _external=True)
-            try:
-                delivered = _send_mail(email, "MaklerHub — şifrə bərpası",
-                                       f"Salam, {user['first_name']}!\n\nYeni şifrə təyin etmək üçün linkə keçin "
-                                       f"(1 saat etibarlıdır):\n{link}\n\nMaklerHub")
-            except Exception as exc:  # SMTP xətası
-                delivered = False
-                add_log(db, "err", "Sistem", f"Bildiriş göndərilməsi uğursuz oldu ({exc.__class__.__name__})",
-                        f"şifrə bərpası email={email}")
-            if not delivered:
+            from . import mailer
+            base = mailer.base_url()  # MAKLERHUB_BASE_URL, yoxdursa sorğunun host_url-u
+            link = base + url_for("auth.sifre_yenile", token=token)
+            queued = mailer.configured()
+            if queued:  # Brevo API, arxa fonda (cavabı ləngitmir; xəta loqa yazılır)
+                html = render_template("email/sifre.html", base=base, link=link, name=user["first_name"],
+                                       subject="MaklerHub — şifrə bərpası")
+                text = (f"Salam, {user['first_name']}!\n\nYeni şifrə təyin etmək üçün linkə keçin "
+                        f"(1 saat etibarlıdır):\n{link}\n\n"
+                        "Bu sorğunu sən göndərməmisənsə, məktubu nəzərə alma.\n\nMaklerHub")
+                mailer.send_async(current_app._get_current_object(), email, "MaklerHub — şifrə bərpası", html, text)
+            else:
                 current_app.logger.warning("ŞİFRƏ BƏRPA LİNKİ (%s): %s", email, link)
             add_log(db, "info", "Sistem", f"Şifrə bərpası tələb olundu: {email}",
-                    "link e-poçta göndərildi" if delivered else "SMTP qurulmayıb — link server konsoluna yazıldı")
+                    "link e-poçta göndərilir" if queued else "e-poçt qurulmayıb (BREVO_API_KEY) — link server konsolunda")
             db.commit()
         sent = True
     return render_template("auth/sifre_berpa.html", sent=sent, email=email)

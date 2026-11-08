@@ -29,13 +29,9 @@ class Config:
     UPLOAD_DIR = os.path.join(INSTANCE_DIR, "uploads")
     TIMEZONE = os.environ.get("MAKLERHUB_TZ", "Asia/Baku")
 
-    # Şifrə bərpası üçün e-poçt (boş qalsa, link server konsoluna və sistem loqlarına yazılır)
-    MAIL_SERVER = os.environ.get("MAKLERHUB_MAIL_SERVER", "")
-    MAIL_PORT = int(os.environ.get("MAKLERHUB_MAIL_PORT", "587"))
-    MAIL_USERNAME = os.environ.get("MAKLERHUB_MAIL_USERNAME", "")
-    MAIL_PASSWORD = os.environ.get("MAKLERHUB_MAIL_PASSWORD", "")
-    MAIL_FROM = os.environ.get("MAKLERHUB_MAIL_FROM", "no-reply@maklerhub.az")
-    MAIL_TLS = os.environ.get("MAKLERHUB_MAIL_TLS", "1") == "1"
+    # E-poçt: Brevo HTTP API (mailer.py) — BREVO_API_KEY, MAKLERHUB_MAIL_FROM mühitdən oxunur. SMTP YOXDUR
+    # (Render pulsuz planı SMTP portlarını bloklayır). MAIL_SYNC=True — məktub eyni axında (testlər).
+    MAIL_SYNC = False
 
     MAX_CONTENT_LENGTH = 26 * 1024 * 1024  # bütün forma: təklif şəkilləri 5 × 5 MB + sahələr (aşanda 413)
     SESSION_COOKIE_HTTPONLY = True

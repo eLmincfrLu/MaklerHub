@@ -24,6 +24,8 @@ EXPIRE_EVERY = timedelta(minutes=1)
 ORPHAN_EVERY = timedelta(days=7)
 CLEANUP_KEY, CLEANUP_STATS_KEY, EXPIRE_KEY = "last_cleanup_at", "last_cleanup_stats", "last_expire_at"
 ORPHAN_KEY = "last_orphan_images_at"
+MAIL_KEY = "last_mail_check_at"
+MAIL_EVERY = timedelta(minutes=5)
 
 # (cədvəl, açıqlama, WHERE, gün) — gün: bundan köhnə sətirlər silinir
 RULES = (
@@ -153,6 +155,23 @@ def _background_cleanup(app):
         log.exception("Avtomatik təmizlik işə düşmədi")
 
 
+def _background_mail(app, base):
+    """Cavabdan sonra: vaxtı çatmış gözləyən müştəri bildirişləri (saatda 1 qaydası ilə yığılanlar)."""
+    from . import mailer
+    from .customer_mail import flush_pending
+
+    def job(con):
+        if not claim(con, MAIL_KEY, MAIL_EVERY):
+            con.rollback()
+            return
+        con.commit()
+        n = flush_pending(con, base)
+        if n:
+            log.info("Gözləyən e-poçt bildirişləri göndərildi: %s", n)
+
+    mailer.run_background(app, job)
+
+
 SKIP_ENDPOINTS = {"static", "public.health", "public.robots"}
 
 
@@ -166,6 +185,11 @@ def init_app(app):
         if _due_in_memory(CLEANUP_KEY):
             _remember(CLEANUP_KEY, 300)  # bu proses növbəti dəfə 5 dəqiqədən tez bazaya baxmır
             response.call_on_close(lambda: _background_cleanup(app))
+        if _due_in_memory(MAIL_KEY):
+            _remember(MAIL_KEY, MAIL_EVERY.total_seconds())
+            from .mailer import base_url
+            base = base_url()  # MAKLERHUB_BASE_URL, yoxdursa sorğunun host_url-u
+            response.call_on_close(lambda: _background_mail(app, base))
         return response
 
 

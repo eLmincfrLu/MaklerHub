@@ -201,3 +201,13 @@ CREATE TABLE IF NOT EXISTS offer_images (
 );
 CREATE INDEX IF NOT EXISTS ix_offer_images_offer ON offer_images(offer_id, sort);
 CREATE INDEX IF NOT EXISTS ix_offer_images_time ON offer_images(created_at);
+
+-- Paket C2: müştəri e-poçtu (istəyə bağlı) — yeni təklif bildirişi və link bərpası.
+-- emailed_upto: məktubla bildirilmiş ən böyük təklif id-si (arada gələnlər növbəti məktubda xülasə).
+ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT '';
+ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS email_notify INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS last_email_at TEXT;
+ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS emails_today INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS emails_day TEXT;
+ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS emailed_upto INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS ix_requests_email ON customer_requests(email) WHERE email != '';

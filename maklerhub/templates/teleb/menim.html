@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Tələbim">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/teleb-share.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/teleb-email.css') }}">
 <script defer src="{{ url_for('static', filename='js/teleb-share.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/teleb-memory.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/offer-images.css') }}">
@@ -91,6 +92,30 @@
       <div class="expired"><b>Tələbin müddəti bitib</b>Tələb 30 gün aktiv qalır. Hələ də axtarırsansa, <a href="{{ url_for('teleb.forma') }}">yeni tələb yaz</a>.</div>
       {% elif r.status == 'closed' %}
       <div class="expired"><b>Tələb bağlanıb</b>{% if close_reason %}Səbəb: {{ close_reason }}. {% endif %}Yeni təkliflər qəbul olunmur.</div>
+      {% endif %}
+
+      {% if email_masked %}
+      <div class="em" id="email">
+        <div class="em-on">
+          <span>E-poçt: <b>{{ email_masked }}</b><span class="em-state{% if not email_notify %} off{% endif %}">{{ 'bildiriş açıq' if email_notify else 'bildiriş dayandırılıb' }}</span></span>
+          <form method="post" action="{{ url_for('teleb.email_ayarla', token=token) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="{{ 'stop' if email_notify else 'resume' }}">
+            <button class="em-ghost" type="submit">{{ 'Bildirişləri dayandır' if email_notify else 'Bildirişləri yenidən aç' }}</button>
+          </form>
+        </div>
+      </div>
+      {% elif r.status == 'active' %}
+      <form class="em" id="email" method="post" action="{{ url_for('teleb.email_ayarla', token=token) }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="add">
+        <div class="em-h"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>E-poçtla bildiriş al</div>
+        <p class="em-p">Yeni təklif gələndə xəbər verək və linkini itirsən bərpa edək. Maklerlər e-poçtunu görmür.</p>
+        <div class="em-row">
+          <input type="email" name="email" inputmode="email" placeholder="ad@gmail.com" autocomplete="email" maxlength="120" aria-label="E-poçt" required>
+          <button class="em-btn" type="submit">Bildiriş al</button>
+        </div>
+      </form>
       {% endif %}
 
       <div class="sum">

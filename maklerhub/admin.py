@@ -84,8 +84,11 @@ def panel():
         "JOIN users u ON u.id = o.agent_id JOIN customer_requests r ON r.id = o.request_id WHERE r.is_demo = ? "
         "ORDER BY o.id DESC LIMIT 10", (demo,)).fetchall()
     demo_total = db.execute("SELECT COUNT(*) FROM customer_requests WHERE is_demo = 1").fetchone()[0]
+    from . import mailer
+    mail_day, mail_sent = mailer.quota(db)
     return render("admin/panel.html", "admin.panel", kpi=kpi, reqs=reqs, offers=offers, offer_status=OFFER_STATUS,
-                  rel=rel, full_name=full_name, demo=demo, demo_total=demo_total)
+                  rel=rel, full_name=full_name, demo=demo, demo_total=demo_total,
+                  mail_sent=mail_sent, mail_limit=mailer.DAILY_LIMIT, mail_full=mail_sent >= mailer.DAILY_LIMIT)
 
 
 # ---------------------------------------------------------------- tələblər

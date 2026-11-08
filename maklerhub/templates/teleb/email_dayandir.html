@@ -1,0 +1,28 @@
+{% extends 'teleb/_layout.html' %}
+{% block title %}Bildirişlər dayandırıldı{% endblock %}
+{% block meta %}<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/teleb-email.css') }}">{% endblock %}
+{% block showcase %}
+      <div class="eyebrow">E-poçt bildirişləri</div>
+      <h1>
+        <span class="line"><span>Bildirişlər</span></span>
+        <span class="line line2"><span>dayandırıldı.</span></span>
+      </h1>
+      <p>Tələbin aktiv qalır — təklifləri öz səhifəndə görməyə davam edəcəksən.</p>
+{% endblock %}
+{% block card %}
+      <div class="kicker">E-poçt bildirişləri</div>
+      <h1>Dayandırıldı <i>✓</i></h1>
+      <div class="underline"></div>
+      <div class="alert ok" role="status">Bu tələb üçün yeni təklif məktubları artıq göndərilməyəcək.</div>
+      <p class="em-note">Təsadüfən basmısansa, bildirişləri yenidən aça bilərsən.</p>
+      <div class="em-actions">
+        <a class="btn" href="{{ url_for('teleb.menim', token=token) }}">Tələbimə keç</a>
+        <form method="post" action="{{ url_for('teleb.email_ayarla', token=token) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="resume">
+          <button class="em-ghost" type="submit">Bildirişləri yenidən aç</button>
+        </form>
+      </div>
+{% endblock %}

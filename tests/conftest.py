@@ -41,7 +41,7 @@ def app():
         raise RuntimeError("TƏHLÜKƏSİZLİK: app fixture yalnız qoruyucudan keçmiş test bazası ilə işləyir.")
     dbmod.init_db(url)  # test bazası sıfırdan
     # avtomatik (sorğudan sonrakı) təmizlik testlərdə söndürülüb — test_gun5 onu ayrıca yandırır
-    application = create_app({"TESTING": True, "DATABASE": url, "CLEANUP_DISABLED": True})
+    application = create_app({"TESTING": True, "DATABASE": url, "CLEANUP_DISABLED": True, "MAIL_SYNC": True})
     yield application
     if dbmod._pool is not None:
         dbmod._pool.close()
@@ -95,6 +95,35 @@ def cloud(monkeypatch):
     return fake
 
 
+class FakeMail:
+    """Brevo əvəzi: şəbəkəyə getmir, göndərilən payload-ları yadda saxlayır."""
+
+    def __init__(self):
+        self.sent = []
+        self.status = 201
+
+    def post(self, payload):
+        self.sent.append(payload)
+        if self.status in (200, 201, 202):
+            return self.status, {"messageId": f"<pytest-{len(self.sent)}@brevo>"}
+        return self.status, {"code": "pytest", "message": "saxta xəta"}
+
+    def to(self, email):
+        return [m for m in self.sent if m["to"][0]["email"] == email]
+
+
+@pytest.fixture(autouse=True)
+def mail(monkeypatch):
+    """BÜTÜN testlərdə Brevo mock olunur (heç bir test real məktub göndərmir)."""
+    from maklerhub import mailer
+    fake = FakeMail()
+    monkeypatch.setenv("BREVO_API_KEY", "pytest-saxta-acar")
+    monkeypatch.setenv("MAKLERHUB_MAIL_FROM", "no-reply@maklerhub.test")
+    monkeypatch.delenv("MAKLERHUB_BASE_URL", raising=False)  # defolt: sorğunun host_url-u (testlər özü qoyur)
+    monkeypatch.setattr(mailer, "_post", fake.post)
+    return fake
+
+
 @pytest.fixture(autouse=True)
 def fresh_throttle(request):
     """Hər test lazy yeniləmələrin (dəqiqədə 1 dəfə) məhdudiyyətindən təmiz başlasın."""
@@ -102,7 +131,8 @@ def fresh_throttle(request):
         from maklerhub import maintenance
         maintenance.reset_throttle()
         con = request.getfixturevalue("db")
-        con.execute("DELETE FROM settings WHERE key IN ('last_expire_at', 'last_cleanup_at')")
+        con.execute("DELETE FROM settings WHERE key IN ('last_expire_at', 'last_cleanup_at', 'mail_quota', "
+                    "'last_mail_check_at')")
         con.commit()
     yield
 

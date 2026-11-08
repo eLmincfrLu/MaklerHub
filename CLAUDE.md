@@ -66,6 +66,25 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   tələb səhifəsi), ikonlar `static/img/icon-192.png`, `icon-512.png`, `apple-touch-icon.png` (logo.png-dən, bir dəfəlik).
   Service worker YOXDUR. QR/manifest: `private, no-store`, noindex, səhv token 404. Sentry: `token/tokens/mh_requests`
   açarları maskalanır. pytest: `tests/test_paket_c1.py`.
+- Paket C2 (8 noyabr): e-poçt YALNIZ Brevo HTTP API ilə (`mailer.py`; SMTP kodu və MAIL_* config silindi — Render
+  pulsuz planı SMTP portlarını bloklayır). `send_email` sinxron (1 təkrar: şəbəkə/429/5xx; açar yoxdursa loqa yazır,
+  False), `run_background`/`send_async` — ayrı axın, öz bağlantısı (`MAIL_SYNC=True` testlərdə). Qlobal limit gündə
+  250 (settings `mail_quota` = "gün|say", atomik CAS; dolanda warn loq + admin paneldə qırmızı xəbərdarlıq).
+  Göndərən: `MAKLERHUB_MAIL_FROM`, yoxdursa `admin_contact_email`. Şəbəkə yalnız `mailer._post` — conftest `mail`
+  autouse fixture onu BÜTÜN testlərdə mock edir (`FakeMail.sent`).
+  `customer_mail.py`: customer_requests `email` ('' = yox), `email_notify`, `last_email_at`, `emails_today`,
+  `emails_day`, `emailed_upto` (bildirilmiş ən böyük təklif id). Təklif göndəriləndə `offer_sent` (makler.teklif_gonder)
+  atomik UPDATE-iddia: saatda 1, gündə 3, aktiv + müddəti keçməmiş + demo deyil; arada gələnlər
+  `flush_pending` ilə (maintenance hook `last_mail_check_at`, 5 dəq, `CLEANUP_DISABLED`-də söndürülür) xülasə.
+  Müştəri səhifəyə baxıbsa (`customer_seen_at`) gözləyən sayılmır. Məktubda makler adı/telefonu YOX; List-Unsubscribe.
+  Şablonlar `templates/email/` (url_for YOX, `base` ötürülür). `/teleb/<token>/email` (add/stop/resume, CSRF),
+  `/teleb/<token>/email-dayandir` (GET, tək kliklə + təsdiq səhifəsi). `/teleb/berpa` — cavab həmişə eyni, axtarış və
+  göndərmə arxa fonda; IP saatda 5 (`login_attempts.email='#berpa:<ip>'`, `ip_limit_applies`), e-poçt gündə 3
+  (`'#berpa:'+sha256`), honeypot `website`. Tapılmayan /teleb/<token> → `lost_link_404`. E-poçt makler/kabinet/API-də
+  YOX (`REQ_COLS`-da yoxdur), admin tələb detalında var. 90 gün anonimləşdirmədə silinir. Sentry: `email/to/sender/
+  api-key` açarları və BREVO_API_KEY dəyəri maskalanır. pytest: `tests/test_paket_c2.py`.
+  DİQQƏT: lokal serveri test bazası ilə işə salanda `BREVO_API_KEY=""` ver — yoxsa hook pytest-in yaratdığı
+  ünvanlara REAL məktub göndərə bilər (`load_dotenv` mövcud dəyişəni əvəz etmir).
 - Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
 
 ## Qaydalar (pozma)
@@ -86,7 +105,8 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 - Mühit dəyişənləri yalnız `.env`-də / Render-də: DATABASE_URL, MAKLERHUB_ADMIN_EMAIL, MAKLERHUB_ADMIN_PASSWORD,
   MAKLERHUB_SECRET, MAKLERHUB_SECURE_COOKIES, MAKLERHUB_BEHIND_PROXY (yalnız Render-də =1, lokalda yox),
   MAKLERHUB_DEMO_PASSWORD (yoxdursa "Demo12345"), SENTRY_DSN (yoxdursa Sentry söndürülüb), CLOUDINARY_CLOUD_NAME,
-  CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET (yoxdursa şəkil yükləmə söndürülür; açarlar loqa/HTML-ə/Sentry-yə
+  CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET, BREVO_API_KEY, MAKLERHUB_MAIL_FROM (yoxdursa şəkil yükləmə / e-poçt
+  söndürülür; açarlar loqa/HTML-ə/Sentry-yə
   getmir — `monitoring.scrub_text` mühitdəki açar dəyərlərini maskalayır). BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə,
   commit etmə.
 - Demo izolyasiyası: makler tərəfində tələb seçən HƏR sorğu `is_demo`-nu maklerinki ilə müqayisə etməlidir
@@ -98,7 +118,7 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 ## Struktur
 - `maklerhub/__init__.py` — `create_app` (ProxyFix x_for=1, x_proto=1), public blueprint (`/`, `/sertler`,
   `/mexfilik` — əlaqə e-poçtu `settings.notify_email`; `/saglamliq` — bazaya toxunmur, UptimeRobot üçün).
-- `auth.py` — giriş/çıxış, şifrə bərpası (SMTP yoxdursa link konsola), CSRF, dekoratorlar; `/qeydiyyat` lisenziya
+- `auth.py` — giriş/çıxış, şifrə bərpası (`mailer`, Brevo; açar yoxdursa link konsola), CSRF, dekoratorlar; `/qeydiyyat` lisenziya
   kodu ilə (bir tranzaksiya, `FOR UPDATE`; IP başına 15 dəq-də 10 səhv kod → blok, `login_attempts.email='#license'`).
   Makler: `mh_device` cookie (httponly, 1 il; bazada `sha256(user_id:cookie)`), limit `settings.max_devices`=2,
   hər girişdə yeni `sessions` sətri, köhnələri `active=0`; session["st"] hər sorğuda yoxlanır. Lisenziya bitib/ləğv →

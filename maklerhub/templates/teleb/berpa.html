@@ -1,0 +1,39 @@
+{% extends 'teleb/_layout.html' %}
+{% block title %}Linkimi itirdim{% endblock %}
+{% block meta %}<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/teleb-email.css') }}">{% endblock %}
+{% block showcase %}
+      <div class="eyebrow">Link bərpası</div>
+      <h1>
+        <span class="line"><span>Linkini itirmisən?</span></span>
+        <span class="line line2"><span>E-poçtuna göndərək.</span></span>
+      </h1>
+      <p>Tələb yazanda e-poçtunu qeyd etmisənsə, aktiv tələblərinin linklərini həmin ünvana göndəririk.</p>
+{% endblock %}
+{% block card %}
+      <div class="kicker">Linkimi itirdim</div>
+      <h1>Linki <i>bərpa et</i></h1>
+      <div class="underline"></div>
+
+      {% if done %}
+      <div class="alert ok berpa-done" role="status">{{ message }}</div>
+      <p class="em-note">Məktub bir neçə dəqiqəyə gəlir. "Spam" qovluğuna da bax. Gəlməsə, tələb yazanda e-poçt qeyd edilməyib və ya tələbin müddəti bitib — <a href="{{ url_for('teleb.forma') }}">yeni tələb yaz</a>.</p>
+      {% else %}
+      {% if error %}<div class="alert err">{{ error }}</div>{% endif %}
+      <form method="post" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="hp" aria-hidden="true"><label for="{{ honeypot }}">Veb sayt</label><input id="{{ honeypot }}" name="{{ honeypot }}" type="text" tabindex="-1" autocomplete="off"></div>
+        <div class="field">
+          <label for="email">E-poçt</label>
+          <div class="input-line">
+            <svg class="field-ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+            <input id="email" name="email" type="email" inputmode="email" placeholder="ad@gmail.com" autocomplete="email" maxlength="120" value="{{ email }}" required autofocus>
+          </div>
+          <div class="hint">Tələb yazanda qeyd etdiyin ünvan.</div>
+        </div>
+        <button class="btn" type="submit">Linkləri göndər</button>
+      </form>
+      {% endif %}
+      <div class="switch">E-poçt qeyd etməmisən? <a href="{{ url_for('teleb.forma') }}">Yeni tələb yaz</a></div>
+{% endblock %}

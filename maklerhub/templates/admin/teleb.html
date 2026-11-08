@@ -17,6 +17,7 @@
           <div class="row"><span>Status</span><span><span class="pill {{ x.pill }}">{{ x.status }}</span>{% if close_reason %} · {{ close_reason }}{% endif %}</span></div>
           <div class="row"><span>Müştəri</span><span>{{ x.r.name or '—' }}</span></div>
           <div class="row"><span>Telefon</span><span>{% if x.r.phone %}<a href="tel:{{ x.r.phone }}">{{ phone }}</a>{% else %}— (anonimləşdirilib){% endif %}</span></div>
+          <div class="row"><span>E-poçt</span><span>{% if x.r.email %}<a href="mailto:{{ x.r.email }}">{{ x.r.email }}</a> · bildiriş {{ 'açıq' if x.r.email_notify else 'dayandırılıb' }}{% if x.r.last_email_at %} · son məktub {{ x.r.last_email_at }}{% endif %}{% else %}—{% endif %}</span></div>
           <div class="row"><span>Büdcə</span><span>{{ x.budget }}</span></div>
           <div class="row"><span>Təcililik</span><span>{{ urgency.get(x.r.urgency, x.r.urgency) }}</span></div>
           <div class="row"><span>Yaradılıb</span><span>{{ x.r.created_at }} ({{ x.when }})</span></div>

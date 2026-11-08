@@ -104,6 +104,15 @@
         </div>
 
         <div class="field">
+          <label for="email">E-poçt <span style="color:#B7AE93">(istəyə bağlı)</span></label>
+          <div class="input-line">
+            <svg class="field-ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+            <input id="email" name="email" type="email" inputmode="email" placeholder="ad@gmail.com" autocomplete="email" maxlength="120" value="{{ form.email }}">
+          </div>
+          <div class="hint">Yeni təklif gələndə xəbər verək və linkini itirsən bərpa edək. Maklerlər görmür.</div>
+        </div>
+
+        <div class="field">
           <label for="note">Qeyd <span style="color:#B7AE93">(istəyə bağlı)</span></label>
           <div class="input-line">
             <textarea id="note" name="note" maxlength="{{ note_max }}" rows="3" placeholder="Məs.: metroya yaxın, əşyalı, ev heyvanı var...">{{ form.note }}</textarea>
@@ -119,5 +128,6 @@
         <button class="btn" type="submit">Tələbi göndər</button>
       </form>
 
+      <div class="switch">Tələb yazmısan, linkini itirmisən? <a href="{{ url_for('teleb.berpa') }}">Linkimi bərpa et</a></div>
       <div class="switch">Maklersiniz? <a href="{{ url_for('auth.giris') }}">Makler girişi</a></div>
 {% endblock %}

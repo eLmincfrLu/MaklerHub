@@ -9,13 +9,15 @@ from collections import deque
 from datetime import timedelta
 from urllib.parse import urlsplit
 
-from flask import (Blueprint, abort, flash, g, jsonify, make_response, redirect, render_template, request, session,
-                   url_for)
+from flask import (Blueprint, abort, current_app, flash, g, jsonify, make_response, redirect, render_template,
+                   request, session, url_for)
 
 from .auth import client_ip, ip_limit_applies
 from .db import add_log, get_db, get_setting
 from .helpers import (ALL_BAKU, BAKU_DISTRICTS, DISTRICTS_AZ, date_short, districts_text, is_all_baku, money,
                       normalize_phone, now, phone_display, phone_masked, rel, ts)
+from .customer_mail import (RECOVERY_EMAIL_DAILY, RECOVERY_IP_HOURLY, email_key, mask_email, normalize_email,
+                            send_recovery)
 from .maintenance import lazy_expire
 
 bp = Blueprint("teleb", __name__)
@@ -58,8 +60,8 @@ def expire_requests(db):
     db.execute("UPDATE customer_requests SET status = 'expired', closed_at = ? WHERE status = 'active' AND is_demo = 0 "
                "AND created_at < ?",
                (ts(stamp), ts(stamp - timedelta(days=ttl))))
-    db.execute("UPDATE customer_requests SET name = '', phone = '', note = '', ip = '' "
-               "WHERE status IN ('closed', 'expired') AND closed_at < ? AND phone != ''", (old,))
+    db.execute("UPDATE customer_requests SET name = '', phone = '', note = '', ip = '', email = '', email_notify = 0 "
+               "WHERE status IN ('closed', 'expired') AND closed_at < ? AND (phone != '' OR email != '')", (old,))
     return public_ids
 
 
@@ -120,19 +122,22 @@ def validate(f):
         errors.append(f"Qeyd {NOTE_MAX} simvoldan uzun ola bilməz.")
     if not f["consent"]:
         errors.append("Razılıq qutusunu işarələyin — nömrəniz yalnız bu şərtlə saxlanılır.")
+    email = normalize_email(f.get("email"))
+    if email is None:
+        errors.append("E-poçt ünvanı düzgün deyil (məs. ad@gmail.com) — və ya sahəni boş saxlayın.")
     clean = {"name": name, "phone": phone, "deal": deal, "districts": districts, "rooms": rooms,
-             "budget_min": lo, "budget_max": hi, "urgency": urgency, "note": f["note"]}
+             "budget_min": lo, "budget_max": hi, "urgency": urgency, "note": f["note"], "email": email or ""}
     return clean, errors
 
 
 @bp.route("/teleb", methods=["GET", "POST"])
 def forma():
     form = {"name": "", "phone": "", "deal": "", "districts": [], "rooms": "", "budget_min": "", "budget_max": "",
-            "urgency": "", "note": "", "consent": False}
+            "urgency": "", "note": "", "consent": False, "email": ""}
     errors = []
     if request.method == "POST":
         form = {k: (request.form.get(k) or "").strip() for k in
-                ("name", "phone", "deal", "rooms", "budget_min", "budget_max", "urgency", "note")}
+                ("name", "phone", "deal", "rooms", "budget_min", "budget_max", "urgency", "note", "email")}
         form["districts"] = request.form.getlist("districts")
         form["all_districts"] = request.form.get("all_districts") == "1"
         form["consent"] = request.form.get("consent") == "on"
@@ -164,11 +169,12 @@ def forma():
                 stamp = ts()
                 rid = db.execute(
                     "INSERT INTO customer_requests(token, name, phone, deal_type, districts, rooms, budget_min, "
-                    "budget_max, urgency, note, consent, consent_at, status, ip, created_at) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,1,?,'active',?,?)",
+                    "budget_max, urgency, note, consent, consent_at, status, ip, created_at, email, email_notify) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,1,?,'active',?,?,?,?)",
                     (token, clean["name"], clean["phone"], clean["deal"],
                      json.dumps(clean["districts"], ensure_ascii=False), clean["rooms"], clean["budget_min"],
-                     clean["budget_max"], clean["urgency"], clean["note"], stamp, ip, stamp)).lastrowid
+                     clean["budget_max"], clean["urgency"], clean["note"], stamp, ip, stamp,
+                     clean["email"], 1 if clean["email"] else 0)).lastrowid
                 from .offers import notify_new_request
                 notify_new_request(db, {"id": rid, "is_demo": 0, "deal_type": clean["deal"], "districts": clean["districts"],
                                         "budget_min": clean["budget_min"], "budget_max": clean["budget_max"],
@@ -256,12 +262,12 @@ def _page_response(html):
 def menim(token):
     from .offers import ACCEPT_LIMIT, CLOSE_REASONS, CUSTOMER_COMPLAINTS, COMPLAINT_TEXT_MAX
     if len(token) > 64:
-        abort(404)
+        return lost_link_404()
     db = get_db()
     lazy_expire(db)
     r = db.execute("SELECT * FROM customer_requests WHERE token = ?", (token,)).fetchone()
     if r is None:
-        abort(404)
+        return lost_link_404()
     offers = offer_cards(db, r["id"], r["deal_type"], r["customer_seen_at"])
     complained = {x[0] for x in db.execute(
         "SELECT offer_id FROM complaints WHERE request_id = ? AND from_side = 'customer'", (r["id"],))}
@@ -281,7 +287,7 @@ def menim(token):
         session.pop("teleb_new", None)
     return _page_response(render_template(
         "teleb/menim.html", r=view, token=token, alive=alive, link=url_for("teleb.menim", token=token, _external=True),
-        fresh=fresh, theme_color=THEME_COLOR,
+        fresh=fresh, theme_color=THEME_COLOR, email_masked=mask_email(r["email"]), email_notify=bool(r["email_notify"]),
         offers=[o for o in offers if o["status"] != "rejected"], rejected=[o for o in offers if o["status"] == "rejected"],
         confirm_id=confirm_id, can_accept=alive and n_accepted < ACCEPT_LIMIT, accept_limit=ACCEPT_LIMIT,
         n_accepted=n_accepted, close_reasons=CLOSE_REASONS, close_reason=CLOSE_REASONS.get(r["close_reason"]),
@@ -490,3 +496,101 @@ def status_api():
     resp = jsonify(ok=True, results=results)
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+# ---------------------------------------------------------------- e-poçt bildirişləri və link bərpası (Paket C2)
+def lost_link_404():
+    """Tapılmayan /teleb/<token>: adi 404 + "Linkini itirmisən?"."""
+    resp = make_response(render_template(
+        "error.html", code=404, title="Tələb tapılmadı", teleb_link=True, berpa_link=True,
+        text="Bu link səhv yazılıb və ya tələb silinib. Tələb yazanda e-poçtunu qeyd etmisənsə, linki yenidən "
+             "göndərə bilərik."), 404)
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return resp
+
+
+def _base_url():
+    from .mailer import base_url
+    return base_url()
+
+
+@bp.route("/teleb/<token>/email", methods=["POST"])
+def email_ayarla(token):
+    """Müştəri səhifəsindən: e-poçt əlavə et / bildirişləri dayandır / yenidən aç."""
+    _token_or_404(token)
+    db = get_db()
+    action = request.form.get("action")
+    if action == "add":
+        email = normalize_email(request.form.get("email"))
+        if not email:
+            flash("E-poçt ünvanı düzgün deyil (məs. ad@gmail.com).", "err")
+        else:
+            db.execute("UPDATE customer_requests SET email = ?, email_notify = 1 WHERE token = ? AND email = ''",
+                       (email, token))
+            db.commit()
+            flash("Hazırdır — yeni təklif gələndə e-poçtla xəbər verəcəyik.", "ok")
+    elif action in ("stop", "resume"):
+        db.execute("UPDATE customer_requests SET email_notify = ? WHERE token = ? AND email != ''",
+                   (1 if action == "resume" else 0, token))
+        db.commit()
+        flash("E-poçt bildirişləri dayandırıldı." if action == "stop" else "E-poçt bildirişləri yenidən açıldı.", "ok")
+    return redirect(url_for("teleb.menim", token=token) + "#email")
+
+
+@bp.route("/teleb/<token>/email-dayandir")
+def email_dayandir(token):
+    """Məktubdakı link: tək kliklə dayandırır və təsdiq səhifəsi göstərir (yenidən açmaq mümkündür)."""
+    _token_or_404(token)
+    db = get_db()
+    db.execute("UPDATE customer_requests SET email_notify = 0 WHERE token = ?", (token,))
+    db.commit()
+    return _page_response(render_template("teleb/email_dayandir.html", token=token))
+
+
+def _recovery_attempts(db, key, since):
+    return db.execute("SELECT COUNT(*) FROM login_attempts WHERE email = ? AND created_at >= ?",
+                      (key, since)).fetchone()[0]
+
+
+RECOVERY_DONE = "Əgər bu e-poçtla aktiv tələb varsa, linklər göndərildi."
+RECOVERY_IP_KEY = "#berpa"
+
+
+@bp.route("/teleb/berpa", methods=["GET", "POST"])
+def berpa():
+    """"Linkimi itirdim": cavab HƏMİŞƏ eynidir; axtarış və göndərmə arxa fonda (cavab müddəti də oxşar qalsın)."""
+    email, error, done = "", None, False
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip()
+        if g.get("csrf_failed"):
+            error = "Zəhmət olmasa yenidən göndərin — təhlükəsizlik tokeni yeniləndi."
+        elif request.form.get(HONEYPOT):
+            done = True  # bot: eyni cavab, heç nə göndərilmir
+        else:
+            clean = normalize_email(email)
+            if not clean:
+                error = "E-poçt ünvanı düzgün deyil (məs. ad@gmail.com)."
+            else:
+                db = get_db()
+                ip = client_ip()
+                stamp = now()
+                if ip_limit_applies(ip) and _recovery_attempts(
+                        db, RECOVERY_IP_KEY + ":" + ip, ts(stamp - timedelta(hours=1))) >= RECOVERY_IP_HOURLY:
+                    error = "Çox cəhd edildi. Bir saatdan sonra yenidən yoxlayın."
+                else:
+                    key = email_key(clean)
+                    allowed = _recovery_attempts(db, key, ts(stamp - timedelta(days=1))) < RECOVERY_EMAIL_DAILY
+                    db.execute("INSERT INTO login_attempts(email, ip, success, created_at) VALUES (?, ?, 0, ?), "
+                               "(?, ?, 0, ?)", (RECOVERY_IP_KEY + ":" + ip, ip, ts(stamp), key, ip, ts(stamp)))
+                    db.commit()
+                    if allowed:
+                        from . import mailer
+                        base = _base_url()
+                        mailer.run_background(current_app._get_current_object(),
+                                              lambda con: send_recovery(con, clean, base))
+                    done = True
+        if done:
+            email = ""
+    return _page_response(render_template("teleb/berpa.html", email=email, error=error, done=done,
+                                          message=RECOVERY_DONE, honeypot=HONEYPOT))
