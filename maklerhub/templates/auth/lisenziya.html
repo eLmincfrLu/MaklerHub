@@ -1,12 +1,16 @@
 {% extends 'auth/giris.html' %}
+{% from '_admin_contact.html' import contact_card %}
 {% block title %}Lisenziya{% endblock %}
 {% block card %}
+      <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/admin-contact.css') }}">
       <div class="kicker">Kabinet bağlıdır</div>
       <h1>Lisenziyanız <i>bitib</i></h1>
       <div class="underline"></div>
 
       <div class="alert err">{{ message }}</div>
-      <p class="hint" style="font-size:.86rem;line-height:1.6;margin:0 0 26px">Lisenziya uzadılandan və ya yeni kod verildikdən sonra kabinetə yenidən daxil ola bilərsiniz.</p>
+      <p class="hint" style="font-size:.86rem;line-height:1.6;margin:0 0 6px">Lisenziya uzadılandan və ya yeni kod verildikdən sonra kabinetə yenidən daxil ola bilərsiniz.</p>
+      {{ contact_card(admin_contact) }}
+      <div style="height:18px"></div>
 
       {% if current_user %}
       <a class="btn" style="display:block;text-align:center;text-decoration:none" href="{{ url_for('auth.cixis') }}">Çıxış et</a>

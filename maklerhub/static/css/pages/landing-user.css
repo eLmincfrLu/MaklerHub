@@ -1,0 +1,37 @@
+/* Ana səhifə: daxil olmuş istifadəçi başlığı (avatar + ad + menyu), footer əlaqəsi.
+   landing.css-ə toxunmur; onun dəyişənlərini (--gold, --navy, --font-b) istifadə edir. */
+.navbtns{align-items:center;}
+.hero .top{z-index:6;} /* açılan hesab menyusu hero mətninin üstündə qalsın */
+.lu{position:relative;}
+.lu-who{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:4px 10px 4px 4px;border-radius:24px;
+  cursor:pointer;color:#fff;font-family:var(--font-b,'IBM Plex Sans',Arial,sans-serif);font-size:.86rem;font-weight:500;
+  background:rgba(16,24,32,.28);border:1px solid rgba(255,255,255,.22);transition:background .2s ease,border-color .2s ease;}
+.lu-who:hover,.lu-who[aria-expanded="true"]{background:rgba(16,24,32,.5);border-color:rgba(255,255,255,.45);}
+.lu-who:focus-visible{outline:2px solid var(--gold,#C9A227);outline-offset:2px;}
+.lu-av{width:32px;height:32px;border-radius:50%;background:var(--navy,#101820);color:var(--gold,#C9A227);display:flex;
+  align-items:center;justify-content:center;font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:.82rem;
+  box-shadow:0 0 0 1.5px rgba(201,162,39,.65);}
+.lu-name{max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lu-caret{opacity:.8;transition:transform .2s ease;}
+.lu-who[aria-expanded="true"] .lu-caret{transform:rotate(180deg);}
+.lu-menu{position:absolute;right:0;top:calc(100% + 8px);min-width:220px;max-width:min(280px,calc(100vw - 24px));z-index:30;
+  background:#FFFDF8;border:1px solid #E4DCC8;border-radius:6px;box-shadow:0 16px 36px rgba(16,24,32,.25);padding:6px;
+  font-family:var(--font-b,'IBM Plex Sans',Arial,sans-serif);}
+.lu-menu[hidden]{display:none;}
+.lu-head{padding:8px 10px 10px;border-bottom:1px solid #EFE7D4;margin-bottom:4px;}
+.lu-head b{display:block;color:#101820;font-size:.88rem;}
+.lu-head small{display:block;color:#8A8372;font-size:.72rem;margin-top:2px;overflow-wrap:anywhere;}
+.lu-menu form{margin:0;}
+.lu-item{all:unset;box-sizing:border-box;display:block;width:100%;padding:9px 10px;border-radius:4px;font-size:.86rem;
+  color:#1B2430;cursor:pointer;text-decoration:none;}
+.lu-item:hover,.lu-item:focus-visible{background:#F6F1E4;}
+.lu-item:focus-visible{outline:2px solid #C9A227;outline-offset:-2px;}
+.lu-out{color:#8A3A28;}
+.lx-contact{display:inline-block;margin-top:6px;opacity:.85;}
+.lx-contact a{color:inherit;}
+@media (max-width:600px){
+  .lu-name,.lu-caret{display:none;}
+  .lu-who{padding:3px;}
+  .navbtns .btn{padding:9px 14px;}
+}
+@media (prefers-reduced-motion:reduce){.lu-who,.lu-caret{transition:none;}}

@@ -1,0 +1,13 @@
+{#- Daxil olmuş istifadəçi /giris və ya /qeydiyyat-a gəlib: izah + "Çıxış et və davam et" (POST, CSRF, sonra bu səhifəyə). -#}
+      <div class="kicker">Artıq daxil olmusunuz</div>
+      <h1>Siz <i>{{ full_name(current_user) }}</i> kimi daxil olmusunuz</h1>
+      <div class="underline"></div>
+      <div class="alert ok">
+        Siz <b>{{ full_name(current_user) }}</b> ({{ ROLE_LABELS[current_user.role] }}) kimi daxil olmusunuz.
+        {% if request.endpoint == 'auth.qeydiyyat' %}Yeni makler hesabı yaratmaq üçün əvvəl çıxış edin.{% else %}Başqa hesabla daxil olmaq üçün əvvəl çıxış edin.{% endif %}
+      </div>
+      <form method="post" action="{{ url_for('auth.cixis', next=next_path) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn" type="submit">Çıxış et və davam et</button>
+      </form>
+      <div class="switch" style="margin-top:16px"><a href="{{ home }}">{{ 'Panelə qayıt' if current_user.role == 'admin' else 'Kabinetə qayıt' }} →</a></div>

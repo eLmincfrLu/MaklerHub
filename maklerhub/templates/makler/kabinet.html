@@ -1,4 +1,5 @@
 {% extends 'makler/base.html' %}
+{% from '_admin_contact.html' import contact_card %}
 {% set page_css = 'teleblist2.css' %}
 {% block title %}Tələblər{% endblock %}
 {% block main %}
@@ -6,6 +7,14 @@
     <h1>Müştəri tələbləri</h1>
     <p>{{ today_long }}{% if lic %} · lisenziya {{ lic.days_left }} gün qalıb{% endif %}</p>
   </div>
+
+  {% if lic and lic.days_left <= 7 %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/admin-contact.css') }}">
+  <div class="mh-licwarn reveal" style="animation-delay:.08s" role="status">
+    <b>Lisenziyanızın bitməsinə {{ lic.days_left }} gün qalıb</b> ({{ lic.expires }}). Kabinet bağlanmasın deyə vaxtında uzadın.
+    {{ contact_card(admin_contact, short=True) }}
+  </div>
+  {% endif %}
 
   <div class="stats three reveal" style="animation-delay:.1s">
     <div class="stat"><div class="n">{{ good }}</div><div class="l">Uyğun aktiv tələb</div></div>

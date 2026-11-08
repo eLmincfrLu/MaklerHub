@@ -1,7 +1,9 @@
 {% extends 'makler/base.html' %}
+{% from '_admin_contact.html' import contact_card %}
 {% set page_css = 'makler-ayarlar.css' %}
 {% block title %}Ayarlar{% endblock %}
 {% block main %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/admin-contact.css') }}">
   {%- set ro = current_user.is_demo %}
   <div class="head reveal" style="animation-delay:.05s"><h1>Ayarlar</h1></div>
   {% if ro %}<div class="mh-empty reveal" style="animation-delay:.08s;margin-bottom:18px">Demo hesab: ayarlar yalnız baxış üçündür — profil, xidmət sahəsi və şifrə dəyişdirilmir.</div>{% endif %}
@@ -77,6 +79,7 @@
         {% else %}
         <div class="mh-empty">Lisenziya məlumatı tapılmadı.</div>
         {% endif %}
+        {{ contact_card(admin_contact) }}
       </div>
 
       <form class="panel" id="p-sifre" autocomplete="off" novalidate>

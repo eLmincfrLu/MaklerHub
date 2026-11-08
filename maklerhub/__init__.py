@@ -5,7 +5,7 @@ import os
 from flask import Blueprint, Flask, g, render_template, request, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import auth, db as dbmod, demo, helpers, maintenance, monitoring
+from . import auth, contact, db as dbmod, demo, helpers, maintenance, monitoring
 from .config import Config
 
 public = Blueprint("public", __name__)
@@ -18,12 +18,12 @@ def landing():
 
 @public.route("/sertler")
 def sertler():
-    return render_template("public/sertler.html", contact=dbmod.get_setting(dbmod.get_db(), "notify_email"))
+    return render_template("public/sertler.html")  # əlaqə: admin_contact (contact.py, settings)
 
 
 @public.route("/mexfilik")
 def mexfilik():
-    return render_template("public/mexfilik.html", contact=dbmod.get_setting(dbmod.get_db(), "notify_email"))
+    return render_template("public/mexfilik.html")
 
 
 @public.route("/saglamliq")
@@ -84,6 +84,7 @@ def create_app(overrides=None):
     helpers.init_app(app)
     dbmod.init_app(app)
     auth.init_app(app)
+    contact.init_app(app)
     maintenance.init_app(app)
     demo.init_app(app)
     app.after_request(security_headers)

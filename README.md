@@ -7,7 +7,7 @@ maklerlər uyğun evləri ona özləri təklif edir. Müştərinin nömrəsi he�
 maklerə açılır.
 
 🔗 **Canlı versiya:** https://maklerhub.onrender.com
-👤 **Demo makler girişi:** `demo1@maklerhub.az` / `Demo12345` (və ya ana səhifənin altındakı "Demo: makler kimi bax")
+👤 **Demo makler girişi:** `demo1@maklerhub.az` / `Demo12345` (https://maklerhub.onrender.com/giris)
 
 > Sayt pulsuz hostinqdədir (Render + Neon): bir müddət boş qalandan sonra ilk açılış 30–60 saniyə çəkə bilər.
 > Demo məlumatlar realdan tam ayrıdır: demo makler yalnız demo tələbləri görür, demo hesabda ayarlar dəyişdirilmir.

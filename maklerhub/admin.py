@@ -3,12 +3,12 @@ Bütün admin hərəkətləri loqa yazılır."""
 import json
 from datetime import timedelta
 
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from . import images as images_mod, licenses, maintenance
+from . import contact as contact_mod, images as images_mod, licenses, maintenance
 from .auth import admin_required
-from .db import add_log, get_db
-from .helpers import date_short, full_name, log_time, now, parse, phone_display, rel, ts
+from .db import add_log, get_db, get_settings, set_setting
+from .helpers import date_short, full_name, log_time, normalize_phone, now, parse, phone_display, rel, ts
 from .offers import AGENT_COMPLAINTS, CLOSE_REASONS, CUSTOMER_COMPLAINTS, OFFER_STATUS
 from .teleb import DEALS, ROOMS, STATUS as REQ_STATUS, URGENCY, budget_str
 
@@ -315,8 +315,46 @@ def loglar():
 def ayarlar():
     changed = g.user["password_changed_at"]
     last_at, last_stats = maintenance.last_cleanup(get_db())
+    c = contact_mod.get()
+    form = session.pop("contact_form", None) or {"name": c["name"], "phone": c["phone_display"], "email": c["email"]}
     return render("admin/ayarlar.html", "admin.ayarlar", pw_changed=rel(changed) if changed else "məlum deyil",
+                  contact_form=form,
                   cleanup_when=rel(last_at) if last_at else None, cleanup_at=last_at, cleanup_stats=last_stats)
+
+
+@bp.route("/ayarlar/elaqe", methods=["POST"])
+@admin_required
+def elaqe():
+    """Admin əlaqəsi (settings): ad, telefon (+994), e-poçt. notify_email da eyni e-poçta bağlanır."""
+    from .auth import normalize_email, valid_email
+    name = (request.form.get("name") or "").strip()
+    raw_phone = (request.form.get("phone") or "").strip()
+    email = normalize_email(request.form.get("email"))
+    phone = normalize_phone(raw_phone)
+    errors = []
+    if not name or len(name) > 60:
+        errors.append("Ad boş və ya 60 simvoldan uzun ola bilməz.")
+    if not phone:
+        errors.append("Telefon düzgün deyil (məsələn: +994 50 123 45 67).")
+    if not valid_email(email) or len(email) > 120:
+        errors.append("E-poçt ünvanı düzgün deyil.")
+    if errors:
+        session["contact_form"] = {"name": name, "phone": raw_phone, "email": request.form.get("email") or ""}
+        flash(" ".join(errors), "err")
+        return redirect(url_for("admin.ayarlar"))
+    db = get_db()
+    old = contact_mod.build(get_settings(db))
+    for key, value in (("admin_contact_name", name), ("admin_contact_phone", phone), ("admin_contact_email", email),
+                       ("notify_email", email)):
+        set_setting(db, key, value)
+    changes = [f"{label}: {old[k]} → {new}" for label, k, new in
+               (("ad", "name", name), ("telefon", "phone", phone), ("e-poçt", "email", email)) if old[k] != new]
+    add_log(db, "info", "Sistem", "Admin əlaqəsi dəyişdirildi" if changes else "Admin əlaqəsi yadda saxlanıldı (dəyişiklik yox)",
+            "\n".join(changes + [f"icra edən={g.user['email']}"]))
+    db.commit()
+    g.pop("_admin_contact", None)
+    flash("Əlaqə məlumatı yeniləndi — bütün səhifələrdə göstərilir.", "ok")
+    return redirect(url_for("admin.ayarlar"))
 
 
 @bp.route("/ayarlar/temizlik", methods=["POST"])

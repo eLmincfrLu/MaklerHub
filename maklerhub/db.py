@@ -18,7 +18,11 @@ from .helpers import ts
 
 DEFAULT_SETTINGS = {
     # Bildirişlər
-    "notify_email": "admin@maklerhub.az",
+    "notify_email": "elmincfrlu@gmail.com",  # admin_contact_email ilə eyni saxlanılır (admin dəyişəndə ikisi də)
+    # Admin əlaqəsi (makler kartı, ictimai səhifələr) — admin Ayarlar-dan dəyişir
+    "admin_contact_name": "Elmin Cəfərli",
+    "admin_contact_phone": "+994508364635",
+    "admin_contact_email": "elmincfrlu@gmail.com",
     "notify_new_makler": "1",
     # Təhlükəsizlik
     "session_timeout": "120",      # dəqiqə (admin sessiyası)

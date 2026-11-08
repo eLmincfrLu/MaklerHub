@@ -1,0 +1,14 @@
+{% extends 'auth/giris.html' %}
+{% from '_admin_contact.html' import contact_card %}
+{% block title %}Cihaz limiti{% endblock %}
+{% block card %}
+      <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/admin-contact.css') }}">
+      <div class="kicker">Giriş mümkün olmadı</div>
+      <h1>Cihaz limiti <i>dolub</i></h1>
+      <div class="underline"></div>
+
+      <div class="alert err">{{ message }}</div>
+      <p class="hint" style="font-size:.86rem;line-height:1.6;margin:0 0 6px">Hesabınız artıq icazə verilən sayda cihazda istifadə olunur. Administrator köhnə cihazları sıfırlayandan sonra bu cihazdan daxil ola bilərsiniz.</p>
+      {{ contact_card(admin_contact) }}
+      <a class="btn" style="display:block;text-align:center;text-decoration:none;margin-top:18px" href="{{ url_for('auth.giris') }}">Girişə qayıt</a>
+{% endblock %}

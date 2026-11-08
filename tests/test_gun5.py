@@ -216,7 +216,7 @@ def test_demo_login_from_many_devices(app, db, make_demo_makler, make_makler):
     # real makler üçün limit qalır
     real_email, _ = make_makler(login_now=False)
     statuses = [login(app, real_email, "TestPass123")[1].status_code for _ in range(3)]
-    assert statuses[:2] == [302, 302] and statuses[2] == 200
+    assert statuses[:2] == [302, 302] and statuses[2] == 403  # Paket A: ayrıca "Cihaz limiti dolub" səhifəsi
 
 
 def test_demo_wrong_passwords_do_not_lock_demo(app, db, make_demo_makler):
@@ -271,9 +271,7 @@ def test_seed_demo_twice_no_duplicates_and_clear(app, db, make_makler, make_requ
     phones = {r[0] for r in db.execute("SELECT phone FROM customer_requests WHERE is_demo = 1")}
     assert phones == {f"+9945000000{i:02d}" for i in range(1, 9)}
 
-    # demo giriş: /giris?demo=1 e-poçtu yazır və şifrəni göstərir; demo1 daxil olur, demo tələbləri görür
-    html = app.test_client().get("/giris?demo=1").get_data(as_text=True)
-    assert 'value="demo1@maklerhub.az"' in html and demo_password() in html
+    # demo1 daxil olur, demo tələbləri görür (/giris?demo=1 avtomatik doldurması Paket A-da silindi — test_paket_a)
     c, r = login(app, "demo1@maklerhub.az", demo_password())
     assert r.status_code == 302
     demo_ids = {x[0] for x in db.execute("SELECT id FROM customer_requests WHERE is_demo = 1")}

@@ -36,6 +36,7 @@
   <main class="stage">
     <div class="card">
       <div class="top-link"><a class="backlink" href="{{ url_for('public.landing') }}">← Ana səhifə</a></div>
+      {% if signed_in %}{% include 'auth/_signed_in.html' %}{% else %}
       <div class="kicker">Makler qeydiyyatı</div>
       <h1>Lisenziya kodu ilə <i>qoşulun</i></h1>
       <div class="underline"></div>
@@ -113,6 +114,7 @@
       </form>
 
       <div class="switch">Artıq hesabınız var? <a href="{{ url_for('auth.giris') }}">Daxil olun</a></div>
+      {% endif %}
     </div>
   </main>
 </div>

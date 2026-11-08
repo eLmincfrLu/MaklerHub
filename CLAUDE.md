@@ -23,6 +23,16 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 - Gün 5 BİTDİ: avtomatik təmizlik (`maintenance.py`), demo rejimi (`demo.py`, `is_demo`), təhlükəsizlik başlıqları,
   `/robots.txt`, 404/500 mətnləri, Sentry (`monitoring.py`), köhnə placeholder marşrut/şablonları silindi, README +
   `docs/screenshots/`. pytest: `tests/test_gun5.py`.
+- Paket A (8 noyabr): admin əlaqəsi settings-də (`admin_contact_name/phone/email`, `notify_email` eyni e-poçta
+  bağlı; admin Ayarlar → "Admin əlaqəsi"), `contact.py` (`admin_contact` tənbəl, sorğu başına 1 oxu), kart
+  `templates/_admin_contact.html` (`contact_card`, ictimai səhifələr üçün `obf_email/obf_phone` + `js/contact-reveal.js`
+  — HTML-də açıq e-poçt/telefon YOX). Kart: makler Ayarlar → Lisenziya, `auth/lisenziya.html`, `auth/cihaz.html`
+  (cihaz limiti), kabinetdə ≤7 gün banner (qısa). Ana səhifədən Bina.az/Tap.az müqayisəsi və demo linki silindi.
+  Daxil olmuş istifadəçi: ana səhifədə avatar + menyu (`css/pages/landing-user.css`, `js/user-menu.js`; Çıxış menyuda,
+  POST), əsas düymə "Kabinetə keç →"/"Admin panel →"; `landing.js` `#registerBtn` gözlədiyi üçün gizli span qalır.
+  /giris və /qeydiyyat daxil olmuş istifadəçiyə izah kartı (`auth/_signed_in.html`), "Çıxış et və davam et" →
+  POST `/cixis?next=` (yalnız daxili ünvan; GET /cixis köhnə linklər üçün qalır). CSRF xətasında /giris və
+  /qeydiyyat formanı dəyərlərlə qaytarır (`CSRF_SOFT_ENDPOINTS`, `CSRF_RETRY`). pytest: `tests/test_paket_a.py`.
 - Şəkillər (8 noyabr): təklifə 1-5 şəkil Cloudinary-ə (`images.py`, `offer_images` cədvəli; `offers.image_url` yalnız
   köhnə təkliflər üçün, formada link sahəsi yoxdur). pytest: `tests/test_images.py`.
 - IP (7 noyabr): Render-in qarşısında Cloudflare var, XFF 3 hop-dur (müştəri, Cloudflare, Render daxili).
@@ -92,7 +102,8 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   loqa). `lazy_expire(db)` — `expire_requests` dəqiqədə 1 dəfə (`last_expire_at`); birbaşa `expire_requests` çağırma.
   Testlərdə `CLEANUP_DISABLED=True`, conftest hər testdə tezlik məhdudiyyətini sıfırlayır.
 - `demo.py` — `seed-demo` / `clear-demo` CLI; demo tələblərin müddəti bitmir (`request_alive`, `expire_requests`);
-  demo makler cihaz limiti və tək sessiyadan azad, uğursuz giriş bloku tətbiq olunmur; `/giris?demo=1`.
+  demo makler cihaz limiti və tək sessiyadan azad, uğursuz giriş bloku tətbiq olunmur. Ana səhifədə demo linki və
+  `/giris?demo=1` avtomatik doldurması YOXDUR (Paket A-da silindi); demo girişi yalnız README-də.
 - `images.py` — Pillow: məzmuna görə format (JPEG/PNG/WEBP), ≤5 MB, 200..10000 px, `MAX_IMAGE_PIXELS` (bomb),
   `exif_transpose`, metadata silinir (yalnız ICC qalır), uzun tərəf 1600, JPEG q82. Cloudinary imzalı yükləmə
   (`maklerhub/offers/<offer_id>/<təsadüfi>`, overwrite=False), `destroy` (toplu, xəta loqa), `delete_orphans`,

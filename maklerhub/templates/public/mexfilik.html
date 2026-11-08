@@ -1,4 +1,6 @@
 {% extends 'teleb/_layout.html' %}
+{% from '_admin_contact.html' import obf_email, obf_phone %}
+{% block meta %}<script defer src="{{ url_for('static', filename='js/contact-reveal.js') }}"></script>{% endblock %}
 {% block title %}Məxfilik siyasəti{% endblock %}
 {% block showcase %}
       <div class="eyebrow">MaklerHub</div>
@@ -34,7 +36,7 @@
 
         <h2>Silinmə və suallar</h2>
         <p>Məlumatlarının daha tez silinməsini istəyirsənsə, tələbinin linkini və ya nömrəni yazaraq
-        <a href="mailto:{{ contact }}">{{ contact }}</a> ünvanına müraciət et.</p>
+        {{ obf_email(admin_contact) }} ünvanına yaz və ya {{ obf_phone(admin_contact) }} nömrəsinə zəng et.</p>
         <p>Ətraflı: <a href="{{ url_for('public.sertler') }}">İstifadə şərtləri</a>.</p>
         <p class="upd">Son yenilənmə: noyabr 2026</p>
       </div>

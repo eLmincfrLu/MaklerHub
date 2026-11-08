@@ -1,3 +1,4 @@
+{%- from '_admin_contact.html' import obf_email, obf_phone -%}
 <!DOCTYPE html>
 <html lang="az">
 <head>
@@ -9,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing-extra.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing-user.css') }}">
 </head>
 <body>
 <div id="heroView">
@@ -23,8 +25,27 @@
         MaklerHub
       </div>
       <div class="navbtns">
-        <button class="btn btn-ghost" id="loginBtn">{{ 'Kabinet' if current_user else 'Makler girişi' }}</button>
-        {% if current_user %}<button class="btn btn-gold" id="registerBtn" data-logout="{{ url_for('auth.cixis') }}">Çıxış</button>{% else %}<button class="btn btn-gold" id="registerBtn">Tələbini yaz</button>{% endif %}
+        {%- if current_user %}
+        {%- set is_admin = current_user.role == 'admin' %}
+        <div class="lu" data-usermenu>
+          <button type="button" class="lu-who" aria-haspopup="true" aria-expanded="false" aria-controls="luMenu" aria-label="Hesab menyusu: {{ full_name(current_user) }}">
+            <span class="lu-av" aria-hidden="true">{{ initials(current_user.first_name, current_user.last_name) }}</span>
+            <span class="lu-name">{{ current_user.first_name }}</span>
+            <svg class="lu-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="lu-menu" id="luMenu" hidden>
+            <div class="lu-head"><b>{{ full_name(current_user) }}</b><small>{{ ROLE_LABELS[current_user.role] }} · {{ current_user.email }}</small></div>
+            <a class="lu-item" href="{{ url_for('admin.panel') if is_admin else url_for('makler.kabinet') }}">{{ 'Admin panel' if is_admin else 'Kabinet' }}</a>
+            {%- if not is_admin %}<a class="lu-item" href="{{ url_for('makler.ayarlar') }}">Ayarlar</a>{% endif %}
+            <form method="post" action="{{ url_for('auth.cixis') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="lu-item lu-out" type="submit">Çıxış</button></form>
+          </div>
+        </div>
+        <button class="btn btn-gold" id="loginBtn">{{ 'Admin panel →' if is_admin else 'Kabinetə keç →' }}</button>
+        <span id="registerBtn" hidden></span>{# landing.js bu id-ni gözləyir (mövcud static fayl dəyişdirilmir) #}
+        {%- else %}
+        <button class="btn btn-ghost" id="loginBtn">Makler girişi</button>
+        <button class="btn btn-gold" id="registerBtn">Tələbini yaz</button>
+        {%- endif %}
       </div>
     </div>
     <div class="content">
@@ -33,7 +54,11 @@
       <p class="reveal" style="animation-delay:.85s">Nə axtardığını bir dəqiqədə yaz — maklerlər sənə <em>fərdi təkliflər</em> göndərsin. Nömrən yalnız qəbul etdiyin təklifin maklerinə açılır.</p>
       <div class="lx-cta reveal" style="animation-delay:1s">
         <a class="btn btn-gold" href="{{ url_for('teleb.forma') }}">Tələbini yaz</a>
+        {%- if current_user %}
+        <a class="btn btn-ghost" href="{{ url_for('admin.panel') if current_user.role == 'admin' else url_for('makler.kabinet') }}">{{ 'Admin panel' if current_user.role == 'admin' else 'Kabinetə keç' }}</a>
+        {%- else %}
         <a class="btn btn-ghost" href="{{ url_for('auth.qeydiyyat') }}">Maklerəm</a>
+        {%- endif %}
       </div>
       <div class="underline"></div>
     </div>
@@ -77,8 +102,12 @@
       <h2>Müştəri axtarmayın — <i>hazır tələbləri</i> görün</h2>
       <p class="lx-lead">Xidmət sahənizi (rayon, kirayə/satış, qiymət aralığı) seçin, sizə uyğun tələblər kabinetinizə düşsün.</p>
       <div class="lx-actions">
+        {%- if current_user %}
+        <a class="btn btn-gold" href="{{ url_for('admin.panel') if current_user.role == 'admin' else url_for('makler.kabinet') }}">{{ 'Admin panel →' if current_user.role == 'admin' else 'Kabinetə keç →' }}</a>
+        {%- else %}
         <a class="btn btn-gold" href="{{ url_for('auth.qeydiyyat') }}">Maklerəm — qeydiyyat</a>
         <a class="btn btn-ghost" href="{{ url_for('auth.giris') }}">Makler girişi</a>
+        {%- endif %}
       </div>
     </div>
     <ul class="lx-list">
@@ -90,39 +119,12 @@
   </div>
 </section>
 
-<section class="lx-sec" id="ferq">
-  <div class="lx-in">
-    <div class="lx-kicker">Fərq nədir</div>
-    <h2>Elan saytı <i>və</i> MaklerHub</h2>
-    <div class="lx-compare">
-      <div class="lx-col">
-        <div class="lx-logos"><img src="{{ url_for('static', filename='img/bina.png') }}" alt="Bina.az"><img src="{{ url_for('static', filename='img/tap.png') }}" alt="Tap.az"><span>Bina.az / Tap.az</span></div>
-        <ul>
-          <li>Müştəri özü axtarır</li>
-          <li>Yüzlərlə elanın siyahısı</li>
-          <li>Hər elana ayrıca zəng</li>
-          <li>Uyğun olanı özün süzüb seçirsən</li>
-        </ul>
-      </div>
-      <div class="lx-col lx-hl">
-        <div class="lx-logos"><img src="{{ url_for('static', filename='img/logo.png') }}" alt="MaklerHub" class="lx-own"><span>MaklerHub</span></div>
-        <ul>
-          <li>Maklerlər müştəriyə gəlir</li>
-          <li>Tələbinə uyğun fərdi təkliflər</li>
-          <li>Bir tələb — bir neçə makler</li>
-          <li>Nömrən yalnız seçdiyin maklerə açılır</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</section>
-
 <section class="lx-sec lx-final">
   <div class="lx-in">
     <h2>Nə axtardığını yaz — <i>qalanını maklerlər etsin</i></h2>
     <a class="lx-btn" href="{{ url_for('teleb.forma') }}">Tələbini yaz →</a>
   </div>
-  <footer class="lx-foot">© MaklerHub · Bakı · <a href="{{ url_for('public.sertler') }}" style="color:inherit">İstifadə şərtləri</a> · <a href="{{ url_for('public.mexfilik') }}" style="color:inherit">Məxfilik</a> · <a href="{{ url_for('auth.giris', demo=1) }}" style="color:inherit;opacity:.75">Demo: makler kimi bax</a></footer>
+  <footer class="lx-foot">© MaklerHub · Bakı · <a href="{{ url_for('public.sertler') }}" style="color:inherit">İstifadə şərtləri</a> · <a href="{{ url_for('public.mexfilik') }}" style="color:inherit">Məxfilik</a><br><span class="lx-contact">Əlaqə: {{ admin_contact.name }} · {{ obf_phone(admin_contact) }} · {{ obf_email(admin_contact) }}</span></footer>
 </section>
 <div class="fade" id="fade"></div>
 
@@ -130,5 +132,7 @@
 <script>window.MH_LOGIN="{{ url_for('auth.giris') }}";window.MH_REGISTER="{{ url_for('teleb.forma') }}";
 window.MH_IMG={front:"{{ url_for('static', filename='img/hero-front.jpg') }}",left:"{{ url_for('static', filename='img/hero-login.jpg') }}",right:"{{ url_for('static', filename='img/hero-register.jpg') }}"};</script>
 <script src="{{ url_for('static', filename='js/pages/landing.js') }}"></script>
+<script src="{{ url_for('static', filename='js/contact-reveal.js') }}"></script>
+{% if current_user %}<script src="{{ url_for('static', filename='js/user-menu.js') }}"></script>{% endif %}
 </body>
 </html>

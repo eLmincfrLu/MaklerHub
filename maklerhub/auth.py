@@ -55,8 +55,9 @@ def password_problem(pw):
     return None
 
 
-# CSRF uğursuz olanda yönləndirilməyən, g.csrf_failed ilə özü idarə edən görünüşlər
-CSRF_SOFT_ENDPOINTS = {"teleb.forma"}
+# CSRF uğursuz olanda yönləndirilməyən, g.csrf_failed ilə özü idarə edən görünüşlər (forma dəyərləri itməsin)
+CSRF_SOFT_ENDPOINTS = {"teleb.forma", "auth.giris", "auth.qeydiyyat"}
+CSRF_RETRY = "Səhifə yeniləndi, zəhmət olmasa yenidən göndərin."
 
 
 def csrf_token():
@@ -206,6 +207,12 @@ def finish_login(db, user, remember=False):
     return resp, None
 
 
+def signed_in_page(template, **ctx):
+    """Daxil olmuş istifadəçi /giris və ya /qeydiyyat-a gələndə: səssiz yönləndirmə yox, izah kartı
+    ("Çıxış et və davam et" — POST /cixis?next=<bu səhifə>)."""
+    return render_template(template, signed_in=True, home=home_url(g.user), next_path=request.path, **ctx)
+
+
 def license_page(status=403):
     if is_api_request():
         return jsonify(ok=False, error=LICENSE_MSG), status
@@ -330,10 +337,13 @@ def init_app(app):
 @bp.route("/giris", methods=["GET", "POST"])
 def giris():
     if g.user:
-        return redirect(home_url(g.user))
+        return signed_in_page("auth/giris.html", email="", error=None)
     email = ""
     error = None
-    if request.method == "POST":
+    if request.method == "POST" and g.get("csrf_failed"):
+        email = normalize_email(request.form.get("email"))  # şifrə saxlanılmır
+        error = CSRF_RETRY
+    elif request.method == "POST":
         db = get_db()
         email = normalize_email(request.form.get("email"))
         password = request.form.get("password", "")
@@ -360,6 +370,8 @@ def giris():
                     resp, error = finish_login(db, user, remember)
                     if resp:
                         return resp
+                    if error == DEVICE_LIMIT_MSG:
+                        return render_template("auth/cihaz.html", message=error), 403
             else:
                 db.execute("INSERT INTO login_attempts(email, ip, success, created_at) VALUES (?, ?, 0, ?)",
                            (email, ip, ts()))
@@ -369,16 +381,7 @@ def giris():
                             f"IP={masked} cəhd={limit}\nhesab 15 dəq müddətinə bloklandı")
                 db.commit()
                 error = "E-poçt və ya şifrə yanlışdır."
-    demo = None
-    if request.args.get("demo") == "1":
-        demo = {"email": DEMO_EMAIL, "password": demo_password(),
-                "ready": get_db().execute("SELECT 1 FROM users WHERE email = ? AND is_demo = 1",
-                                          (DEMO_EMAIL,)).fetchone() is not None}
-        email = email or DEMO_EMAIL
-    return render_template("auth/giris.html", email=email, error=error, demo=demo)
-
-
-DEMO_EMAIL = "demo1@maklerhub.az"
+    return render_template("auth/giris.html", email=email, error=error)
 
 
 def demo_password():
@@ -450,14 +453,16 @@ def _register(db, form, phone, pw, lic_id, ip):
 def qeydiyyat():
     """Makler qeydiyyatı: yalnız admin verdiyi istifadə olunmamış lisenziya kodu ilə."""
     if g.user:
-        return redirect(home_url(g.user))
+        return signed_in_page("auth/qeydiyyat.html", form={}, errors=[])
     form = {}
     errors = []
     if request.method == "POST":
-        db = get_db()
-        ip = client_ip()
         form = {k: (request.form.get(k) or "").strip() for k in ("fname", "lname", "email", "phone", "license")}
         form["email"] = normalize_email(form["email"])
+        if g.get("csrf_failed"):  # köhnə forma: dəyərlər qalır (şifrələr yox), yenidən göndərmək kifayətdir
+            return render_template("auth/qeydiyyat.html", form=form, errors=[CSRF_RETRY])
+        db = get_db()
+        ip = client_ip()
         pw, pw2 = request.form.get("password", ""), request.form.get("password2", "")
         if not form["fname"] or not form["lname"]:
             errors.append("Ad və soyad daxil edilməlidir.")
@@ -495,14 +500,16 @@ def qeydiyyat():
     return render_template("auth/qeydiyyat.html", form=form, errors=errors)
 
 
-@bp.route("/cixis")
+@bp.route("/cixis", methods=["GET", "POST"])
 def cixis():
+    """Çıxış. POST (CSRF ilə) ?next=/qeydiyyat kimi daxili ünvana qayıda bilər; GET — köhnə linklər (ana səhifə)."""
     if session.get("st"):
         db = get_db()
         db.execute("UPDATE sessions SET active = 0 WHERE token = ?", (session["st"],))
         db.commit()
     session.clear()
-    return redirect(url_for("public.landing"))
+    nxt = _safe_next(request.values.get("next")) if request.method == "POST" else None
+    return redirect(nxt or url_for("public.landing"))
 
 
 # ---------------------------------------------------------------- şifrə bərpası

@@ -20,6 +20,18 @@
       </form>
     </div>
 
+    <div class="box pwform reveal" style="animation-delay:.13s;margin-top:22px">
+      <h2>Admin əlaqəsi</h2>
+      <p class="msub" style="margin-bottom:14px">Maklerlərin əlaqə kartında (lisenziya, cihaz limiti), kabinetdəki xəbərdarlıqda və ictimai səhifələrdə (şərtlər, məxfilik, ana səhifə) göstərilir.</p>
+      <form method="post" action="{{ url_for('admin.elaqe') }}" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mh-field"><label for="c-name">Ad</label><input id="c-name" name="name" maxlength="60" value="{{ contact_form.name }}" required></div>
+        <div class="mh-field"><label for="c-phone">Telefon</label><input id="c-phone" name="phone" type="tel" maxlength="25" value="{{ contact_form.phone }}" placeholder="+994 50 123 45 67" required></div>
+        <div class="mh-field"><label for="c-email">E-poçt</label><input id="c-email" name="email" type="text" inputmode="email" maxlength="120" value="{{ contact_form.email }}" required></div>
+        <button class="btn" type="submit">Əlaqəni yadda saxla</button>
+      </form>
+    </div>
+
     <div class="box pwform reveal" style="animation-delay:.16s;margin-top:22px">
       <h2>Avtomatik təmizlik</h2>
       <p class="msub" style="margin-bottom:14px">Saatda ən çox bir dəfə, sorğudan sonra özü işləyir: oxunmuş bildirişlər (30 gün), oxunmamışlar (90 gün), giriş cəhdləri (7 gün), loqlar (90 gün), bağlı sessiyalar (30 gün).</p>
