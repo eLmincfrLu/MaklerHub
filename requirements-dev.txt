@@ -1,1 +1,2 @@
 pytest>=8
+playwright>=1.40  # ixtiyari: tests/test_mobile.py (yoxdursa skip). Brauzer: sistemdəki Chrome (channel="chrome")

@@ -1,0 +1,161 @@
+/* MaklerHub — mobil responsivlik (Paket M). Base şablonlarda ui.css-dən SONRA qoşulur.
+   Rənglər, şriftlər, loqo dəyişmir; yalnız yerləşmə, ölçü, toxunma sahələri. */
+
+/* ===== Hər ölçüdə ===== */
+img{max-width:100%;}
+/* ".reveal" transform-u eyebrow-un animasiyasında sıfırlanmırdı → eyebrow başlığın üstünə minirdi */
+.hero .eyebrow.reveal{transform:none;}
+.hero .content h1{text-wrap:balance;}
+/* ☰ menyu yalnız mobildə */
+.mm{display:none;}
+/* təklif şəkilləri: kəsilmir — contain + eyni şəklin bulanıq fonu (js/mobile.js çərçivəyə salır) */
+.mh-fr{position:relative;display:block;flex:0 0 100%;aspect-ratio:16/10;overflow:hidden;background:#101820;scroll-snap-align:start;}
+.mh-fr::before{content:"";position:absolute;inset:-24px;background:var(--fr) center/cover no-repeat;filter:blur(18px) brightness(.75);}
+.offer .mh-fr img, .gal-track .mh-fr img{position:relative;display:block;width:100%;height:100%;aspect-ratio:auto;object-fit:contain;background:none;}
+/* qalereya nöqtələri: görünən nöqtə kiçik, toxunma sahəsi böyük */
+.gal-dots{bottom:2px;gap:0;}
+.gal-dots button{width:44px;height:44px;background:none;display:flex;align-items:center;justify-content:center;border-radius:0;}
+.gal-dots button::before{content:"";width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.6);box-shadow:0 0 0 1px rgba(0,0,0,.15);transition:width .2s ease;}
+.gal-dots button.on{width:44px;background:none;}
+.gal-dots button.on::before{width:18px;border-radius:4px;background:#fff;}
+/* uzun sözlər, e-poçt, linklər */
+.card, .mh-card, .offer, .sum-row, .mhb, .lu-menu, .contactbox, .note, .privacy, td, .od, .ot, .msub{overflow-wrap:anywhere;}
+html.mh-lock, html.mh-lock body{overflow:hidden;}
+
+/* ===== Mobil (≤640px) ===== */
+@media (max-width:640px){
+
+  /* --- 16px input (iPhone avtomatik zoom etməsin) --- */
+  body input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),
+  body select, body textarea, .input-line textarea, .input-line input{font-size:16px;}
+  a.brand{display:inline-flex;align-items:center;min-height:44px;}
+
+  /* ===== ANA SƏHİFƏ ===== */
+  .hero{height:auto;min-height:100vh;min-height:100dvh;perspective:none;display:flex;flex-direction:column;}
+
+  /* 1. başlıq: solda loqo, sağda kompakt "Tələbini yaz" + ☰ */
+  .hero .top{position:fixed;top:0;left:0;right:0;z-index:40;padding:calc(8px + env(safe-area-inset-top,0px)) 16px 8px;
+    gap:10px;transition:background .25s ease,box-shadow .25s ease;}
+  .hero .top.mm-solid{background:rgba(16,24,32,.94);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    box-shadow:0 1px 0 rgba(255,255,255,.08);}
+  .hero .top .brand{min-width:0;min-height:44px;font-size:1.05rem;}
+  .hero .top .brand img{width:30px;height:30px;}
+  /* animasiyanın saxladığı transform fixed menyunu navbtns-ə bağlayırdı */
+  .hero .navbtns, .hero .top .brand{animation:none;opacity:1;transform:none;}
+  .hero .navbtns{gap:8px;align-items:center;flex-shrink:0;}
+  .hero .navbtns .nav-txt{display:none;}
+  .hero #registerBtn{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;font-size:.84rem;white-space:nowrap;}
+  /* 6. hero-dakı düymə görünəndə başlıqdakı gizlənir (JS-siz ikisi də görünür) */
+  .hero .top.cta-seen #registerBtn{display:none;}
+  .mm{display:block;position:relative;}
+  .mm-btn{all:unset;box-sizing:border-box;width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+    border-radius:4px;color:#fff;border:1px solid rgba(255,255,255,.3);background:rgba(16,24,32,.3);cursor:pointer;}
+  .mm-btn[aria-expanded="true"]{background:rgba(16,24,32,.7);border-color:rgba(241,226,184,.6);}
+  .mm-btn:focus-visible{outline:2px solid #C9A227;outline-offset:2px;}
+  .mm-menu, .hero .lu-menu{position:fixed;left:12px;right:12px;top:calc(64px + env(safe-area-inset-top,0px));
+    min-width:0;max-width:none;z-index:45;background:#FFFDF8;border:1px solid #E4DCC8;border-radius:8px;
+    box-shadow:0 18px 40px rgba(0,0,0,.35);padding:6px;}
+  .mm-menu[hidden]{display:none;}
+  .mm-item, .hero .lu-item{display:flex;align-items:center;min-height:48px;padding:0 14px;border-radius:4px;color:#1B2430;
+    text-decoration:none;font:500 1rem 'IBM Plex Sans',Arial,sans-serif;}
+  .mm-item + .mm-item{border-top:1px solid #EFE7D4;}
+  .mm-item:hover, .mm-item:focus-visible{background:#F6F1E4;outline:none;}
+  .hero .lu-who{min-width:44px;min-height:44px;justify-content:center;}
+  .hero .lu-av{width:36px;height:36px;}
+
+  /* hero məzmunu səhifə axınında, sabit başlığın altından */
+  .hero .content{position:relative;left:auto;right:auto;top:auto;max-width:none;flex:1 0 auto;display:flex;flex-direction:column;
+    justify-content:center;padding:84px 20px 24px;}
+  /* 3. eyebrow ilə başlıq arasında boşluq */
+  .hero .eyebrow{margin-bottom:14px;line-height:1.5;letter-spacing:.18em;}
+  /* 4. başlıq ölçüsü */
+  .hero .content h1{font-size:clamp(1.75rem,8.6vw,2.25rem);line-height:1.14;}
+  .hero .content p{font-size:.98rem;}
+  .hero .lx-cta .btn{min-height:48px;display:flex;align-items:center;justify-content:center;}
+  .hero .hero-note{margin-top:12px;}
+  .hero .lost-link{display:inline-flex;align-items:center;align-self:flex-start;min-height:44px;margin-top:2px;}
+
+  /* 2. "Aktiv tələbin var" banneri: axında, tam en, 2 sətir */
+  .mhb-slot.dark{position:static;max-width:none;margin:0 0 22px;}
+  .mhb-main{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"dot txt txt" ". badge go";
+    column-gap:8px;row-gap:6px;align-items:center;padding:10px 48px 10px 12px;}
+  .mhb-main .mhb-dot{grid-area:dot;}
+  .mhb-main .mhb-txt{grid-area:txt;flex-direction:row;align-items:baseline;min-width:0;white-space:nowrap;overflow:hidden;}
+  .mhb-main .mhb-txt b{flex-shrink:0;}
+  .mhb-main .mhb-sum{flex:1 1 auto;min-width:0;font-size:.84rem;}
+  .mhb-main .mhb-sum::before{content:"\00a0·\00a0";}
+  .mhb-main .mhb-new, .mhb-main .mhb-cnt{grid-area:badge;justify-self:start;}
+  .mhb-main .mhb-go{grid-area:go;min-height:28px;display:flex;align-items:center;}
+  .mhb-x{top:0;right:0;width:44px;height:44px;display:flex;align-items:center;justify-content:center;}
+  .mhb-head{min-height:44px;}
+  .mhb-slot.dark .mhb-list{position:static;margin-top:4px;background:none;border:0;box-shadow:none;padding:0 8px 6px;}
+  .mhb-row{min-height:44px;}
+
+  /* 5. göstəricilər: 3 sütunlu kompakt grid */
+  .hero .bottom{position:relative;left:auto;right:auto;bottom:auto;padding:14px 16px calc(16px + env(safe-area-inset-bottom,0px));}
+  .hero .bottom .tag{display:none;}
+  .hero .stats-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;width:100%;}
+  .hero .stat-chip, .hero .stat-chip:nth-child(3){display:flex;flex-direction:column;align-items:center;text-align:center;gap:5px;
+    padding:0 6px;border-left:1px solid rgba(255,255,255,.18);}
+  .hero .stat-chip:first-child{border-left:0;padding-left:6px;}
+  .hero .stat-chip .ic{width:20px;height:20px;}
+  .hero .stat-chip .lx-val{font-size:.98rem;}
+  .hero .stat-chip .lbl{font-size:.66rem;line-height:1.3;}
+
+  /* ana səhifənin aşağı bölmələri */
+  .mk-wa{display:inline-flex;align-items:center;min-height:44px;}
+  .lx-actions{display:flex;flex-direction:column;gap:10px;}
+  .lx-actions .btn, .lx-btn{min-height:48px;display:flex;align-items:center;justify-content:center;}
+
+  /* ===== AUTH / TƏLƏB SƏHİFƏLƏRİ (sol panel + kart) ===== */
+  .s-top{padding:calc(10px + env(safe-area-inset-top,0px)) 16px 0;}
+  .s-top .brand, .wrap .brand{min-height:44px;}
+  .s-body{padding:12px 16px 18px;}
+  .s-body h1{font-size:clamp(1.4rem,6.6vw,1.75rem);text-wrap:balance;}
+  .stage{padding:16px 16px calc(28px + env(safe-area-inset-bottom,0px));}
+  .card h1{font-size:clamp(1.4rem,6.6vw,1.65rem);text-wrap:balance;}
+  .top-link{margin-bottom:10px;}
+  .backlink{display:inline-flex;align-items:center;min-height:44px;border-bottom:0;text-decoration:underline;text-underline-offset:3px;}
+  .input-line input{min-height:44px;}
+  .row2{grid-template-columns:1fr;gap:0;}
+  .row-between{flex-wrap:wrap;gap:4px 12px;}
+  .remember, .forgot{display:inline-flex;align-items:center;min-height:44px;}
+  .terms{min-height:44px;align-items:center;}
+  .terms input{width:20px;height:20px;margin-top:0;flex-shrink:0;}
+  .switch a{display:inline-flex;align-items:center;min-height:44px;}
+
+  /* /teleb forması: tək sütun, seçim düymələri grid, "Göndər" aşağıda sticky */
+  .roles.two{grid-template-columns:1fr 1fr;}
+  #telebForm .roles:not(.two):not(.five){grid-template-columns:1fr 1fr;}
+  #telebForm .roles:not(.two):not(.five) .role:last-child:nth-child(odd){grid-column:1 / -1;}
+  .roles.five{grid-template-columns:repeat(5,minmax(0,1fr));}
+  .role span{min-height:48px;}
+  #telebForm > .btn[type=submit]{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:5;
+    box-shadow:0 10px 26px rgba(16,24,32,.22),0 0 0 6px var(--cream,#F6F1E4);}
+  .dp-toggle{min-height:44px;}
+  .dp-field{padding:0 8px;}
+  .dp-link{min-height:44px;padding:0 10px;display:inline-flex;align-items:center;}
+  .dp-opt{min-height:48px;}
+  .dp-sheet{left:0;right:0;max-width:none;padding-bottom:env(safe-area-inset-bottom,0px);}
+
+  /* /teleb/<token> */
+  .em-row{flex-direction:column;}
+  .em-row input, .linkrow input, .lk-in{min-height:44px;}
+  .lk-b{min-height:44px;}
+  details > summary{min-height:44px;display:flex;align-items:center;gap:6px;}
+  .radio{min-height:44px;display:flex;align-items:center;gap:8px;}
+  .oa{flex-wrap:wrap;gap:4px 10px;}
+  .confirmbox .abtn, .ob .abtn{min-height:48px;}
+  .mh-dlg{width:calc(100vw - 24px);max-width:none;margin:auto;max-height:calc(100dvh - 24px);overflow:auto;}
+
+  /* tipoqrafiya */
+  h1, h2{overflow-wrap:anywhere;}
+  .lx-sec h2{font-size:clamp(1.5rem,7vw,2rem);text-wrap:balance;}
+}
+
+/* ≤360px: başlıqda yalnız loqo ikonu */
+@media (max-width:360px){
+  .hero .top .brand{font-size:0;gap:0;}
+  .hero #registerBtn{padding:0 12px;font-size:.8rem;}
+  .hero .stat-chip .lbl{font-size:.62rem;}
+}

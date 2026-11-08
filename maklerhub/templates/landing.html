@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/mh-banner.css') }}">
 <script>document.documentElement.classList.add('js-anim');</script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+<script defer src="{{ url_for('static', filename='js/mobile.js') }}"></script>
 </head>
 <body>
 <div id="heroView">
@@ -52,6 +54,16 @@
         <a class="nav-txt nav-hide-sm" href="#maklerler" data-scroll>Maklerlər üçün</a>
         <button class="nav-txt" id="loginBtn" type="button">Makler girişi</button>
         <button class="btn btn-gold shine" id="registerBtn" type="button">Tələbini yaz</button>
+        <div class="mm" data-mm>
+          <button class="mm-btn" type="button" aria-label="Menyu" aria-expanded="false" aria-controls="mmMenu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+          <nav class="mm-menu" id="mmMenu" aria-label="Menyu" hidden>
+            <a class="mm-item" href="{{ url_for('auth.giris') }}">Makler girişi</a>
+            <a class="mm-item" href="#maklerler">Maklerlər üçün</a>
+            <a class="mm-item" href="{{ url_for('teleb.berpa') }}">Linkimi itirdim</a>
+          </nav>
+        </div>
         {%- endif %}
       </div>
     </div>
