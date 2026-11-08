@@ -7,7 +7,8 @@ from flask import Blueprint, abort, flash, g, make_response, redirect, render_te
 
 from .auth import client_ip, ip_limit_applies
 from .db import add_log, get_db, get_setting
-from .helpers import BAKU_DISTRICTS, date_short, money, normalize_phone, now, phone_display, phone_masked, rel, ts
+from .helpers import (BAKU_DISTRICTS, DISTRICTS_AZ, date_short, districts_text, money, normalize_phone, now,
+                      phone_display, phone_masked, rel, ts)
 from .maintenance import lazy_expire
 
 bp = Blueprint("teleb", __name__)
@@ -16,7 +17,6 @@ DEALS = {"rent": "Kirayə", "sale": "Alış"}
 URGENCY = {"urgent": "Təcili", "month": "1 ay ərzində", "flexible": "Tələsmirəm"}
 ROOMS = {1: "1", 2: "2", 3: "3", 4: "4", 5: "5+"}
 STATUS = {"active": "Aktiv", "closed": "Bağlanıb", "expired": "Müddəti bitib"}
-MAX_DISTRICTS = 3
 NOTE_MAX = 300
 NAME_MAX = 40
 IP_DAILY_LIMIT = 3       # IP başına son 24 saatda
@@ -79,11 +79,13 @@ def validate(f):
     deal = f["deal"] if f["deal"] in DEALS else None
     if not deal:
         errors.append("Kirayə və ya alış seçin.")
-    districts = [d for d in dict.fromkeys(f["districts"]) if d in BAKU_DISTRICTS]
+    # rayon limiti yoxdur (minimum 1); "Fərq etmir (bütün Bakı)" → bütün rayonlar
+    if f.get("all_districts"):
+        districts = list(DISTRICTS_AZ)
+    else:
+        districts = [d for d in dict.fromkeys(f["districts"]) if d in BAKU_DISTRICTS]
     if not districts:
         errors.append("Ən azı bir rayon seçin.")
-    elif len(f["districts"]) > MAX_DISTRICTS or len(districts) > MAX_DISTRICTS:
-        errors.append(f"Ən çox {MAX_DISTRICTS} rayon seçmək olar.")
     rooms = int(f["rooms"]) if f["rooms"].isdigit() and int(f["rooms"]) in ROOMS else None
     if not rooms:
         errors.append("Otaq sayını seçin.")
@@ -120,6 +122,7 @@ def forma():
         form = {k: (request.form.get(k) or "").strip() for k in
                 ("name", "phone", "deal", "rooms", "budget_min", "budget_max", "urgency", "note")}
         form["districts"] = request.form.getlist("districts")
+        form["all_districts"] = request.form.get("all_districts") == "1"
         form["consent"] = request.form.get("consent") == "on"
         db = get_db()
         ip = client_ip()
@@ -157,14 +160,14 @@ def forma():
                 from .offers import notify_new_request
                 notify_new_request(db, {"id": rid, "is_demo": 0, "deal_type": clean["deal"], "districts": clean["districts"],
                                         "budget_min": clean["budget_min"], "budget_max": clean["budget_max"],
-                                        "summary": f"{DEALS[clean['deal']]}, {', '.join(clean['districts'])}, "
+                                        "summary": f"{DEALS[clean['deal']]}, {districts_text(clean['districts'])}, "
                                                    f"{ROOMS[clean['rooms']]} otaq"})
-                add_log(db, "info", "Müştəri", f"Yeni tələb: {DEALS[clean['deal']]}, {', '.join(clean['districts'])}",
+                add_log(db, "info", "Müştəri", f"Yeni tələb: {DEALS[clean['deal']]}, {districts_text(clean['districts'])}",
                         f"otaq={ROOMS[clean['rooms']]} büdcə≤{clean['budget_max']}")
                 db.commit()
                 return redirect(url_for("teleb.menim", token=token))
     return render_template("teleb/forma.html", form=form, errors=errors, districts=BAKU_DISTRICTS, deals=DEALS,
-                           urgency=URGENCY, rooms=ROOMS, max_districts=MAX_DISTRICTS, note_max=NOTE_MAX,
+                           urgency=URGENCY, rooms=ROOMS, note_max=NOTE_MAX,
                            consent_text=CONSENT_TEXT, honeypot=HONEYPOT, budget=BUDGET)
 
 

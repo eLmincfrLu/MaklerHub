@@ -24,7 +24,7 @@ yerləşdirir və "ev hələ var?" zənglərinə cavab verir. Hər iki tərəf v
 
 MaklerHub axını tərsinə çevirir:
 
-1. **Müştəri** qeydiyyatsız, 1 dəqiqəlik forma ilə tələbini yazır: kirayə/alış, 1–3 rayon, otaq sayı, büdcə,
+1. **Müştəri** qeydiyyatsız, 1 dəqiqəlik forma ilə tələbini yazır: kirayə/alış, bir və ya bir neçə rayon (və ya "bütün Bakı"), otaq sayı, büdcə,
    təcililik. Ona gizli link verilir — "Mənim tələbim" səhifəsi.
 2. **Maklerlər** kabinetdə öz xidmət sahələrinə uyğun tələbləri uyğunluq faizi ilə görür və konkret evi təklif
    edir (başlıq, qiymət, rayon, otaq, sahə, 1–5 şəkil, təsvir). Bir tələbə ən çox 5 təklif gəlir.

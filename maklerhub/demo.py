@@ -16,7 +16,7 @@ from werkzeug.security import generate_password_hash
 
 from .auth import demo_password
 from .db import add_log
-from .helpers import now, ts
+from .helpers import districts_text, now, ts
 from .licenses import gen_code
 from .offers import notify_new_request
 from .teleb import DEALS, ROOMS
@@ -136,7 +136,7 @@ def seed_demo(con):
              note, created, created)).lastrowid
         notify_new_request(con, {"id": rid, "is_demo": 1, "deal_type": deal, "districts": districts,
                                  "budget_min": lo, "budget_max": hi,
-                                 "summary": f"{DEALS[deal]}, {', '.join(districts)}, {ROOMS[rooms]} otaq"})
+                                 "summary": f"{DEALS[deal]}, {districts_text(districts)}, {ROOMS[rooms]} otaq"})
         con.execute("UPDATE notifications SET created_at = ? WHERE request_id = ? AND kind = 'new_request'", (created, rid))
         req_ids.append(rid)
         tokens.append(token)

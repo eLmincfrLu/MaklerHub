@@ -13,26 +13,83 @@ def hero(html):
 
 
 # ---------------------------------------------------------------- /teleb
-def test_teleb_picker_markup_and_server_limit(app, db):
+def _teleb_data(tok, phone, **kw):
+    d = {"csrf_token": tok, "name": "Test", "phone": phone, "deal": "rent", "rooms": "2",
+         "budget_min": "", "budget_max": "900", "urgency": "month", "consent": "on", "website": ""}
+    d.update(kw)
+    return d
+
+
+def test_teleb_picker_markup_no_limit(app, db):
     c = app.test_client()
     html = c.get("/teleb").get_data(as_text=True)
-    assert 'data-dp data-max="3"' in html and "district-picker.js" in html and "district-picker.css" in html
+    assert 'data-dp data-max="0"' in html and "district-picker.js" in html and "district-picker.css" in html
+    assert "Ən çox" not in html and "1–3" not in html and 'id="distCount"' not in html
+    # "Fərq etmir (bütün Bakı)" ən yuxarıda (rayonlardan əvvəl), seçilməmiş
+    assert '<input type="checkbox" name="all_districts" value="1" data-any>' in html
+    assert html.index("Fərq etmir (bütün Bakı)") < html.index('name="districts"')
     # JS-siz fallback: bütün rayonlar adi qeyd qutusu, eyni ad (server dəyişmir), əlifba sırası
     names = re.findall(r'<input type="checkbox" name="districts" value="([^"]+)"', html)
     from maklerhub.helpers import BAKU_DISTRICTS, DISTRICTS_AZ
     assert names == DISTRICTS_AZ and sorted(names) != names and set(names) == set(BAKU_DISTRICTS)
     assert names.index("Qara Qarayev") < names.index("Qaradağ") and names.index("Xırdalan") < names.index("İçərişəhər")
+    # teleb.js (dəyişmir) data-max-a görə qutuları bağlayır → rayonların sayı = praktik limitsiz
+    assert f'id="telebForm" data-max="{len(BAKU_DISTRICTS)}"' in html
 
-    tok = csrf(c, "/teleb")
-    data = {"csrf_token": tok, "name": "Test", "phone": "+994 70 555 44 33", "deal": "rent", "rooms": "2",
-            "budget_min": "", "budget_max": "900", "urgency": "month", "consent": "on", "website": "",
-            "districts": ["Yasamal", "Nəsimi", "Səbail", "Xətai"]}
-    r = c.post("/teleb", data=data)
-    assert r.status_code == 200 and "Ən çox 3 rayon seçmək olar." in r.get_data(as_text=True)
-    assert not db.execute("SELECT 1 FROM customer_requests WHERE phone = '+994705554433'").fetchone()
-    # seçilənlər dəyərlərlə qayıdır
-    h = r.get_data(as_text=True)
-    assert 'value="Yasamal" checked' in h and 'value="Xətai" checked' in h
+
+def test_teleb_four_districts_accepted(app, db):
+    c = app.test_client()
+    r = c.post("/teleb", data=_teleb_data(csrf(c, "/teleb"), "+994 70 555 44 33",
+                                          districts=["Yasamal", "Nəsimi", "Səbail", "Xətai"]))
+    assert r.status_code == 302 and "/teleb/" in r.headers["Location"]
+    row = db.execute("SELECT districts FROM customer_requests WHERE phone = '+994705554433'").fetchone()
+    import json
+    assert sorted(json.loads(row["districts"])) == sorted(["Yasamal", "Nəsimi", "Səbail", "Xətai"])
+    # minimum 1 qalır
+    c2 = app.test_client()
+    r = c2.post("/teleb", data=_teleb_data(csrf(c2, "/teleb"), "+994 70 555 44 34"))
+    assert r.status_code == 200 and "Ən azı bir rayon seçin." in r.get_data(as_text=True)
+
+
+def test_teleb_all_baku_option(app, db):
+    import json
+    from maklerhub.helpers import BAKU_DISTRICTS
+    # JS-siz: yalnız "Fərq etmir" qutusu → bütün rayonlar yazılır
+    c = app.test_client()
+    r = c.post("/teleb", data=_teleb_data(csrf(c, "/teleb"), "+994 70 555 44 35", all_districts="1"))
+    assert r.status_code == 302
+    row = db.execute("SELECT districts FROM customer_requests WHERE phone = '+994705554435'").fetchone()
+    assert set(json.loads(row["districts"])) == set(BAKU_DISTRICTS)
+    page = c.get(r.headers["Location"]).get_data(as_text=True)
+    assert "Bütün Bakı" in page and "Yasamal, " not in page
+    # xəta ilə qayıdanda "Fərq etmir" seçili qalır
+    c2 = app.test_client()
+    h = c2.post("/teleb", data=_teleb_data(csrf(c2, "/teleb"), "+994 70 555 44 36", all_districts="1",
+                                           budget_max="")).get_data(as_text=True)
+    assert "Maksimum büdcəni yazın." in h and 'name="all_districts" value="1" data-any checked' in h
+
+
+def test_all_baku_shown_everywhere(app, db, admin_client, make_makler, make_request):
+    from maklerhub.helpers import BAKU_DISTRICTS, districts_text
+    assert districts_text(list(BAKU_DISTRICTS)) == "Bütün Bakı"
+    assert districts_text(["Yasamal", "Nəsimi"]) == "Yasamal, Nəsimi"
+    m, _ = make_makler(RENT_AREA)            # yalnız Yasamal və Nəsimi-də işləyən makler
+    rid, token = make_request(districts=list(reversed(BAKU_DISTRICTS)))
+    long_list = ", ".join(list(reversed(BAKU_DISTRICTS))[:3])
+    # kabinet: uyğun gəlir (rayon kəsişməsi → 55 bal) və "Bütün Bakı" kimi görünür
+    html = m.get("/kabinet?view=all").get_data(as_text=True)
+    assert rid in ids_in(html) and "Bütün Bakı" in html
+    detail = m.get(f"/kabinet/teleb/{rid}").get_data(as_text=True)
+    assert detail.count("Bütün Bakı") >= 2 and long_list not in detail
+    page = app.test_client().get(f"/teleb/{token}").get_data(as_text=True)
+    assert page.count("Bütün Bakı") >= 2 and long_list not in page
+    assert "Bütün Bakı" in admin_client.get("/admin/telebler").get_data(as_text=True)
+    assert "Bütün Bakı" in admin_client.get(f"/admin/teleb/{rid}").get_data(as_text=True)
+    # uyğunluq: rayon hissəsi kəsişmə varsa 55
+    from maklerhub import matching
+    req = {"deal_type": "rent", "districts": list(BAKU_DISTRICTS), "budget_min": 500, "budget_max": 900}
+    areas = [{"deal_type": "rent", "district": "Yasamal", "price_min": None, "price_max": None}]
+    assert matching.score(req, areas)[0] == 100
 
 
 # ---------------------------------------------------------------- xidmət sahəsi

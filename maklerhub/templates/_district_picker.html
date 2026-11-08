@@ -6,11 +6,17 @@
     district_multi(name, selected, max=0, data_attr=False, label='Rayon seçin…', uid='')
       name      — input adı (None → adsız, məs. makler Ayarlar data-district ilə oxuyur)
       max       — ən çox seçim (0 = limitsiz; limit varsa "Hamısını seç" gizlidir)
+      any_name  — verilərsə ən yuxarıda "Fərq etmir (bütün Bakı)" qutusu (name=any_name, value=1): server bütün
+                  rayonları götürür; JS-də seçiləndə hamısını seçir, hər hansı rayon götürüləndə özü də götürülür
+      any_on    — həmin qutu seçilmiş gəlsin (forma xəta ilə qayıdanda)
     district_single(name, selected, all_label='Hamısı', uid='') — tək seçim (kabinet filtri), JS-siz <select>. -#}
 
-{% macro district_multi(name, selected, max=0, data_attr=False, label='Rayon seçin…', uid='') -%}
+{% macro district_multi(name, selected, max=0, data_attr=False, label='Rayon seçin…', uid='', any_name=None, any_on=False) -%}
 <div class="dp" data-dp data-max="{{ max or 0 }}" data-label="{{ label }}"{% if uid %} data-uid="{{ uid }}"{% endif %}>
   <div class="dp-list" role="group" aria-label="Rayonlar">
+    {%- if any_name %}
+    <label class="dp-opt dp-any"><input type="checkbox" name="{{ any_name }}" value="1" data-any{% if any_on or (BAKU_DISTRICTS|reject('in', selected)|list|length == 0) %} checked{% endif %}><span>Fərq etmir (bütün Bakı)</span></label>
+    {%- endif %}
     {%- for d in DISTRICTS_AZ %}
     <label class="dp-opt"><input type="checkbox"{% if name %} name="{{ name }}"{% endif %}{% if data_attr %} data-district{% endif %} value="{{ d }}"{% if d in selected %} checked{% endif %}><span>{{ d }}</span></label>
     {%- endfor %}

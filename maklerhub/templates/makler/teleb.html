@@ -7,7 +7,7 @@
   <a class="back" href="{{ url_for('makler.kabinet') }}">← Tələblər</a>
   <div class="head reveal" style="animation-delay:.05s">
     <h1>{{ req.deal }} · {{ req.rooms }} otaq</h1>
-    <p>{{ req.districts|join(', ') }} · {{ req.ago }}</p>
+    <p>{{ req.districts|districts_text }} · {{ req.ago }}</p>
   </div>
 
   {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="mh-flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
@@ -23,7 +23,7 @@
       </div>
       <div class="rows">
         <div class="row"><span>Əməliyyat</span><span>{{ req.deal }}</span></div>
-        <div class="row"><span>Rayon</span><span>{{ req.districts|join(', ') }}</span></div>
+        <div class="row"><span>Rayon</span><span>{{ req.districts|districts_text }}</span></div>
         <div class="row"><span>Otaq sayı</span><span>{{ req.rooms }}</span></div>
         <div class="row"><span>Büdcə</span><span>{{ req.budget }}</span></div>
         <div class="row"><span>Nə vaxt</span><span>{{ req.urgency }}</span></div>

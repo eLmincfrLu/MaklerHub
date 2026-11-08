@@ -44,11 +44,14 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   (bazasız, ayrıca: `pytest tests/test_client_ip.py -p no:cacheprovider`).
 - Paket B (8 noyabr): rayon seçici `templates/_district_picker.html` (`district_multi`/`district_single`; JS-siz adi
   checkbox/select, eyni input adları — server qaydaları dəyişmir) + `js/district-picker.js`, `css/pages/district-picker.css`;
-  siyahı `helpers.DISTRICTS_AZ` (Azərbaycan əlifbası, `az_sort_key`). İstifadə: `/teleb` (max 3), Ayarlar xidmət sahəsi
+  siyahı `helpers.DISTRICTS_AZ` (Azərbaycan əlifbası, `az_sort_key`). İstifadə: `/teleb` (limitsiz + "Fərq etmir (bütün Bakı)" `any_name`), Ayarlar xidmət sahəsi
   (limitsiz, `data-district`), kabinet filtri (tək). Demo Ayarlar: düymələr görünür, `fieldset disabled class="ro-zone"`
   + `css/pages/readonly.css`, `js/readonly-tip.js`. Ana səhifə: hero-da tək düymə "Tələbini yaz →", maklerlər üçün
   `#maklerler` bölməsi (3 `mk-card`), `landing-anim.js/css`; WhatsApp linki `contact-reveal.js` ilə (`data-k="w"`).
   pytest: `tests/test_paket_b.py`.
+- Bütün Bakı (8 noyabr): `/teleb`-də rayon limiti götürüldü; bütün `BAKU_DISTRICTS` seçilmiş tələb hər yerdə
+  "Bütün Bakı" kimi göstərilir (`helpers.districts_text` filtri / `is_all_baku`; ayrıca sütun YOX). Uyğunluq dəyişmir.
+  `static/js/pages/teleb.js`-ə toxunulmayıb: forma `data-max` = rayonların sayı.
 - Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
 
 ## Qaydalar (pozma)
@@ -88,7 +91,7 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   `auth/lisenziya.html` (makler blueprint-i və /api/password bağlı). Admin: köhnə timeout, cihaz limiti yoxdur.
 - `licenses.py` — kod yaratma/normallaşdırma (MH-XXXX-XXXX-XXXX), `activate`, `revoke`, `license_problem`,
   `reset_devices` (admin UI Gün 4-də).
-- `teleb.py` — `/teleb` (honeypot `website`, IP başına 24 saatda 3, nömrə başına 2 aktiv tələb, 1-3 rayon, razılıq;
+- `teleb.py` — `/teleb` (honeypot `website`, IP başına 24 saatda 3, nömrə başına 2 aktiv tələb, rayon limiti yoxdur (min 1; `all_districts=1` → hamısı), razılıq;
   CSRF uğursuzsa `g.csrf_failed` → forma dəyərlərlə yenidən), `/teleb/<token>` (noindex, Referrer-Policy: no-referrer,
   təkliflər — geri çəkilənlər yox, makler "Ad S."). `expire_requests(db)`: lazy — `settings.request_ttl_days`=30-dan
   sonra 'expired'; bağlanan/bitən tələbin ad/telefon/qeyd/IP-si 90 gün sonra silinir. `request_summary` = telefonsuz.

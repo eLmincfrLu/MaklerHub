@@ -29,7 +29,7 @@
 
       {% if errors %}<div class="alert err">{% if errors|length == 1 %}{{ errors[0] }}{% else %}<ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}</div>{% endif %}
 
-      <form method="post" id="telebForm" data-max="{{ max_districts }}" novalidate>
+      <form method="post" id="telebForm" data-max="{{ DISTRICTS_AZ|length }}" novalidate>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="hp" aria-hidden="true"><label for="{{ honeypot }}">Veb sayt</label><input id="{{ honeypot }}" name="{{ honeypot }}" type="text" tabindex="-1" autocomplete="off"></div>
 
@@ -43,8 +43,8 @@
         </div>
 
         <div class="block">
-          <div class="sec-label">Rayon (1–{{ max_districts }}) <b id="distCount">{{ form.districts|length }}/{{ max_districts }}</b></div>
-          {{ district_multi('districts', form.districts, max=max_districts, label='Rayon seçin…') }}
+          <div class="sec-label">Rayon <span class="sec-note">bir və ya bir neçə</span></div>
+          {{ district_multi('districts', form.districts, label='Rayon seçin…', any_name='all_districts', any_on=form.all_districts) }}
         </div>
 
         <div class="block">

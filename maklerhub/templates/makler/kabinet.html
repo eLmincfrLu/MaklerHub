@@ -63,7 +63,7 @@
     <a class="card{% if m.mid %} mid{% endif %}" href="{{ url_for('makler.teleb_detal', rid=m.id) }}" style="animation-delay:{{ '%.2f'|format(0.2 + loop.index0 * 0.04) }}s">
       <div class="match"><svg width="52" height="52"><circle cx="26" cy="26" r="22" stroke="var(--line)" stroke-width="4" fill="none"/><circle cx="26" cy="26" r="22" stroke="{{ 'var(--gold-dim)' if m.mid else 'var(--ok)' }}" stroke-width="4" fill="none" stroke-dasharray="138" stroke-dashoffset="{{ m.ring }}"/></svg><div class="pct">{{ m.score }}%</div></div>
       <div class="info">
-        <div class="top-row"><div class="title">{{ m.deal }} · {{ m.rooms }} otaq · {{ m.districts|join(', ') }}</div></div>
+        <div class="top-row"><div class="title">{{ m.deal }} · {{ m.rooms }} otaq · {{ m.districts|districts_text }}</div></div>
         <div class="meta">{{ m.budget }} · {{ m.ago }}</div>
         <div class="why">{{ m.why }}</div>
         <div class="chipline">

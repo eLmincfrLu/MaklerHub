@@ -3,6 +3,8 @@
    - tək seçim: gizli <select> idarə olunur.
    Dəyişiklikdə həmişə "change" hadisəsi göndərilir (teleb.js, makler-ayarlar.js eyni inputlara qulaq asır).
    Axtarış Azərbaycan hərflərinə həssas deyil (ə/e, ı/i, ö/o, ü/u, ş/s, ç/c, ğ/g).
+   "Fərq etmir (bütün Bakı)" ([data-any], yalnız /teleb): seçiləndə bütün rayonlar seçilir, sahədə tək "Bütün Bakı"
+   etiketi; hər hansı rayon götürüləndə o da götürülür (hamısı əl ilə seçiləndə özü də seçilir).
    Klaviatura: Enter/Space açır və seçir, oxlar gəzir, Esc bağlayır; kənara basanda bağlanır; ≤640px — bottom sheet. */
 (function(){
   'use strict';
@@ -12,7 +14,7 @@
       .replace(/[əıöüşçğ]/g,function(c){return FOLD[c];});
   }
   var MOBILE=window.matchMedia?window.matchMedia('(max-width:640px)'):{matches:false};
-  var TAGS_SHOWN=3,uid=0,current=null;
+  var TAGS_SHOWN=3,uid=0,current=null,ALL_LABEL='Bütün Bakı';
 
   function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
   function fire(input){input.dispatchEvent(new Event('change',{bubbles:true}));}
@@ -31,7 +33,9 @@
     var max=parseInt(root.getAttribute('data-max')||'0',10)||0;
     var select=single?root.querySelector('select'):null;
     var list=single?null:root.querySelector('.dp-list');
-    var inputs=list?Array.prototype.slice.call(list.querySelectorAll('input[type=checkbox]')):[];
+    var inputs=list?Array.prototype.slice.call(list.querySelectorAll('input[type=checkbox]:not([data-any])')):[];
+    var anyInput=list?list.querySelector('input[data-any]'):null;
+    function allOn(){return inputs.length>0&&inputs.every(function(i){return i.checked;});}
 
     root.classList.add('dp-on');
     // ---- sahə: etiketlər + açma düyməsi
@@ -94,35 +98,45 @@
         return;
       }
       var on=inputs.filter(function(i){return i.checked;});
-      on.slice(0,TAGS_SHOWN).forEach(function(i){
+      var all=!!anyInput&&allOn();
+      if(all){
+        var ta=el('span','dp-tag dp-tag-all');ta.appendChild(el('span','dp-tag-t',ALL_LABEL));
+        var xa=el('button','dp-x','✕');xa.type='button';xa.setAttribute('aria-label',ALL_LABEL+' — sil');
+        xa.disabled=toggle.matches(':disabled');
+        xa.addEventListener('click',function(e){e.stopPropagation();setAll(false);});
+        ta.appendChild(xa);tags.appendChild(ta);
+      }
+      if(!all)on.slice(0,TAGS_SHOWN).forEach(function(i){
         var t=el('span','dp-tag');t.appendChild(el('span','dp-tag-t',i.value));
         var x=el('button','dp-x','✕');x.type='button';x.setAttribute('aria-label',i.value+' — sil');
         x.disabled=toggle.matches(':disabled');
         x.addEventListener('click',function(e){e.stopPropagation();i.checked=false;fire(i);});
         t.appendChild(x);tags.appendChild(t);
       });
-      if(on.length>TAGS_SHOWN){
+      if(!all&&on.length>TAGS_SHOWN){
         var more=el('span','dp-more','+'+(on.length-TAGS_SHOWN));more.title=on.slice(TAGS_SHOWN).map(function(i){return i.value;}).join(', ');
         tags.appendChild(more);
       }
       ph.textContent=on.length?(max?on.length+'/'+max:'Dəyiş'):label;
       toggle.classList.toggle('has',!!on.length);
-      toggle.setAttribute('aria-label',on.length?('Seçilmiş rayonlar: '+on.map(function(i){return i.value;}).join(', ')+'. Dəyişmək üçün açın'):label);
+      toggle.setAttribute('aria-label',all?(ALL_LABEL+' seçilib. Dəyişmək üçün açın'):
+        on.length?('Seçilmiş rayonlar: '+on.map(function(i){return i.value;}).join(', ')+'. Dəyişmək üçün açın'):label);
       var full=max&&on.length>=max;
       if(max)inputs.forEach(function(i){if(!i.checked&&!i.closest('fieldset[disabled]'))i.disabled=full;});
       root.classList.toggle('dp-full',!!full);
       if(hint)hint.classList.toggle('on',!!full);
-      count.textContent=on.length?(on.length+' seçilib'+(max?' / ən çox '+max:'')):'Heç nə seçilməyib';
+      count.textContent=all?ALL_LABEL+' ('+on.length+' rayon)':
+        on.length?(on.length+' seçilib'+(max?' / ən çox '+max:'')):'Heç nə seçilməyib';
     }
 
     function visibleItems(){
-      var items=single?options:inputs;
+      var items=single?options:(anyInput?[anyInput].concat(inputs):inputs);
       return items.filter(function(x){var row=single?x:x.closest('.dp-opt');return !row.hidden&&!x.disabled;});
     }
     function filter(){
       var q=fold(search.value.trim()),n=0;
-      (single?options:inputs).forEach(function(x){
-        var row=single?x:x.closest('.dp-opt'),txt=single?x.textContent:x.value;
+      (single?options:(anyInput?[anyInput].concat(inputs):inputs)).forEach(function(x){
+        var row=single?x:x.closest('.dp-opt'),txt=single?x.textContent:(x===anyInput?row.textContent:x.value);
         var show=!q||fold(txt).indexOf(q)!==-1||(single&&!x.dataset.value);
         row.hidden=!show;if(show)n++;
       });
@@ -169,9 +183,18 @@
       else if(e.key==='End'){e.preventDefault();items[items.length-1].focus();}
       else if(e.key==='Enter'&&!single){e.preventDefault();var t=items[i];t.checked=!t.checked;fire(t);}
     });
-    inputs.forEach(function(i){i.addEventListener('change',sync);});
+    function setAll(v){
+      inputs.forEach(function(i){if(i.checked!==v){i.checked=v;fire(i);}});
+      if(anyInput&&anyInput.checked!==v){anyInput.checked=v;}
+      sync();
+    }
+    inputs.forEach(function(i){i.addEventListener('change',function(){
+      if(anyInput)anyInput.checked=allOn();
+      sync();
+    });});
+    if(anyInput)anyInput.addEventListener('change',function(){setAll(anyInput.checked);});
     if(btnAll)btnAll.addEventListener('click',function(){
-      visibleItems().forEach(function(i){if(!i.checked){i.checked=true;fire(i);}});
+      visibleItems().forEach(function(i){if(i!==anyInput&&!i.checked){i.checked=true;fire(i);}});
     });
     if(btnClear)btnClear.addEventListener('click',function(){
       inputs.forEach(function(i){if(i.checked){i.checked=false;fire(i);}});search.focus();
@@ -184,6 +207,8 @@
     document.addEventListener('touchstart',function(e){
       if(!panel.hidden&&!root.contains(e.target)&&!panel.contains(e.target)&&e.target!==backdrop)close(false);
     },{passive:true});
+    // forma xəta ilə qayıdanda "Fərq etmir" seçili gələ bilər (server bütün rayonları götürür)
+    if(anyInput){if(anyInput.checked&&!allOn())inputs.forEach(function(i){i.checked=true;});anyInput.checked=allOn();}
     // fieldset[disabled] (demo) → açma düyməsi də deaktiv olur (brauzer özü); etiketlərin ✕ düymələri sync-də
     sync();
   }

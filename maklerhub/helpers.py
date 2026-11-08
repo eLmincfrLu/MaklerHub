@@ -39,6 +39,17 @@ def az_sort_key(value):
 
 # Rayon seçici üçün: inzibati rayonlar və populyar ərazilər BİR siyahıda, əlifba sırası ilə
 DISTRICTS_AZ = sorted(BAKU_DISTRICTS, key=az_sort_key)
+ALL_BAKU = "Bütün Bakı"
+
+
+def is_all_baku(districts):
+    """Bütün rayonlar seçilibmi (customer_requests-də ayrıca sütun yoxdur — siyahıdan çıxarılır)."""
+    return set(BAKU_DISTRICTS) <= set(districts or [])
+
+
+def districts_text(districts):
+    """Rayon siyahısı mətni: hamısı seçilibsə "Bütün Bakı", yoxsa vergüllə."""
+    return ALL_BAKU if is_all_baku(districts) else ", ".join(districts or [])
 
 
 # ---------------------------------------------------------------- vaxt
@@ -177,7 +188,7 @@ def money(n):
 def init_app(app):
     app.jinja_env.filters.update(
         rel=rel, date_short=date_short, money=money, phone=phone_display,
-        az_upper=az_upper,
+        az_upper=az_upper, districts_text=districts_text,
     )
     app.jinja_env.globals.update(
         initials=initials, full_name=full_name, ROLE_LABELS=ROLE_LABELS, BAKU_DISTRICTS=BAKU_DISTRICTS,

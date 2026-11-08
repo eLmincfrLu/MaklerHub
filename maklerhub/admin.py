@@ -8,7 +8,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 from . import contact as contact_mod, images as images_mod, licenses, maintenance
 from .auth import admin_required
 from .db import add_log, get_db, get_settings, set_setting
-from .helpers import date_short, full_name, log_time, normalize_phone, now, parse, phone_display, rel, ts
+from .helpers import date_short, districts_text, full_name, log_time, normalize_phone, now, parse, phone_display, rel, ts
 from .offers import AGENT_COMPLAINTS, CLOSE_REASONS, CUSTOMER_COMPLAINTS, OFFER_STATUS
 from .teleb import DEALS, ROOMS, STATUS as REQ_STATUS, URGENCY, budget_str
 
@@ -44,7 +44,7 @@ def _page():
 
 def _req_row(r):
     districts = json.loads(r["districts"] or "[]")
-    return {"r": r, "deal": DEALS.get(r["deal_type"], r["deal_type"]), "districts": ", ".join(districts),
+    return {"r": r, "deal": DEALS.get(r["deal_type"], r["deal_type"]), "districts": districts_text(districts),
             "rooms": ROOMS.get(r["rooms"], "—") if r["rooms"] else "—",
             "budget": budget_str(r["deal_type"], r["budget_min"], r["budget_max"]),
             "status": REQ_STATUS.get(r["status"], r["status"]), "when": rel(r["created_at"]),

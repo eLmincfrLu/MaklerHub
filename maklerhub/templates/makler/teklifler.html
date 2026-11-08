@@ -25,7 +25,7 @@
       <div class="info">
         <div class="top-row"><div class="title">{{ it.o.title }}</div></div>
         <div class="meta">{{ it.price }} · {{ it.o.district or '—' }} · {{ it.rooms }} otaq · {{ it.when }}</div>
-        <div class="why" style="color:#8A8372">Tələb: {{ it.req.deal }}, {{ it.req.districts|join(', ') }}, {{ it.req.rooms }} otaq, {{ it.req.budget }}{% if it.req.status != 'active' %} · tələb {{ it.req.status_label|lower }}{% endif %}</div>
+        <div class="why" style="color:#8A8372">Tələb: {{ it.req.deal }}, {{ it.req.districts|districts_text }}, {{ it.req.rooms }} otaq, {{ it.req.budget }}{% if it.req.status != 'active' %} · tələb {{ it.req.status_label|lower }}{% endif %}</div>
         <div class="chipline"><span class="tag st-{{ it.o.status }}">{{ it.label }}</span></div>
       </div>
       <div class="pricebox"><div class="now">{{ it.price }}</div></div>

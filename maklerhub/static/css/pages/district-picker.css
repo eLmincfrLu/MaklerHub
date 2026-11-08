@@ -105,3 +105,8 @@ fieldset[disabled] .dp-toggle,fieldset[disabled] .dp-x{cursor:not-allowed;}
 
 /* kabinet filtri: <label> əvəzinə (label içində panel olsa hər klik düyməni işə salardı) */
 .fl-dp{display:flex;flex-direction:column;gap:5px;font-size:.72rem;color:#8A8372;flex:1 1 40%;min-width:180px;}
+
+/* "Fərq etmir (bütün Bakı)" — siyahının ən yuxarısında, ayrıca */
+.dp-opt.dp-any{font-weight:600;border-bottom:1px solid rgba(138,130,98,.25);margin-bottom:4px;padding-bottom:8px;}
+.dp-tag.dp-tag-all{font-weight:600;}
+.sec-label .sec-note{font-weight:400;opacity:.75;}
