@@ -175,7 +175,9 @@
 
 {% if current_user %}<script>window.MH_HOME="{{ url_for('admin.panel') if current_user.role == 'admin' else url_for('makler.kabinet') }}";</script>{% endif %}
 <script>window.MH_LOGIN="{{ url_for('auth.giris') }}";window.MH_REGISTER="{{ url_for('teleb.forma') }}";
-window.MH_IMG={front:"{{ url_for('static', filename='img/hero-front.jpg') }}",left:"{{ url_for('static', filename='img/hero-login.jpg') }}",right:"{{ url_for('static', filename='img/hero-register.jpg') }}"};</script>
+window.MH_IMG={front:"{{ url_for('static', filename='img/hero-front.jpg') }}",left:"{{ url_for('static', filename='img/hero-login.jpg') }}",right:"{{ url_for('static', filename='img/hero-register.jpg') }}"};
+/* mobildə (≤640px) fon mobile.css-dəki hero-mobile-dır: landing.js masaüstü şəkillərini əvvəlcədən yükləməsin */
+if(window.matchMedia&&matchMedia('(max-width:640px)').matches){var m="{{ url_for('static', filename='img/hero-mobile.webp') }}";window.MH_IMG={front:m,left:m,right:m};}</script>
 <script src="{{ url_for('static', filename='js/pages/landing.js') }}"></script>
 <script src="{{ url_for('static', filename='js/contact-reveal.js') }}"></script>
 <script src="{{ url_for('static', filename='js/landing-anim.js') }}"></script>

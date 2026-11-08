@@ -264,3 +264,7 @@ admin panel, IP həlli, təmizlik, demo izolyasiyası, təhlükəsizlik başlıq
 - WhatsApp / Telegram bildirişləri (yeni təklif — müştəriyə, yeni uyğun tələb — maklerə).
 - Lisenziya üçün onlayn ödəniş.
 - Makler profilində portfolio (əvvəlki evlərin şəkilləri), şəkillərin sonradan redaktəsi.
+
+## Şəkil krediti
+
+- Ana səhifənin mobil fonu (Bakı, Alov qüllələri — `maklerhub/static/img/hero-mobile.webp` / `.jpg`): [Shubham Singla](https://unsplash.com/@shubhamsingla365), Unsplash.

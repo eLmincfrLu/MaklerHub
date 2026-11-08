@@ -118,3 +118,21 @@ def test_landing_blocks_do_not_overlap(live, iphone, make_request):
     assert rects["banner"][1] >= rects["nav"][3], "banner başlığın altında olmalıdır"
     sw, iw = iphone.evaluate(OVERFLOW_JS)
     assert sw <= iw
+
+
+def test_mobile_hero_uses_vertical_baku_background(live, iphone):
+    """≤640px: hero fonu hero-mobile (Bakı mənzərəsi); masaüstü şəkilləri mobildə yüklənmir."""
+    loaded = []
+
+    def on_req(r):
+        if "/static/img/hero" in r.url:
+            loaded.append(r.url)
+    iphone.on("request", on_req)
+    try:
+        iphone.goto(live + "/", wait_until="load")
+        iphone.wait_for_timeout(600)
+        bg = iphone.evaluate("getComputedStyle(document.querySelector('.hero .bg')).backgroundImage")
+    finally:
+        iphone.remove_listener("request", on_req)
+    assert "hero-mobile" in bg
+    assert loaded and all("hero-mobile" in u for u in loaded), loaded

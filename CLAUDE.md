@@ -111,6 +111,10 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   aktiv sahə `scrollIntoView`. Kabinetdə district-picker.css body-də yüklənir — selektorlar `.dp .dp-*`.
   `tests/test_mobile.py` — Playwright (Chrome mühərriki, iPhone 13 profili), yoxdursa skip; Playwright `requirements-dev`.
   Playwright WebKit bu Windows-da işə düşmür — iPhone Chrome mühərriki ilə emulyasiya olunur.
+  Mobil hero fonu (≤640px): `img/hero-mobile.webp` (+ `.jpg` fallback, `image-set`), 1080×1920, Bakı gecə mənzərəsi
+  (Shubham Singla, Unsplash — README "Şəkil krediti"); `!important` inline hero-front-u əvəz edir, landing.html-də
+  `MH_IMG` mobildə hero-mobile-a yönəlir (masaüstü şəkilləri mobildə yüklənmir, hero-mobile masaüstündə yüklənmir).
+  Mobil scrim yuxarıda yüngül (qüllələr), 19%-dən tünd (kontrast ≥6.3). Mənbə `hero-mobile-src.jpg.jpg` commit olunmur.
 - Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
 
 ## Qaydalar (pozma)
