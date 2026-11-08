@@ -26,6 +26,21 @@ BAKU_DISTRICTS = [
 ]
 
 
+AZ_ALPHABET = "abcçdeəfgğhxıijkqlmnoöprsştuüvyz"
+_AZ_ORDER = {ch: i for i, ch in enumerate(AZ_ALPHABET)}
+
+
+def az_sort_key(value):
+    """Azərbaycan əlifbası ilə sıralama açarı (rəqəmlər əvvəl; I→ı, İ→i)."""
+    s = (value or "").replace("I", "ı").replace("İ", "i").lower()
+    return [(-1, 0) if ch.isspace() else (0, ord(ch)) if ch.isdigit() else (1, _AZ_ORDER.get(ch, 100 + ord(ch)))
+            for ch in s]
+
+
+# Rayon seçici üçün: inzibati rayonlar və populyar ərazilər BİR siyahıda, əlifba sırası ilə
+DISTRICTS_AZ = sorted(BAKU_DISTRICTS, key=az_sort_key)
+
+
 # ---------------------------------------------------------------- vaxt
 def set_timezone(name):
     global _TZ
@@ -166,4 +181,5 @@ def init_app(app):
     )
     app.jinja_env.globals.update(
         initials=initials, full_name=full_name, ROLE_LABELS=ROLE_LABELS, BAKU_DISTRICTS=BAKU_DISTRICTS,
+        DISTRICTS_AZ=DISTRICTS_AZ,
     )

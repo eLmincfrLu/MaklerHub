@@ -1,0 +1,75 @@
+/* Ana səhifə: başlıq (qonaq), hero qeydi, "Maklerlər üçün" bölməsi və animasiyalar.
+   landing.css / landing-extra.css-ə toxunmur. Yalnız transform və opacity animasiya olunur.
+   Scroll ilə görünmə yalnız JS işə düşəndə (html.js-anim) gizlədir — JS-siz məzmun dərhal görünür. */
+
+/* ---- başlıq: mətn linkləri ---- */
+.nav-txt{all:unset;cursor:pointer;color:rgba(255,255,255,.88);font-family:var(--font-b);font-size:.86rem;font-weight:500;
+  padding:10px 8px;position:relative;white-space:nowrap;}
+.nav-txt::after{content:'';position:absolute;left:8px;right:8px;bottom:6px;height:1px;background:var(--gold);
+  transform:scaleX(0);transform-origin:left;transition:transform .25s ease;}
+.nav-txt:hover{color:#fff;}
+.nav-txt:hover::after,.nav-txt:focus-visible::after{transform:scaleX(1);}
+.nav-txt:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:2px;}
+html{scroll-behavior:smooth;}
+
+/* ---- hero ---- */
+.hero-cta{padding:14px 30px;font-size:.95rem;}
+.hero-note{margin-top:14px;font-size:.8rem;letter-spacing:.06em;color:rgba(255,255,255,.72);}
+
+/* ---- düymələr: parıltı (shine) və yumşaq qalxma ---- */
+.shine{position:relative;overflow:hidden;transition:transform .25s cubic-bezier(.2,.7,.2,1),box-shadow .25s ease;}
+.shine::before{content:'';position:absolute;top:0;left:-75%;width:50%;height:100%;pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:skewX(-20deg);}
+.shine:hover{transform:translateY(-2px);}
+.shine:hover::before{animation:lxShine .9s ease;}
+@keyframes lxShine{to{left:130%;}}
+
+/* ---- Maklerlər üçün ---- */
+#maklerler .mk-lead{max-width:640px;}
+.mk-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:34px 0 30px;}
+.mk-card{background:#141F2B;border:1px solid rgba(255,255,255,.1);border-top:2px solid var(--gold);padding:24px 22px;
+  border-radius:4px;transition:transform .3s cubic-bezier(.2,.7,.2,1),box-shadow .3s ease,border-color .3s ease;}
+.mk-card:hover{transform:translateY(-5px);box-shadow:0 18px 36px rgba(0,0,0,.35);border-color:rgba(201,162,39,.45);}
+.mk-ic{width:42px;height:42px;border-radius:50%;background:rgba(201,162,39,.12);color:var(--gold);display:flex;
+  align-items:center;justify-content:center;margin-bottom:14px;}
+.mk-card h3{font-family:var(--font-h,'Fraunces',Georgia,serif);font-weight:600;font-size:1.08rem;margin-bottom:6px;color:#fff;}
+.mk-card p{font-size:.88rem;line-height:1.6;color:#B9C0C6;}
+.mk-join{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:26px 26px 24px;}
+.mk-join h3{font-family:var(--font-h,'Fraunces',Georgia,serif);font-weight:600;font-size:1.15rem;margin-bottom:14px;color:#fff;}
+.mk-steps{list-style:none;counter-reset:mk;display:grid;gap:12px;margin-bottom:22px;}
+.mk-steps li{counter-increment:mk;position:relative;padding-left:44px;}
+.mk-steps li::before{content:counter(mk);position:absolute;left:0;top:0;width:30px;height:30px;border-radius:50%;
+  border:1.5px solid var(--gold);color:var(--gold);display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-h,'Fraunces',Georgia,serif);font-weight:600;font-size:.9rem;}
+.mk-steps b{display:block;color:#fff;font-size:.95rem;margin-bottom:2px;}
+.mk-steps span{font-size:.86rem;color:#B9C0C6;line-height:1.55;}
+.mk-steps a{color:var(--gold);}
+.mk-wa{display:inline-flex;margin-top:8px;padding:6px 12px;border:1px solid rgba(201,162,39,.55);border-radius:3px;
+  font-size:.82rem;font-weight:600;text-decoration:none;color:var(--gold)!important;transition:background .2s ease;}
+.mk-wa:hover{background:rgba(201,162,39,.12);}
+#maklerler .lx-actions{display:flex;flex-wrap:wrap;gap:10px;}
+
+/* ---- scroll ilə görünmə (yalnız JS varsa) ---- */
+.js-anim [data-reveal]{opacity:0;transform:translateY(22px);
+  transition:opacity .7s ease var(--d,0s),transform .7s cubic-bezier(.2,.7,.2,1) var(--d,0s);}
+.js-anim [data-reveal].is-in{opacity:1;transform:none;}
+.js-anim .mk-card[data-reveal].is-in:hover{transform:translateY(-5px);transition-delay:0s;}
+
+@media (max-width:900px){.mk-cards{grid-template-columns:1fr;}}
+@media (max-width:600px){
+  .nav-hide-sm{display:none;}
+  .nav-txt{padding:10px 4px;font-size:.82rem;}
+  .mk-join{padding:20px 16px;}
+  #maklerler .lx-actions .btn{flex:1 1 100%;text-align:center;}
+}
+
+/* ---- azaldılmış hərəkət: hər şey dərhal, animasiyasız ---- */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto;}
+  .js-anim [data-reveal]{opacity:1!important;transform:none!important;transition:none!important;}
+  .reveal,.navbtns,.bottom,.content h1 .line span,.eyebrow.reveal{animation:none!important;opacity:1!important;transform:none!important;}
+  .brand svg,.brand img,.trust-track,.hero.intro .bg{animation:none!important;}
+  .shine,.mk-card,.nav-txt::after{transition:none!important;}
+  .shine:hover,.mk-card:hover{transform:none!important;}
+  .shine:hover::before{animation:none!important;}
+}

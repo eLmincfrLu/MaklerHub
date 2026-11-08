@@ -1,0 +1,16 @@
+/* Demo hesab: oxu rejimi (fieldset.ro-zone[disabled]). İdarə elementləri aydın deaktiv görünür;
+   üstünə gələndə / toxunanda "Demo hesabda dəyişdirilmir" ipucu. Server tərəfində 403 olduğu kimi qalır. */
+fieldset.ro-zone{position:relative;}
+/* deaktiv elementlər hadisə almır — hover/toxunma fieldset-in özünə düşsün (ipucu üçün) */
+fieldset.ro-zone[disabled] *{pointer-events:none;}
+fieldset.ro-zone[disabled]{cursor:not-allowed;}
+fieldset.ro-zone[disabled] input,fieldset.ro-zone[disabled] select,fieldset.ro-zone[disabled] textarea,
+fieldset.ro-zone[disabled] .btn,fieldset.ro-zone[disabled] .slider,fieldset.ro-zone[disabled] .dp-field{
+  opacity:.5;filter:grayscale(.35);}
+fieldset.ro-zone[disabled] .btn{box-shadow:none!important;transform:none!important;}
+fieldset.ro-zone[disabled] .switch{opacity:.6;}
+fieldset.ro-zone::after{content:attr(data-tip);position:absolute;left:50%;top:-6px;transform:translate(-50%,-100%);
+  padding:7px 12px;border-radius:4px;background:#101820;color:#F6F1E4;font-size:.78rem;font-weight:500;white-space:nowrap;
+  box-shadow:0 8px 20px rgba(16,24,32,.25);opacity:0;pointer-events:none;transition:opacity .18s ease;z-index:30;}
+fieldset.ro-zone:hover::after,fieldset.ro-zone.tip-on::after{opacity:1;}
+@media (prefers-reduced-motion:reduce){fieldset.ro-zone::after{transition:none;}}

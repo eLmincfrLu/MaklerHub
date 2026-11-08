@@ -189,8 +189,11 @@ def test_demo_request_does_not_notify_real_agents(app, db, make_makler, make_dem
 def test_demo_makler_cannot_change_settings(app, db, make_demo_makler):
     demo, uid, _ = make_demo_makler()
     html = demo.get("/ayarlar").get_data(as_text=True)
-    assert "yalnız baxış üçündür" in html and "Dəyişiklikləri yadda saxla" not in html
-    assert "Xidmət sahəsini yadda saxla" not in html and "Şifrəni yenilə" not in html
+    assert "yalnız baxış üçündür" in html
+    # Paket B: düymələr gizlənmir, deaktiv sahədə (fieldset disabled) aydın deaktiv görünür
+    assert html.count('disabled class="ro-zone" data-tip="Demo hesabda dəyişdirilmir"') == 3
+    for label in ("Dəyişiklikləri yadda saxla", "Xidmət sahəsini yadda saxla", "Şifrəni yenilə"):
+        assert label in html
     tok = csrf(demo, "/ayarlar")
     h = {"X-CSRF-Token": tok}
     r1 = demo.post("/api/me/profile", json={"first_name": "Hack", "last_name": "X", "phone": "+994501112233"}, headers=h)

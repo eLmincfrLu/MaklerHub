@@ -11,8 +11,10 @@
   for(var i=0;i<els.length;i++){
     var el=els[i],v=el.getAttribute('data-r').split('').reverse().join('');
     if(!v)continue;
-    if(el.getAttribute('data-k')==='m'){el.href='mailto:'+v;el.textContent=v;}
+    var k=el.getAttribute('data-k');
+    if(k==='m'){el.href='mailto:'+v;el.textContent=v;}
+    else if(k==='w'){el.href='https://wa.me/'+v.replace(/\D/g,'');}  // mətn (məs. "WhatsApp") dəyişmir
     else{el.href='tel:'+v;el.textContent=phoneText(v);}
-    el.removeAttribute('rel');
+    if(k!=='w')el.removeAttribute('rel');
   }
 })();

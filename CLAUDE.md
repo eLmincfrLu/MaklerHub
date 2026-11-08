@@ -42,6 +42,13 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   (proxy rejimində). IP ictimai deyilsə IP limitləri tətbiq olunmur (fail-open, `auth.ip_limit_applies`, bir dəfə
   warning): `/teleb` gündəlik 3 və lisenziya kodu 10/15 dəq. Nömrə limiti qalır. Testlər: `tests/test_client_ip.py`
   (bazasız, ayrıca: `pytest tests/test_client_ip.py -p no:cacheprovider`).
+- Paket B (8 noyabr): rayon seçici `templates/_district_picker.html` (`district_multi`/`district_single`; JS-siz adi
+  checkbox/select, eyni input adları — server qaydaları dəyişmir) + `js/district-picker.js`, `css/pages/district-picker.css`;
+  siyahı `helpers.DISTRICTS_AZ` (Azərbaycan əlifbası, `az_sort_key`). İstifadə: `/teleb` (max 3), Ayarlar xidmət sahəsi
+  (limitsiz, `data-district`), kabinet filtri (tək). Demo Ayarlar: düymələr görünür, `fieldset disabled class="ro-zone"`
+  + `css/pages/readonly.css`, `js/readonly-tip.js`. Ana səhifə: hero-da tək düymə "Tələbini yaz →", maklerlər üçün
+  `#maklerler` bölməsi (3 `mk-card`), `landing-anim.js/css`; WhatsApp linki `contact-reveal.js` ilə (`data-k="w"`).
+  pytest: `tests/test_paket_b.py`.
 - Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
 
 ## Qaydalar (pozma)

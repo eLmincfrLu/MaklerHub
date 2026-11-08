@@ -1,4 +1,4 @@
-{%- from '_admin_contact.html' import obf_email, obf_phone -%}
+{%- from '_admin_contact.html' import obf_email, obf_phone, obf_whatsapp -%}
 <!DOCTYPE html>
 <html lang="az">
 <head>
@@ -11,6 +11,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing-extra.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing-user.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing-anim.css') }}">
+<script>document.documentElement.classList.add('js-anim');</script>
 </head>
 <body>
 <div id="heroView">
@@ -43,8 +45,9 @@
         <button class="btn btn-gold" id="loginBtn">{{ 'Admin panel →' if is_admin else 'Kabinetə keç →' }}</button>
         <span id="registerBtn" hidden></span>{# landing.js bu id-ni gözləyir (mövcud static fayl dəyişdirilmir) #}
         {%- else %}
-        <button class="btn btn-ghost" id="loginBtn">Makler girişi</button>
-        <button class="btn btn-gold" id="registerBtn">Tələbini yaz</button>
+        <a class="nav-txt nav-hide-sm" href="#maklerler" data-scroll>Maklerlər üçün</a>
+        <button class="nav-txt" id="loginBtn" type="button">Makler girişi</button>
+        <button class="btn btn-gold shine" id="registerBtn" type="button">Tələbini yaz</button>
         {%- endif %}
       </div>
     </div>
@@ -53,13 +56,16 @@
       <h1><span class="line"><span style="animation-delay:.4s">Ev axtarma, tələbini yaz.</span></span><span class="line line2"><span style="animation-delay:.56s">Maklerlər səni özləri tapsın.</span></span></h1>
       <p class="reveal" style="animation-delay:.85s">Nə axtardığını bir dəqiqədə yaz — maklerlər sənə <em>fərdi təkliflər</em> göndərsin. Nömrən yalnız qəbul etdiyin təklifin maklerinə açılır.</p>
       <div class="lx-cta reveal" style="animation-delay:1s">
-        <a class="btn btn-gold" href="{{ url_for('teleb.forma') }}">Tələbini yaz</a>
         {%- if current_user %}
+        <a class="btn btn-gold" href="{{ url_for('teleb.forma') }}">Tələbini yaz</a>
         <a class="btn btn-ghost" href="{{ url_for('admin.panel') if current_user.role == 'admin' else url_for('makler.kabinet') }}">{{ 'Admin panel' if current_user.role == 'admin' else 'Kabinetə keç' }}</a>
         {%- else %}
-        <a class="btn btn-ghost" href="{{ url_for('auth.qeydiyyat') }}">Maklerəm</a>
+        <a class="btn btn-gold shine hero-cta" href="{{ url_for('teleb.forma') }}">Tələbini yaz →</a>
         {%- endif %}
       </div>
+      {%- if not current_user %}
+      <div class="hero-note reveal" style="animation-delay:1.12s">1 dəqiqə · qeydiyyatsız · pulsuz</div>
+      {%- endif %}
       <div class="underline"></div>
     </div>
     <div class="bottom">
@@ -84,45 +90,66 @@
 
 <section class="lx-sec" id="nece">
   <div class="lx-in">
-    <div class="lx-kicker">Necə işləyir</div>
-    <h2>Üç addımda <i>evə bir addım</i></h2>
+    <div class="lx-kicker" data-reveal>Necə işləyir</div>
+    <h2 data-reveal>Üç addımda <i>evə bir addım</i></h2>
     <div class="lx-steps">
-      <div class="lx-step"><div class="lx-n">1</div><h3>Tələbini yaz</h3><p>Kirayə və ya alış, rayon, otaq sayı və büdcə. Cəmi bir dəqiqə, qeydiyyat lazım deyil.</p></div>
-      <div class="lx-step"><div class="lx-n">2</div><h3>Maklerlərdən təkliflər al</h3><p>Həmin rayonda işləyən maklerlər tələbini görür və sənə uyğun variantlar göndərir.</p></div>
-      <div class="lx-step"><div class="lx-n">3</div><h3>Bəyəndiyini seç</h3><p>Xoşuna gələn təklifi qəbul et — yalnız o makler nömrəni görür və sənə zəng edir.</p></div>
+      <div class="lx-step" data-reveal><div class="lx-n">1</div><h3>Tələbini yaz</h3><p>Kirayə və ya alış, rayon, otaq sayı və büdcə. Cəmi bir dəqiqə, qeydiyyat lazım deyil.</p></div>
+      <div class="lx-step" data-reveal><div class="lx-n">2</div><h3>Maklerlərdən təkliflər al</h3><p>Həmin rayonda işləyən maklerlər tələbini görür və sənə uyğun variantlar göndərir.</p></div>
+      <div class="lx-step" data-reveal><div class="lx-n">3</div><h3>Bəyəndiyini seç</h3><p>Xoşuna gələn təklifi qəbul et — yalnız o makler nömrəni görür və sənə zəng edir.</p></div>
     </div>
-    <a class="lx-btn" href="{{ url_for('teleb.forma') }}">Tələbini yaz →</a>
+    <a class="lx-btn shine" href="{{ url_for('teleb.forma') }}" data-reveal>Tələbini yaz →</a>
   </div>
 </section>
 
-<section class="lx-sec lx-dark" id="makler">
-  <div class="lx-in lx-split">
-    <div>
-      <div class="lx-kicker">Maklerlər üçün</div>
-      <h2>Müştəri axtarmayın — <i>hazır tələbləri</i> görün</h2>
-      <p class="lx-lead">Xidmət sahənizi (rayon, kirayə/satış, qiymət aralığı) seçin, sizə uyğun tələblər kabinetinizə düşsün.</p>
+<section class="lx-sec lx-dark" id="maklerler">
+  <div class="lx-in">
+    <div class="lx-kicker" data-reveal>Maklerlər üçün</div>
+    <h2 data-reveal>Müştəri axtarmayın — <i>hazır tələbləri</i> görün</h2>
+    <p class="lx-lead mk-lead" data-reveal>Xidmət sahənizi (rayon, kirayə/satış, qiymət aralığı) seçin — sizə uyğun müştəri tələbləri kabinetinizə düşsün.</p>
+
+    <div class="mk-cards">
+      <div class="mk-card" data-reveal>
+        <div class="mk-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+        <h3>Hazır müştəri tələbləri</h3>
+        <p>Müştəri nə istədiyini özü yazıb: rayon, otaq sayı, büdcə və nə vaxta lazım olduğu.</p>
+      </div>
+      <div class="mk-card" data-reveal>
+        <div class="mk-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7"/><path d="M12 12V6.5A5.5 5.5 0 0 1 17.5 12H12z" fill="currentColor"/></svg></div>
+        <h3>Uyğunluq faizi ilə sıralama</h3>
+        <p>Hər tələbin xidmət sahənizə nə qədər uyğun olduğu faizlə görünür — ən uyğunlar yuxarıda.</p>
+      </div>
+      <div class="mk-card" data-reveal>
+        <div class="mk-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.7"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.7"/></svg></div>
+        <h3>Nömrə yalnız müştəri razı olanda</h3>
+        <p>Müştəri təklifinizi qəbul edəndə nömrəsi sizə açılır — soyuq zəng yox, maraqlı müştəri.</p>
+      </div>
+    </div>
+
+    <div class="mk-join" data-reveal>
+      <h3>Necə qoşulmaq olar</h3>
+      <ol class="mk-steps">
+        <li><b>Lisenziya kodu alın</b>
+          <span>Administratorla əlaqə saxlayın: {{ admin_contact.name }} · {{ obf_phone(admin_contact) }}</span>
+          {{ obf_whatsapp(admin_contact, 'WhatsApp ilə yazın', 'mk-wa') }}</li>
+        <li><b>Kodla qeydiyyatdan keçin</b><span>Ad, telefon, e-poçt və lisenziya kodu — bir dəqiqə.</span></li>
+        <li><b>Xidmət sahənizi seçin</b><span>Kirayə və/və ya satış, rayonlar və qiymət aralığı — tələblər dərhal görünəcək.</span></li>
+      </ol>
       <div class="lx-actions">
         {%- if current_user %}
-        <a class="btn btn-gold" href="{{ url_for('admin.panel') if current_user.role == 'admin' else url_for('makler.kabinet') }}">{{ 'Admin panel →' if current_user.role == 'admin' else 'Kabinetə keç →' }}</a>
+        <a class="btn btn-gold shine" href="{{ url_for('admin.panel') if current_user.role == 'admin' else url_for('makler.kabinet') }}">{{ 'Admin panel →' if current_user.role == 'admin' else 'Kabinetə keç →' }}</a>
         {%- else %}
-        <a class="btn btn-gold" href="{{ url_for('auth.qeydiyyat') }}">Maklerəm — qeydiyyat</a>
-        <a class="btn btn-ghost" href="{{ url_for('auth.giris') }}">Makler girişi</a>
+        <a class="btn btn-gold shine" href="{{ url_for('auth.qeydiyyat') }}">Lisenziya kodu ilə qoşul</a>
+        <a class="btn btn-ghost" href="{{ url_for('auth.giris') }}">Hesabım var → Daxil ol</a>
         {%- endif %}
       </div>
     </div>
-    <ul class="lx-list">
-      <li><b>Hazır müştəri tələbləri</b><span>Müştəri nə istədiyini özü yazıb — rayon, otaq, büdcə, nə vaxta lazımdır.</span></li>
-      <li><b>Uyğunluq faizi</b><span>Hər tələbin xidmət sahənizə nə qədər uyğun olduğu göstərilir.</span></li>
-      <li><b>Nömrə yalnız razılıqla</b><span>Müştəri təklifinizi qəbul edəndə nömrəsi sizə açılır — soyuq zənglər yox, isti əlaqə.</span></li>
-      <li><b>Lisenziya kodu ilə giriş</b><span>Platformada yalnız administratorun təsdiqlədiyi maklerlər işləyir.</span></li>
-    </ul>
   </div>
 </section>
 
 <section class="lx-sec lx-final">
   <div class="lx-in">
-    <h2>Nə axtardığını yaz — <i>qalanını maklerlər etsin</i></h2>
-    <a class="lx-btn" href="{{ url_for('teleb.forma') }}">Tələbini yaz →</a>
+    <h2 data-reveal>Nə axtardığını yaz — <i>qalanını maklerlər etsin</i></h2>
+    <a class="lx-btn shine" href="{{ url_for('teleb.forma') }}" data-reveal>Tələbini yaz →</a>
   </div>
   <footer class="lx-foot">© MaklerHub · Bakı · <a href="{{ url_for('public.sertler') }}" style="color:inherit">İstifadə şərtləri</a> · <a href="{{ url_for('public.mexfilik') }}" style="color:inherit">Məxfilik</a><br><span class="lx-contact">Əlaqə: {{ admin_contact.name }} · {{ obf_phone(admin_contact) }} · {{ obf_email(admin_contact) }}</span></footer>
 </section>
@@ -133,6 +160,7 @@
 window.MH_IMG={front:"{{ url_for('static', filename='img/hero-front.jpg') }}",left:"{{ url_for('static', filename='img/hero-login.jpg') }}",right:"{{ url_for('static', filename='img/hero-register.jpg') }}"};</script>
 <script src="{{ url_for('static', filename='js/pages/landing.js') }}"></script>
 <script src="{{ url_for('static', filename='js/contact-reveal.js') }}"></script>
+<script src="{{ url_for('static', filename='js/landing-anim.js') }}"></script>
 {% if current_user %}<script src="{{ url_for('static', filename='js/user-menu.js') }}"></script>{% endif %}
 </body>
 </html>

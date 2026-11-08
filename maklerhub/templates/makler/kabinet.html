@@ -1,8 +1,10 @@
 {% extends 'makler/base.html' %}
 {% from '_admin_contact.html' import contact_card %}
+{% from '_district_picker.html' import district_single %}
 {% set page_css = 'teleblist2.css' %}
 {% block title %}Tələblər{% endblock %}
 {% block main %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/district-picker.css') }}">
   <div class="head reveal" style="animation-delay:.05s">
     <h1>Müştəri tələbləri</h1>
     <p>{{ today_long }}{% if lic %} · lisenziya {{ lic.days_left }} gün qalıb{% endif %}</p>
@@ -42,9 +44,7 @@
       <select name="deal"><option value="">Hamısı</option>{% for k, v in deals.items() %}<option value="{{ k }}"{% if f.deal == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select>
     </label>
     {% endif %}
-    <label>Rayon
-      <select name="district"><option value="">Hamısı</option>{% for d in districts %}<option{% if f.district == d %} selected{% endif %}>{{ d }}</option>{% endfor %}</select>
-    </label>
+    <div class="fl-dp"><span>Rayon</span>{{ district_single('district', f.district, all_label='Hamısı') }}</div>
     <label>Otaq
       <select name="rooms"><option value="">Hamısı</option>{% for n, l in rooms.items() %}<option value="{{ n }}"{% if f.rooms == n %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
     </label>
@@ -89,3 +89,4 @@
   {% endif %}
   {% endif %}
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/district-picker.js') }}"></script>{% endblock %}

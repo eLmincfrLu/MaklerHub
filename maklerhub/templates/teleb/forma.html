@@ -1,6 +1,9 @@
 {% extends 'teleb/_layout.html' %}
+{% from '_district_picker.html' import district_multi %}
 {% block title %}Tələbini yaz{% endblock %}
-{% block meta %}<meta name="description" content="Bakıda kirayə və ya alış üçün tələbini yaz — maklerlər sənə fərdi təklif göndərsin.">{% endblock %}
+{% block meta %}<meta name="description" content="Bakıda kirayə və ya alış üçün tələbini yaz — maklerlər sənə fərdi təklif göndərsin.">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/district-picker.css') }}">
+<script defer src="{{ url_for('static', filename='js/district-picker.js') }}"></script>{% endblock %}
 {% block showcase %}
       <div class="eyebrow">Qeydiyyat lazım deyil</div>
       <h1>
@@ -41,12 +44,7 @@
 
         <div class="block">
           <div class="sec-label">Rayon (1–{{ max_districts }}) <b id="distCount">{{ form.districts|length }}/{{ max_districts }}</b></div>
-          <div class="chips">
-            {%- for d in districts %}
-            {%- if loop.index0 == 12 %}<div class="chips-more">Populyar ərazilər</div>{% endif %}
-            <label class="chip"><input type="checkbox" name="districts" value="{{ d }}"{% if d in form.districts %} checked{% endif %}><span>{{ d }}</span></label>
-            {%- endfor %}
-          </div>
+          {{ district_multi('districts', form.districts, max=max_districts, label='Rayon seçin…') }}
         </div>
 
         <div class="block">

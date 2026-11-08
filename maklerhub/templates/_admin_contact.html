@@ -26,6 +26,10 @@
 <a class="mh-obf" data-k="m" data-r="{{ c.email_rev }}">{{ c.email_fallback }}</a>
 {%- endmacro %}
 
+{% macro obf_whatsapp(c, text='WhatsApp', cls='') -%}
+<a class="mh-obf{% if cls %} {{ cls }}{% endif %}" data-k="w" data-r="{{ c.phone_rev }}" target="_blank" rel="noopener noreferrer">{{ text }}</a>
+{%- endmacro %}
+
 {% macro obf_phone(c) -%}
 <a class="mh-obf" data-k="t" data-r="{{ c.phone_rev }}">{{ c.phone_fallback }}</a>
 {%- endmacro %}

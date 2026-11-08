@@ -1,0 +1,28 @@
+{#- Rayon seçici (progressive enhancement). JS-siz: adi qeyd qutuları / select — forma eyni adlarla göndərilir.
+    JS (static/js/district-picker.js) EYNİ input elementlərini panelə köçürür və dəyişəndə "change" göndərir,
+    ona görə səhifənin mövcud skriptləri (teleb.js limit sayğacı, makler-ayarlar.js) işləməyə davam edir.
+    CSS: static/css/pages/district-picker.css. Siyahı: DISTRICTS_AZ (bütün rayonlar, Azərbaycan əlifbası).
+
+    district_multi(name, selected, max=0, data_attr=False, label='Rayon seçin…', uid='')
+      name      — input adı (None → adsız, məs. makler Ayarlar data-district ilə oxuyur)
+      max       — ən çox seçim (0 = limitsiz; limit varsa "Hamısını seç" gizlidir)
+    district_single(name, selected, all_label='Hamısı', uid='') — tək seçim (kabinet filtri), JS-siz <select>. -#}
+
+{% macro district_multi(name, selected, max=0, data_attr=False, label='Rayon seçin…', uid='') -%}
+<div class="dp" data-dp data-max="{{ max or 0 }}" data-label="{{ label }}"{% if uid %} data-uid="{{ uid }}"{% endif %}>
+  <div class="dp-list" role="group" aria-label="Rayonlar">
+    {%- for d in DISTRICTS_AZ %}
+    <label class="dp-opt"><input type="checkbox"{% if name %} name="{{ name }}"{% endif %}{% if data_attr %} data-district{% endif %} value="{{ d }}"{% if d in selected %} checked{% endif %}><span>{{ d }}</span></label>
+    {%- endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro district_single(name, selected, all_label='Hamısı', uid='') -%}
+<div class="dp dp-single" data-dp data-single data-label="{{ all_label }}"{% if uid %} data-uid="{{ uid }}"{% endif %}>
+  <select name="{{ name }}" class="dp-select" aria-label="Rayon">
+    <option value="">{{ all_label }}</option>
+    {%- for d in DISTRICTS_AZ %}<option value="{{ d }}"{% if selected == d %} selected{% endif %}>{{ d }}</option>{% endfor %}
+  </select>
+</div>
+{%- endmacro %}
