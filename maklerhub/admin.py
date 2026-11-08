@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from . import licenses, maintenance
+from . import images as images_mod, licenses, maintenance
 from .auth import admin_required
 from .db import add_log, get_db
 from .helpers import date_short, full_name, log_time, now, parse, phone_display, rel, ts
@@ -135,7 +135,9 @@ def teleb(rid):
         "(SELECT 1 FROM contacts c WHERE c.offer_id = o.id) AS has_contact FROM offers o "
         "JOIN users u ON u.id = o.agent_id WHERE o.request_id = ? ORDER BY o.id", (rid,)).fetchall()
     complaints = db.execute("SELECT * FROM complaints WHERE request_id = ? ORDER BY id", (rid,)).fetchall()
+    pics = images_mod.images_by_offer(db, [o["id"] for o in offers])
     return render("admin/teleb.html", "admin.telebler", x=_req_row(r), phone=phone_display(r["phone"]), offers=offers,
+                  pics=pics,
                   complaints=complaints, offer_status=OFFER_STATUS, reasons=COMPLAINT_REASONS, urgency=URGENCY,
                   close_reason=CLOSE_REASONS_ALL.get(r["close_reason"]), full_name=full_name, rel=rel,
                   date_short=date_short, phone_display=phone_display)
@@ -166,12 +168,17 @@ def teleb_sil(rid):
     counts = db.execute("SELECT (SELECT COUNT(*) FROM offers WHERE request_id = ?) AS o, "
                         "(SELECT COUNT(*) FROM contacts WHERE request_id = ?) AS c, "
                         "(SELECT COUNT(*) FROM complaints WHERE request_id = ?) AS k", (rid, rid, rid)).fetchone()
-    # FK-lar CASCADE: təkliflər, kontaktlar, şikayətlər, bu tələbə bağlı bildirişlər birlikdə silinir
+    public_ids = images_mod.public_ids_for(db, "o.request_id = ?", (rid,))
+    # FK-lar CASCADE: təkliflər, şəkil sətirləri, kontaktlar, şikayətlər, bu tələbə bağlı bildirişlər birlikdə silinir
     db.execute("DELETE FROM notifications WHERE link = ?", (f"/kabinet/teleb/{rid}",))
     db.execute("DELETE FROM customer_requests WHERE id = ?", (rid,))
     add_log(db, "warn", "Sistem", f"Admin tələbi sildi: #{rid}",
-            f"təklif={counts['o']} kontakt={counts['c']} şikayət={counts['k']}\nicra edən={g.user['email']}")
+            f"təklif={counts['o']} kontakt={counts['c']} şikayət={counts['k']} şəkil={len(public_ids)}"
+            f"\nicra edən={g.user['email']}")
     db.commit()
+    # Cloudinary bazadan SONRA; xəta axını sındırmır, loqa yazılır (qalan yetimləri həftəlik təmizlik silir)
+    if public_ids and not images_mod.destroy(public_ids, db):
+        db.commit()
     flash(f"Tələb #{rid} və əlaqəli məlumatlar silindi.", "ok")
     return redirect(url_for("admin.telebler"))
 

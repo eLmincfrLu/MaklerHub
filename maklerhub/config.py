@@ -37,7 +37,7 @@ class Config:
     MAIL_FROM = os.environ.get("MAKLERHUB_MAIL_FROM", "no-reply@maklerhub.az")
     MAIL_TLS = os.environ.get("MAKLERHUB_MAIL_TLS", "1") == "1"
 
-    MAX_CONTENT_LENGTH = 4 * 1024 * 1024  # avatar yükləmə limiti (4 MB)
+    MAX_CONTENT_LENGTH = 26 * 1024 * 1024  # bütün forma: təklif şəkilləri 5 × 5 MB + sahələr (aşanda 413)
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = os.environ.get("MAKLERHUB_SECURE_COOKIES", "0") == "1"

@@ -185,3 +185,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_complaints_agent ON complaints(request_id, 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_demo INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS is_demo INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS ix_requests_demo ON customer_requests(is_demo, status);
+
+-- ------------------------------------------------------------ Təklif şəkilləri (Cloudinary)
+-- offers.image_url köhnə təkliflər üçün qalır; yeni şəkillər burada (sort: 0 = əsas şəkil).
+CREATE TABLE IF NOT EXISTS offer_images (
+  id          SERIAL PRIMARY KEY,
+  offer_id    INTEGER NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+  public_id   TEXT NOT NULL UNIQUE,                     -- Cloudinary public_id (maklerhub/offers/<offer_id>/<təsadüfi>)
+  url         TEXT NOT NULL,                            -- secure_url
+  width       INTEGER,
+  height      INTEGER,
+  bytes       INTEGER,
+  sort        INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_offer_images_offer ON offer_images(offer_id, sort);
+CREATE INDEX IF NOT EXISTS ix_offer_images_time ON offer_images(created_at);

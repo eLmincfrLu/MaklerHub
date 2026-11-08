@@ -73,10 +73,13 @@ PHONE_FMT = "+9945000000{:02d}"  # +994 50 000 00 01..08 — aşkar saxta
 
 
 def clear_demo(con):
-    """Bütün demo məlumatı silir (commit çağıran tərəfdə). Qaytarır: {cədvəl: say}."""
+    """Bütün demo məlumatı silir (commit çağıran tərəfdə). Qaytarır: ({cədvəl: say}, [Cloudinary public_id]) —
+    şəkilləri Cloudinary-dən çağıran tərəf commit-dən SONRA silir (images.destroy)."""
     users = "SELECT id FROM users WHERE is_demo = 1"
     reqs = "SELECT id FROM customer_requests WHERE is_demo = 1"
-    out = {}
+    from .images import public_ids_for
+    public_ids = public_ids_for(con, f"o.request_id IN ({reqs}) OR o.agent_id IN ({users})", ())
+    out = {"images": len(public_ids)}
     out["notifications"] = con.execute(
         f"DELETE FROM notifications WHERE user_id IN ({users}) OR request_id IN ({reqs})").rowcount
     out["complaints"] = con.execute(
@@ -91,16 +94,17 @@ def clear_demo(con):
     # sessiyalar, cihazlar, xidmət sahələri — users FK CASCADE
     out["users"] = con.execute("DELETE FROM users WHERE is_demo = 1").rowcount
     out["licenses"] = con.execute("DELETE FROM licenses WHERE id = ANY(?)", (lic_ids,)).rowcount if lic_ids else 0
-    return out
+    return out, public_ids
 
 
 def seed_demo(con):
-    """Köhnə demo silinir və yenidən yaradılır (commit çağıran tərəfdə). Qaytarır: (counts, [müştəri tokenləri])."""
+    """Köhnə demo silinir və yenidən yaradılır (commit çağıran tərəfdə). Demo təkliflərinə şəkil YÜKLƏNMİR
+    (Cloudinary krediti) — placeholder görünür. Qaytarır: (counts, [müştəri tokenləri], [silinəcək public_id])."""
     clash = con.execute("SELECT email FROM users WHERE email = ANY(?) AND is_demo = 0",
                         ([a[0] for a in AGENTS],)).fetchone()
     if clash:
         raise click.ClickException(f"{clash[0]} real hesabdır — demo yaradılmadı (real məlumata toxunulmur).")
-    clear_demo(con)
+    _, old_images = clear_demo(con)
     stamp = now()
     pw_hash = generate_password_hash(demo_password())
     agent_ids = []
@@ -161,17 +165,22 @@ def seed_demo(con):
 
     add_log(con, "info", "Sistem", "Demo məlumat yaradıldı",
             f"makler={len(agent_ids)} tələb={len(req_ids)} təklif={len(OFFERS)}")
-    return {"users": len(agent_ids), "requests": len(req_ids), "offers": len(OFFERS)}, tokens
+    return {"users": len(agent_ids), "requests": len(req_ids), "offers": len(OFFERS)}, tokens, old_images
 
 
 def init_app(app):
     from .db import connect
 
     def _run(fn):
+        """fn bir tranzaksiyada; nəticənin son elementi — Cloudinary-dən commit-dən sonra silinəcək public_id-lər."""
+        from .images import destroy
         con = connect(app.config["DATABASE"])
         try:
             result = fn(con)
             con.commit()
+            if result[-1] and not destroy(result[-1], con):
+                con.commit()
+                click.echo(f"Diqqət: {len(result[-1])} şəkil Cloudinary-dən silinmədi (loqa yazıldı).")
             return result
         except Exception:
             con.rollback()
@@ -182,7 +191,7 @@ def init_app(app):
     @app.cli.command("seed-demo")
     def seed_demo_command():
         """Demo maklerlər, tələblər və təkliflər (köhnə demo əvvəlcə silinir)."""
-        counts, tokens = _run(seed_demo)
+        counts, tokens, _ = _run(seed_demo)
         click.echo(f"Demo yaradıldı: {counts['users']} makler, {counts['requests']} tələb, {counts['offers']} təklif.")
         click.echo(f"Makler girişi: {AGENTS[0][0]} (həmçinin demo2@, demo3@) / şifrə: "
                    f"{'.env-dəki MAKLERHUB_DEMO_PASSWORD' if demo_password() != 'Demo12345' else 'Demo12345'}")
@@ -193,5 +202,5 @@ def init_app(app):
     @app.cli.command("clear-demo")
     def clear_demo_command():
         """Bütün demo məlumatı silir (real məlumata toxunmur)."""
-        counts = _run(clear_demo)
+        counts, _ = _run(clear_demo)
         click.echo("Demo silindi: " + ", ".join(f"{k}={v}" for k, v in counts.items()))

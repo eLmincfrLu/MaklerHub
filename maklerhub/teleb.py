@@ -31,16 +31,24 @@ OFFER_LIMIT = 5          # bir tələbə aktiv (geri çəkilməmiş) təklif lim
 
 def expire_requests(db):
     """Lazy yeniləmə (cron yoxdur): müddəti keçən aktiv tələblər 'expired' olur; bağlanandan/bitəndən
-    ANON_DAYS gün sonra ad, telefon, qeyd və IP silinir. Demo tələblərin müddəti bitmir (portfolio canlı qalsın).
+    ANON_DAYS gün sonra ad, telefon, qeyd, IP və təklif şəkilləri silinir (Cloudinary-dən silməni çağıran edir —
+    qaytarılan public_id-lər). Demo tələblərin müddəti bitmir (portfolio canlı qalsın).
     Çağıran tərəf commit etməlidir. Sorğularda birbaşa yox, maintenance.lazy_expire ilə (dəqiqədə ən çox 1 dəfə)."""
     ttl = int(get_setting(db, "request_ttl_days") or 30)
     stamp = now()
+    from .images import public_ids_for
+    old = ts(stamp - timedelta(days=ANON_DAYS))
+    anon = ("o.request_id IN (SELECT id FROM customer_requests WHERE status IN ('closed', 'expired') "
+            "AND closed_at < ? AND phone != '')")
+    public_ids = public_ids_for(db, anon, (old,))
+    if public_ids:
+        db.execute("DELETE FROM offer_images WHERE public_id = ANY(?)", (public_ids,))
     db.execute("UPDATE customer_requests SET status = 'expired', closed_at = ? WHERE status = 'active' AND is_demo = 0 "
                "AND created_at < ?",
                (ts(stamp), ts(stamp - timedelta(days=ttl))))
     db.execute("UPDATE customer_requests SET name = '', phone = '', note = '', ip = '' "
-               "WHERE status IN ('closed', 'expired') AND closed_at < ? AND phone != ''",
-               (ts(stamp - timedelta(days=ANON_DAYS)),))
+               "WHERE status IN ('closed', 'expired') AND closed_at < ? AND phone != ''", (old,))
+    return public_ids
 
 
 def request_alive(db, req):
@@ -195,18 +203,21 @@ def agent_short_name(first, last):
 
 
 def offer_cards(db, request_id, deal_type, seen_at=None):
+    from .images import images_by_offer
     """Müştəriyə görünən təkliflər (geri çəkilənlər yox). Makler adı: "Ad S."; qəbul olunanda tam ad və telefon.
     new: müştərinin son baxışından sonra gəlib."""
     rows = db.execute(
         "SELECT o.*, u.first_name, u.last_name, u.phone AS agent_phone FROM offers o JOIN users u ON u.id = o.agent_id "
         "WHERE o.request_id = ? AND o.status != 'withdrawn' ORDER BY o.created_at DESC, o.id DESC", (request_id,)).fetchall()
     unit = " AZN/ay" if deal_type == "rent" else " AZN"
+    pics = images_by_offer(db, [o["id"] for o in rows])
     out = []
     for o in rows:
         accepted = o["status"] == "accepted"
         out.append({"id": o["id"], "title": o["title"], "price": f"{money(o['price'])}{unit}" if o["price"] else "—",
                     "district": o["district"], "rooms": ROOMS.get(o["rooms"], "—") if o["rooms"] else "—",
                     "area": (f"{o['area']:g} m²" if o["area"] else None), "image": o["image_url"],
+                    "images": pics.get(o["id"], []),
                     "description": o["description"], "status": o["status"],
                     "agent": agent_short_name(o["first_name"], o["last_name"]),
                     "agent_full": f"{o['first_name']} {o['last_name']}".strip() if accepted else None,

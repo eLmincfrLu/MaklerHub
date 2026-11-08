@@ -1,0 +1,51 @@
+/* Təklif şəkilləri: forma önizləməsi, miniatürlər (makler/admin), müştəri qalereyası və tam ekran baxış.
+   Mövcud CSS-ə toxunmur; yalnız oi-/gal-/lb- sinifləri. */
+
+/* ---- forma: seçilən şəkillər ---- */
+.oi-preview{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;margin-top:10px;}
+.oi-item{position:relative;border:1px solid #E4DCC8;border-radius:4px;overflow:hidden;background:#F6F1E4;}
+.oi-item img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;}
+.oi-item.main{border-color:#C9A227;box-shadow:0 0 0 2px rgba(201,162,39,.35);}
+.oi-badge{position:absolute;left:6px;top:6px;background:#101820;color:#C9A227;font-size:.66rem;font-weight:600;
+  padding:2px 6px;border-radius:2px;}
+.oi-acts{display:flex;border-top:1px solid #E4DCC8;}
+.oi-acts button{all:unset;flex:1;text-align:center;font-size:.72rem;padding:7px 2px;cursor:pointer;color:#6B6455;
+  background:#FFFDF8;}
+.oi-acts button + button{border-left:1px solid #E4DCC8;}
+.oi-acts button:hover,.oi-acts button:focus-visible{color:#101820;background:#F6F1E4;}
+.oi-acts button:disabled{opacity:.4;cursor:default;}
+.oi-count{grid-column:1/-1;font-size:.76rem;color:#8A8372;}
+.oi-err{grid-column:1/-1;font-size:.78rem;color:#8A3A28;background:#F8E6E0;padding:8px 10px;border-left:3px solid #B4543F;}
+.mh-btn.is-busy{opacity:.7;cursor:progress;}
+
+/* ---- miniatürlər ---- */
+.oi-thumbs{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
+.oi-thumbs img{display:block;width:84px;height:84px;object-fit:cover;border-radius:3px;border:1px solid #E4DCC8;
+  background:#F6F1E4;}
+.oi-thumbs.small img{width:48px;height:48px;}
+.oi-thumbs.small{margin:6px 0 0;gap:6px;}
+
+/* ---- müştəri: qalereya (touch swipe = scroll-snap, JS-siz də işləyir) ---- */
+.gal{position:relative;}
+.gal-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.gal-track::-webkit-scrollbar{display:none;}
+.gal-track img{flex:0 0 100%;scroll-snap-align:start;cursor:zoom-in;height:auto;}
+.gal-dots{position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:6px;pointer-events:none;}
+.gal-dots button{all:unset;pointer-events:auto;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.55);
+  box-shadow:0 0 0 1px rgba(16,24,32,.25);cursor:pointer;}
+.gal-dots button.on{background:#fff;width:18px;border-radius:4px;}
+.gal-n{position:absolute;right:10px;top:10px;background:rgba(16,24,32,.7);color:#fff;font-size:.7rem;padding:3px 7px;
+  border-radius:10px;}
+
+/* ---- tam ekran ---- */
+.lb{position:fixed;inset:0;z-index:1000;background:rgba(10,14,20,.94);display:flex;align-items:center;justify-content:center;}
+.lb[hidden]{display:none;}
+.lb img{max-width:100vw;max-height:100vh;object-fit:contain;}
+.lb button{all:unset;position:absolute;color:#fff;font-size:1.6rem;line-height:1;cursor:pointer;padding:14px 18px;
+  text-shadow:0 1px 4px rgba(0,0,0,.6);}
+.lb button:focus-visible{outline:2px solid #C9A227;}
+.lb .lb-x{top:max(6px,env(safe-area-inset-top));right:6px;}
+.lb .lb-prev{left:4px;top:50%;transform:translateY(-50%);}
+.lb .lb-next{right:4px;top:50%;transform:translateY(-50%);}
+.lb .lb-n{position:absolute;bottom:max(14px,env(safe-area-inset-bottom));left:0;right:0;text-align:center;color:#ddd;
+  font-size:.8rem;}

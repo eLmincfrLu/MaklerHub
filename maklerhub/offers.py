@@ -62,7 +62,7 @@ def validate_offer(form, deal_type):
             area = -1
         if not AREA_RANGE[0] <= area <= AREA_RANGE[1]:
             errors.append(f"Sahə {AREA_RANGE[0]}–{AREA_RANGE[1]:,} m² aralığında olmalıdır.")
-    image = form["image_url"] or None
+    image = (form.get("image_url") or "").strip() or None  # köhnə link sahəsi: formada artıq yoxdur
     if image and not valid_https_url(image):
         errors.append(f"Şəkil linki https:// ilə başlamalı və {URL_MAX} simvoldan qısa olmalıdır.")
     if len(form["description"]) > DESC_MAX:
@@ -71,31 +71,57 @@ def validate_offer(form, deal_type):
             "image_url": image, "description": form["description"]}, errors
 
 
-def send_offer(db, request_id, agent_id, clean):
-    """Bir tranzaksiyada: tələb sətri FOR UPDATE ilə kilidlənir, şərtlər yoxlanır, təklif və müştəri bildirişi yazılır.
-    Qaytarır: (offer_id, None) və ya (None, xəta). Uğurda commit edir, xətada rollback."""
-    req = db.execute("SELECT id, status, created_at, is_demo FROM customer_requests WHERE id = ? FOR UPDATE",
-                     (request_id,)).fetchone()
+def _offer_problem(db, request_id, agent_id, lock):
+    """Təklif göndərmək olmursa xəta mətni, olursa None. lock=True → tələb sətri FOR UPDATE."""
+    req = db.execute("SELECT id, status, created_at, is_demo FROM customer_requests WHERE id = ?"
+                     + (" FOR UPDATE" if lock else ""), (request_id,)).fetchone()
     agent = db.execute("SELECT is_demo FROM users WHERE id = ?", (agent_id,)).fetchone()
-    error = None
     if req is None or agent is None or req["is_demo"] != agent["is_demo"]:
-        error = "Tələb tapılmadı."
-    elif not request_alive(db, req):
-        error = "Bu tələb bağlanıb — təklif göndərmək olmur."
-    elif db.execute("SELECT 1 FROM offers WHERE request_id = ? AND agent_id = ?", (request_id, agent_id)).fetchone():
-        error = "Bu tələbə artıq təklif göndərmisiniz (geri çəkilmiş təklif də sayılır)."
-    elif db.execute("SELECT COUNT(*) FROM offers WHERE request_id = ? AND status != 'withdrawn'",
-                    (request_id,)).fetchone()[0] >= OFFER_LIMIT:
-        error = f"Bu tələbə artıq {OFFER_LIMIT} təklif göndərilib — limit dolub."
+        return "Tələb tapılmadı."
+    if not request_alive(db, req):
+        return "Bu tələb bağlanıb — təklif göndərmək olmur."
+    if db.execute("SELECT 1 FROM offers WHERE request_id = ? AND agent_id = ?", (request_id, agent_id)).fetchone():
+        return "Bu tələbə artıq təklif göndərmisiniz (geri çəkilmiş təklif də sayılır)."
+    if db.execute("SELECT COUNT(*) FROM offers WHERE request_id = ? AND status != 'withdrawn'",
+                  (request_id,)).fetchone()[0] >= OFFER_LIMIT:
+        return f"Bu tələbə artıq {OFFER_LIMIT} təklif göndərilib — limit dolub."
+    return None
+
+
+def precheck_offer(db, request_id, agent_id):
+    """Şəkil yükləməzdən ƏVVƏL kilidsiz yoxlama (boşuna yükləmə olmasın). Oxu tranzaksiyası bağlanır —
+    Cloudinary yüklənərkən bazada açıq tranzaksiya qalmır. Son söz send_offer-in FOR UPDATE yoxlamasındadır."""
+    error = _offer_problem(db, request_id, agent_id, lock=False)
+    db.rollback()
+    return error
+
+
+def reserve_offer_id(db):
+    """Təklif id-si əvvəlcədən (şəkillərin Cloudinary qovluğu üçün). Sequence tranzaksiyadan asılı deyil."""
+    oid = db.execute("SELECT nextval(pg_get_serial_sequence('offers', 'id'))").fetchone()[0]
+    db.rollback()
+    return oid
+
+
+def send_offer(db, request_id, agent_id, clean, offer_id=None, images=()):
+    """QISA tranzaksiya: tələb sətri FOR UPDATE ilə kilidlənir, şərtlər yoxlanır, təklif, şəkil sətirləri və müştəri
+    bildirişi yazılır. images — artıq Cloudinary-ə yüklənmiş şəkillər (sıra = sort).
+    Qaytarır: (offer_id, None) və ya (None, xəta). Uğurda commit edir, xətada rollback (şəkilləri çağıran silir)."""
+    error = _offer_problem(db, request_id, agent_id, lock=True)
     if error:
         db.rollback()
         return None, error
     stamp = ts()
-    oid = db.execute(
-        "INSERT INTO offers(request_id, agent_id, title, price, district, rooms, area, image_url, description, status, "
-        "created_at) VALUES (?,?,?,?,?,?,?,?,?,'sent',?)",
-        (request_id, agent_id, clean["title"], clean["price"], clean["district"], clean["rooms"], clean["area"],
-         clean["image_url"], clean["description"], stamp)).lastrowid
+    cols = "request_id, agent_id, title, price, district, rooms, area, image_url, description, status, created_at"
+    vals = [request_id, agent_id, clean["title"], clean["price"], clean["district"], clean["rooms"], clean["area"],
+            clean["image_url"], clean["description"], "sent", stamp]
+    if offer_id is not None:
+        cols, vals = "id, " + cols, [offer_id] + vals
+    oid = db.execute(f"INSERT INTO offers({cols}) VALUES ({','.join('?' for _ in vals)})", vals).lastrowid
+    for i, im in enumerate(images):
+        db.execute("INSERT INTO offer_images(offer_id, public_id, url, width, height, bytes, sort, created_at) "
+                   "VALUES (?,?,?,?,?,?,?,?)", (oid, im["public_id"], im["url"], im.get("width"), im.get("height"),
+                                                 im.get("bytes"), i, stamp))
     db.execute("INSERT INTO notifications(user_id, request_id, kind, text, link, is_read, created_at) "
                "VALUES (NULL, ?, 'new_offer', ?, '', 0, ?)", (request_id, f"Yeni təklif: {clean['title']}", stamp))
     db.commit()

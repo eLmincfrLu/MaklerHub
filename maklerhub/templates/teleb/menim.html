@@ -1,7 +1,9 @@
 {% extends 'teleb/_layout.html' %}
 {% block title %}Mənim tələbim{% endblock %}
 {% block meta %}<meta name="robots" content="noindex, nofollow">
-<meta name="referrer" content="no-referrer">{% endblock %}
+<meta name="referrer" content="no-referrer">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/offer-images.css') }}">
+<script defer src="{{ url_for('static', filename='js/pages/offer-gallery.js') }}"></script>{% endblock %}
 {% block showcase %}
       <div class="eyebrow">Tələbin qəbul olundu</div>
       <h1>
@@ -12,7 +14,13 @@
 {% endblock %}
 {% macro offer_card(o, decide) %}
         <div class="offer{% if o.status == 'accepted' %} accepted{% endif %}" id="o-{{ o.id }}">
-          {% if o.image %}<img src="{{ o.image }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.outerHTML='<div class=&quot;ph&quot;>Şəkil yüklənmədi</div>'">{% else %}<div class="ph">Şəkil yoxdur</div>{% endif %}
+          {% if o.images %}
+          <div class="gal" data-gal>
+            <div class="gal-track">{% for im in o.images %}<img src="{{ im.card }}" data-full="{{ im.full }}"{% if im.w %} width="{{ im.w }}" height="{{ im.h }}"{% endif %} alt="{{ o.title }} — şəkil {{ loop.index }}" loading="lazy" referrerpolicy="no-referrer">{% endfor %}</div>
+            {% if o.images|length > 1 %}<span class="gal-n">1 / {{ o.images|length }}</span>
+            <div class="gal-dots">{% for im in o.images %}<button type="button" aria-label="Şəkil {{ loop.index }}"></button>{% endfor %}</div>{% endif %}
+          </div>
+          {% elif o.image %}<img src="{{ o.image }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.outerHTML='<div class=&quot;ph&quot;>Şəkil yüklənmədi</div>'">{% else %}<div class="ph">Şəkil yoxdur</div>{% endif %}
           <div class="ob">
             <div class="ot">{{ o.title }}{% if o.new %} <span class="newtag">Yeni</span>{% endif %}</div>
             <div class="op">{{ o.price }}</div>

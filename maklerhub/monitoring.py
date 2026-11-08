@@ -18,7 +18,23 @@ SAFE_HEADERS = {"user-agent", "accept", "accept-language", "content-type", "cont
 _enabled = False
 
 
+def _secrets():
+    """Mühitdəki açar dəyərləri (Cloudinary və s.) — mətndə rast gəlinsə maskalanır."""
+    out = []
+    for key in ("CLOUDINARY_API_SECRET", "CLOUDINARY_API_KEY", "MAKLERHUB_SECRET", "MAKLERHUB_ADMIN_PASSWORD"):
+        v = (os.environ.get(key) or "").strip()
+        if len(v) >= 6:
+            out.append(v)
+    url = os.environ.get("CLOUDINARY_URL") or ""
+    if url:
+        out.append(url)
+    return out
+
+
 def scrub_text(value):
+    for secret in _secrets():
+        if secret in value:
+            value = value.replace(secret, "[gizli]")
     value = TOKEN_RE.sub(r"\1[token]", value)
     value = EMAIL_RE.sub("[email]", value)
     return PHONE_RE.sub("[telefon]", value)

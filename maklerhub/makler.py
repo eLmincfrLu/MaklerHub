@@ -1,7 +1,7 @@
 """Makler kabineti: Tələblər (uyğunluqla), tələb detalı + təklif, Təkliflərim, Ayarlar, bildiriş zəngi."""
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from . import matching, offers as offers_mod
+from . import images as images_mod, matching, offers as offers_mod
 from .auth import member_required
 from .db import add_log, get_db
 from .helpers import BAKU_DISTRICTS, date_short, full_name, long_date, normalize_phone, now, parse, phone_display, rel
@@ -150,7 +150,9 @@ def _detail_ctx(db, rid):
     contact = offers_mod.contacts_for(db, g.user["id"], [mine["id"]]).get(mine["id"]) if mine else None
     complained = db.execute("SELECT 1 FROM complaints WHERE request_id = ? AND agent_id = ? AND from_side = 'agent'",
                             (rid, g.user["id"])).fetchone() is not None
-    return {"req": v, "contact": contact, "complained": complained, "complaint_reasons": offers_mod.AGENT_COMPLAINTS,
+    my_images = images_mod.images_by_offer(db, [mine["id"]]).get(mine["id"], []) if mine else []
+    return {"req": v, "contact": contact, "my_images": my_images, "max_images": max_images(g.user),
+            "max_mb": images_mod.MAX_BYTES // (1024 * 1024), "upload_ready": images_mod.configured(), "complained": complained, "complaint_reasons": offers_mod.AGENT_COMPLAINTS,
             "complaint_max": offers_mod.COMPLAINT_TEXT_MAX, "image_exts": IMAGE_EXTS, "score": res[0] if res else None, "reasons": res[1] if res else [],
             "ring": _ring(res[0], 151) if res else 151, "n_offers": n_offers, "limit": OFFER_LIMIT, "alive": alive,
             "mine": mine, "my_label": offers_mod.OFFER_STATUS.get(mine["status"]) if mine else None,
@@ -159,7 +161,38 @@ def _detail_ctx(db, rid):
             "desc_max": offers_mod.DESC_MAX, "url_max": offers_mod.URL_MAX}
 
 
-EMPTY_OFFER = {"title": "", "price": "", "district": "", "rooms": "", "area": "", "image_url": "", "description": ""}
+EMPTY_OFFER = {"title": "", "price": "", "district": "", "rooms": "", "area": "", "description": ""}
+
+
+def max_images(user):
+    return images_mod.DEMO_MAX_FILES if user["is_demo"] else images_mod.MAX_FILES
+
+
+def _upload_offer_images(db, rid, files):
+    """Şəkilləri yoxlayır, emal edir və Cloudinary-ə yükləyir — tranzaksiya AÇIQ DEYİL.
+    Qaytarır: (offer_id və ya None, [yüklənmiş], [xəta])."""
+    if not files:
+        return None, [], []
+    processed, errors = images_mod.process_all(files, max_images(g.user))
+    if errors:
+        return None, [], errors
+    if not images_mod.configured():
+        return None, [], ["Şəkil yükləmə hazırda işləmir. Şəkilsiz göndərin və ya sonra cəhd edin."]
+    used = images_mod.recent_count(db, g.user["id"], now())
+    if used + len(processed) > images_mod.HOURLY_LIMIT:
+        db.rollback()
+        return None, [], [f"Saatda ən çox {images_mod.HOURLY_LIMIT} şəkil yükləmək olar. Bir az sonra cəhd edin."]
+    problem = offers_mod.precheck_offer(db, rid, g.user["id"])  # boşuna yükləmə olmasın
+    if problem:
+        return None, [], [problem]
+    oid = offers_mod.reserve_offer_id(db)
+    try:
+        uploaded = images_mod.upload_all(oid, processed)
+    except images_mod.UploadError as exc:
+        add_log(db, "err", "Makler", f"Şəkil yüklənmədi: {full_name(g.user)}", f"tələb=#{rid} səbəb={exc}")
+        db.commit()
+        return None, [], [images_mod.UPLOAD_FAILED]
+    return oid, uploaded, []
 
 
 @bp.route("/kabinet/teleb/<int:rid>")
@@ -180,17 +213,23 @@ def teklif_gonder(rid):
     ctx = _detail_ctx(db, rid)
     form = {k: (request.form.get(k) or "").strip() for k in EMPTY_OFFER}
     clean, errors = offers_mod.validate_offer(form, ctx["req"]["deal_type"])
+    files = images_mod.uploaded_files(request)
     if not errors:
-        oid, error = offers_mod.send_offer(db, rid, g.user["id"], clean)
+        reserved, uploaded, errors = _upload_offer_images(db, rid, files)
+    if not errors:
+        oid, error = offers_mod.send_offer(db, rid, g.user["id"], clean, offer_id=reserved, images=uploaded)
         if oid:
-            add_log(db, "info", "Makler", f"Təklif göndərildi: {full_name(g.user)}", f"tələb=#{rid} təklif=#{oid}")
+            add_log(db, "info", "Makler", f"Təklif göndərildi: {full_name(g.user)}",
+                    f"tələb=#{rid} təklif=#{oid} şəkil={len(uploaded)}")
             db.commit()
             flash("Təklif göndərildi. Müştəri onu öz səhifəsində görəcək.", "ok")
-            if clean["image_url"] and not clean["image_url"].lower().split("?")[0].endswith(IMAGE_EXTS):
-                flash("Diqqət: şəkil linki .jpg/.jpeg/.png/.webp ilə bitmir — şəkil müştəridə görünməyə bilər.", "err")
             return redirect(url_for("makler.teleb_detal", rid=rid))
+        images_mod.destroy([u["public_id"] for u in uploaded], db)  # son yoxlama keçmədi → Cloudinary-dən sil
+        db.commit()
         errors.append(error)
-        ctx = _detail_ctx(db, rid)
+    if files and errors:
+        errors.append("Şəkilləri yenidən seçin (təhlükəsizlik üçün brauzer onları saxlamır).")
+    ctx = _detail_ctx(db, rid)
     return render("makler/teleb.html", "makler.kabinet", form=form, errors=errors, **ctx), 400
 
 
@@ -234,8 +273,10 @@ def teklifler():
                       "price": f"{o['price']:,}{unit}" if o["price"] else "—", "when": rel(o["created_at"]),
                       "rooms": ROOMS.get(o["rooms"], "—") if o["rooms"] else "—"})
     contacts = offers_mod.contacts_for(db, g.user["id"], [it["o"]["id"] for it in items if it["o"]["status"] == "accepted"])
+    pics = images_mod.images_by_offer(db, [it["o"]["id"] for it in items])
     for it in items:
         it["contact"] = contacts.get(it["o"]["id"])
+        it["thumb"] = pics[it["o"]["id"]][0]["thumb"] if pics.get(it["o"]["id"]) else None
     return render("makler/teklifler.html", "makler.teklifler", items=items, status=status, counts=counts,
                   labels=offers_mod.OFFER_STATUS, total=sum(counts.values()))
 

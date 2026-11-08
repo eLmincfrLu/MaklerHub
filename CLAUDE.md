@@ -23,6 +23,8 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 - Gün 5 BİTDİ: avtomatik təmizlik (`maintenance.py`), demo rejimi (`demo.py`, `is_demo`), təhlükəsizlik başlıqları,
   `/robots.txt`, 404/500 mətnləri, Sentry (`monitoring.py`), köhnə placeholder marşrut/şablonları silindi, README +
   `docs/screenshots/`. pytest: `tests/test_gun5.py`.
+- Şəkillər (8 noyabr): təklifə 1-5 şəkil Cloudinary-ə (`images.py`, `offer_images` cədvəli; `offers.image_url` yalnız
+  köhnə təkliflər üçün, formada link sahəsi yoxdur). pytest: `tests/test_images.py`.
 - IP (7 noyabr): Render-in qarşısında Cloudflare var, XFF 3 hop-dur (müştəri, Cloudflare, Render daxili).
   `auth.client_ip()` — IP lazım olan HƏR YERDƏ yalnız bu (birbaşa `request.remote_addr` yox). `MAKLERHUB_BEHIND_PROXY=1`
   olanda: CF-Connecting-IP → True-Client-IP → remote_addr (ipaddress ilə yoxlanır, etibarsız → növbəti); lokalda
@@ -49,7 +51,9 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   hissəsini müqayisə et (şifrəni ekrana çıxarma); eynidirsə DAYAN və istifadəçiyə de.
 - Mühit dəyişənləri yalnız `.env`-də / Render-də: DATABASE_URL, MAKLERHUB_ADMIN_EMAIL, MAKLERHUB_ADMIN_PASSWORD,
   MAKLERHUB_SECRET, MAKLERHUB_SECURE_COOKIES, MAKLERHUB_BEHIND_PROXY (yalnız Render-də =1, lokalda yox),
-  MAKLERHUB_DEMO_PASSWORD (yoxdursa "Demo12345"), SENTRY_DSN (yoxdursa Sentry söndürülüb). BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə,
+  MAKLERHUB_DEMO_PASSWORD (yoxdursa "Demo12345"), SENTRY_DSN (yoxdursa Sentry söndürülüb), CLOUDINARY_CLOUD_NAME,
+  CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET (yoxdursa şəkil yükləmə söndürülür; açarlar loqa/HTML-ə/Sentry-yə
+  getmir — `monitoring.scrub_text` mühitdəki açar dəyərlərini maskalayır). BUNLARI HEÇ VAXT fayla yazma, çatda göstərmə,
   commit etmə.
 - Demo izolyasiyası: makler tərəfində tələb seçən HƏR sorğu `is_demo`-nu maklerinki ilə müqayisə etməlidir
   (`offers.SAME_KIND`, `_detail_ctx`, `send_offer`); bildiriş `notify_new_request` yalnız eyni növə; admin
@@ -89,6 +93,18 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   Testlərdə `CLEANUP_DISABLED=True`, conftest hər testdə tezlik məhdudiyyətini sıfırlayır.
 - `demo.py` — `seed-demo` / `clear-demo` CLI; demo tələblərin müddəti bitmir (`request_alive`, `expire_requests`);
   demo makler cihaz limiti və tək sessiyadan azad, uğursuz giriş bloku tətbiq olunmur; `/giris?demo=1`.
+- `images.py` — Pillow: məzmuna görə format (JPEG/PNG/WEBP), ≤5 MB, 200..10000 px, `MAX_IMAGE_PIXELS` (bomb),
+  `exif_transpose`, metadata silinir (yalnız ICC qalır), uzun tərəf 1600, JPEG q82. Cloudinary imzalı yükləmə
+  (`maklerhub/offers/<offer_id>/<təsadüfi>`, overwrite=False), `destroy` (toplu, xəta loqa), `delete_orphans`,
+  çatdırma URL-ləri (`CARD` w_800, `THUMB` 200×200 c_fill, `FULL` w_1600, hamısı f_auto,q_auto). Şəbəkə yalnız
+  `_upload/_delete/_list`-dədir — conftest-də `cloud` autouse fixture onları BÜTÜN testlərdə mock edir.
+  Axın (`makler.teklif_gonder`): yoxla/emal → `precheck_offer` (kilidsiz, rollback) → `reserve_offer_id` (sequence)
+  → Cloudinary (açıq tranzaksiya YOX) → `send_offer` (qısa FOR UPDATE tranzaksiya + `offer_images`); uğursuzluqda
+  yüklənənlər silinir. Limitlər: təklif başına 5 (demo 2), makler başına saatda 60. Geri çəkiləndə şəkillər qalır;
+  admin silməsi, 90 gün anonimləşdirmə, `clear-demo` → Cloudinary-dən silinir; yetimlər həftədə 1 (`maintenance`).
+  413 (forma > 26 MB) → `__init__.too_large`. Klient: `static/js/pages/offer-upload.js` (önizləmə, əsas et/sil,
+  canvas 2000px, DataTransfer; JS-siz adi forma), `offer-gallery.js` (scroll-snap qalereya, lightbox ESC/geri),
+  `css/pages/offer-images.css`.
 - `monitoring.py` — Sentry yalnız `SENTRY_DSN` ilə; `before_send` forma/cookie/query/başlıqları silir, telefon,
   e-poçt, `/teleb/<token>` maskalanır; `include_local_variables=False`.
 - `__init__.py` — `security_headers` (nosniff, DENY, Referrer-Policy setdefault, proxy-də HSTS), `/robots.txt`.

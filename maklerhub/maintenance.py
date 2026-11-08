@@ -21,7 +21,9 @@ log = logging.getLogger(__name__)
 
 CLEANUP_EVERY = timedelta(hours=1)
 EXPIRE_EVERY = timedelta(minutes=1)
+ORPHAN_EVERY = timedelta(days=7)
 CLEANUP_KEY, CLEANUP_STATS_KEY, EXPIRE_KEY = "last_cleanup_at", "last_cleanup_stats", "last_expire_at"
+ORPHAN_KEY = "last_orphan_images_at"
 
 # (cədvəl, açıqlama, WHERE, gün) — gün: bundan köhnə sətirlər silinir
 RULES = (
@@ -104,6 +106,25 @@ def cleanup_if_due(con):
     return run_cleanup(con)
 
 
+def orphans_if_due(con):
+    """Həftədə 1 dəfə: bazada olmayan (24 saatdan köhnə) Cloudinary şəkillərini silir. Qaytarır: say və ya None."""
+    from . import images
+    if not images.configured():
+        return None
+    if not claim(con, ORPHAN_KEY, ORPHAN_EVERY):
+        con.rollback()
+        return None
+    con.commit()
+    n = images.delete_orphans(con, _utcnow())
+    con.commit()
+    return n
+
+
+def _utcnow():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _background_cleanup(app):
     """Cavab göndəriləndən sonra (call_on_close). Ayrı bağlantı; heç bir xəta yuxarı qalxmır."""
     from . import db as dbmod
@@ -115,6 +136,8 @@ def _background_cleanup(app):
                 counts = cleanup_if_due(con)
                 if counts is not None and sum(counts.values()):
                     log.info("Avtomatik təmizlik: %s", counts)
+                if counts is not None:  # saatlıq iş işlədisə, həftəlik yetim şəkil yoxlamasına da bax
+                    orphans_if_due(con)
             except Exception as exc:
                 try:
                     con.rollback()
@@ -155,6 +178,10 @@ def lazy_expire(db):
     from .teleb import expire_requests
     if not claim(db, EXPIRE_KEY, EXPIRE_EVERY):
         return False  # heç nə yazılmayıb (WHERE ödənmədi) — rollback lazım deyil
-    expire_requests(db)
+    public_ids = expire_requests(db)
     db.commit()
+    if public_ids:  # anonimləşdirilən tələblərin şəkilləri — commit-dən sonra Cloudinary-dən
+        from .images import destroy
+        if not destroy(public_ids, db):
+            db.commit()
     return True

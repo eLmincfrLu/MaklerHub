@@ -27,7 +27,7 @@ MaklerHub axını tərsinə çevirir:
 1. **Müştəri** qeydiyyatsız, 1 dəqiqəlik forma ilə tələbini yazır: kirayə/alış, 1–3 rayon, otaq sayı, büdcə,
    təcililik. Ona gizli link verilir — "Mənim tələbim" səhifəsi.
 2. **Maklerlər** kabinetdə öz xidmət sahələrinə uyğun tələbləri uyğunluq faizi ilə görür və konkret evi təklif
-   edir (başlıq, qiymət, rayon, otaq, sahə, şəkil, təsvir). Bir tələbə ən çox 5 təklif gəlir.
+   edir (başlıq, qiymət, rayon, otaq, sahə, 1–5 şəkil, təsvir). Bir tələbə ən çox 5 təklif gəlir.
 3. **Müştəri** təklifləri öz səhifəsində müqayisə edir: "Maraqlıdır" və ya "Maraqlı deyil".
 4. Qəbul olunan təklifin **maklerinə müştərinin adı və nömrəsi açılır** (zəng və WhatsApp linki). Digər
    maklerlər nömrəni heç vaxt görmür.
@@ -78,6 +78,11 @@ sequenceDiagram
   lisenziyanı uzat), lisenziya kodları, şikayətlər, sistem loqları, avtomatik təmizlik.
 - **Məxfilik** — bağlanan/bitən tələbin adı, nömrəsi, qeydi və IP-si 90 gün sonra silinir; köhnə bildiriş, loq,
   giriş cəhdi və sessiyalar saatda bir dəfə avtomatik təmizlənir (pulsuz Neon yaddaşı üçün də).
+- **Şəkil yükləmə** — makler təklifə 1–5 şəkil yükləyir (telefonun kamerası/qalereyası işləyir). Brauzer
+  şəkli əvvəlcə 2000px-ə kiçildir; server isə formatı fayl adına yox, məzmuna görə yoxlayır (Pillow, yalnız
+  JPEG/PNG/WEBP, 200–10000 px, decompression bomb qoruması), EXIF/GPS-i silir, 1600px-ə kiçildib Cloudinary-ə
+  imzalı yükləyir. Hamısı yüklənməsə heç biri qalmır; tələb/demo silinəndə şəkillər Cloudinary-dən də silinir,
+  həftədə bir "yetim" şəkillər təmizlənir. Müştəri səhifəsində sürüşdürülən qalereya və tam ekran baxış.
 - **Demo rejimi** — `is_demo` bayrağı ilə tam izolyasiya; `flask --app run seed-demo` bir əmrlə hazırlayır.
 
 ## Ekran görüntüləri
@@ -103,6 +108,7 @@ Bütün şəkillər demo məlumatla çəkilib (adlar uydurmadır, telefonlar `+9
   Neon yata bilsin). Kiçik uyğunlaşdırıcı qat (`db.py`) `?` parametrlərini və sqlite üslubunu saxlayır.
 - **Frontend:** server tərəfində Jinja şablonları, saf CSS/JS (framework yoxdur), mobil-əvvəl.
 - **Hostinq:** Render (pulsuz web service) + Cloudflare.
+- **Şəkillər:** Cloudinary (saxlama + CDN, `f_auto,q_auto` çatdırma), Pillow (yoxlama və emal).
 - **Monitorinq:** Sentry (yalnız `SENTRY_DSN` varsa; şəxsi məlumat göndərilmir), UptimeRobot.
 - **Testlər:** pytest, ayrıca test bazasında (real bazaya qoşulmağa qoruyucu var).
 
@@ -126,6 +132,7 @@ erDiagram
     users ||--o{ offers : "göndərir"
     customer_requests ||--o{ offers : "alır"
     offers ||--o| contacts : "qəbulda"
+    offers ||--o{ offer_images : "şəkillər"
     customer_requests ||--o{ notifications : "müştəriyə"
     users ||--o{ notifications : "maklerə"
     customer_requests ||--o{ complaints : "şikayət"
@@ -164,6 +171,12 @@ erDiagram
         text title
         int price
         text status "sent, accepted, rejected, withdrawn"
+    }
+    offer_images {
+        int offer_id
+        text public_id "Cloudinary"
+        text url
+        int sort "0 = əsas"
     }
     contacts {
         int offer_id "UNIQUE"
@@ -217,6 +230,7 @@ Windows-da konsol üçün `PYTHONIOENCODING=utf-8` tövsiyə olunur.
 | `MAKLERHUB_SECURE_COOKIES` | canlıda `1` | Cookie-lər yalnız https ilə |
 | `MAKLERHUB_DEMO_PASSWORD` | yox | Demo maklerlərin şifrəsi (defolt `Demo12345`) |
 | `SENTRY_DSN` | yox | Varsa xətalar Sentry-yə gedir (şəxsi məlumatsız); yoxdursa monitorinq söndürülüb |
+| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | şəkillər üçün | Cloudinary hesabı (pulsuz plan kifayətdir). Yoxdursa təklif şəkilsiz göndərilir |
 
 ### Testlər
 
@@ -227,7 +241,7 @@ PYTHONIOENCODING=utf-8 python -m pytest tests -q -p no:cacheprovider
 Testlər YALNIZ `TEST_DATABASE_URL` bazasında işləyir və hər sessiyanın əvvəlində onu sıfırlayır;
 `TEST_DATABASE_URL` yoxdursa və ya real baza ilə eyni host-dadırsa pytest dərhal dayanır.
 Əhatə: uyğunluq balı, tələb forması və limitlər, təklif/qəbul axını və nömrənin açılması, yarış vəziyyətləri,
-admin panel, IP həlli, təmizlik, demo izolyasiyası, təhlükəsizlik başlıqları (~70 test, ~11 dəqiqə — uzaq baza).
+admin panel, IP həlli, təmizlik, demo izolyasiyası, təhlükəsizlik başlıqları (~100 test, ~15 dəqiqə — uzaq baza; Cloudinary testlərdə mock olunur, şəbəkəyə getmir).
 
 ## Monitorinq
 
@@ -244,4 +258,4 @@ admin panel, IP həlli, təmizlik, demo izolyasiyası, təhlükəsizlik başlıq
 - Müştəri nömrəsinin SMS kodu ilə təsdiqi.
 - WhatsApp / Telegram bildirişləri (yeni təklif — müştəriyə, yeni uyğun tələb — maklerə).
 - Lisenziya üçün onlayn ödəniş.
-- Təklifə şəkil yükləmə (indi yalnız https link).
+- Makler profilində portfolio (əvvəlki evlərin şəkilləri), şəkillərin sonradan redaktəsi.

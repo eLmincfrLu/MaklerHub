@@ -118,10 +118,9 @@ def test_offer_rejected_for_closed_expired_license_and_http(db, make_makler, mak
     db.commit()
     assert send(client, expired).status_code == 400
     ok_req, _ = make_request()
-    r = send(client, ok_req, image_url="http://example.com/ev.jpg")
-    assert r.status_code == 400 and "https://" in r.get_data(as_text=True)
+    # şəkil linki sahəsi formadan çıxarılıb (şəkillər Cloudinary-ə yüklənir) — test_images.py
     for bad in ({"title": ""}, {"title": "x" * 81}, {"price": "abc"}, {"district": "Saxta"}, {"rooms": "9"},
-                {"description": "x" * 501}, {"image_url": "https://" + "a" * 500 + ".az"}):
+                {"description": "x" * 501}):
         assert send(client, ok_req, **bad).status_code == 400
     assert db.execute("SELECT COUNT(*) FROM offers WHERE agent_id = ?", (uid,)).fetchone()[0] == 0
 
@@ -169,6 +168,10 @@ def test_customer_page_shows_offers_not_withdrawn(app, db, make_makler, make_req
     assert send(b, rid, title="Geri çəkilən təklif B").status_code == 302
     oid = db.execute("SELECT id FROM offers WHERE agent_id = ?", (uid_b,)).fetchone()[0]
     b.post(f"/kabinet/teklif/{oid}/geri-cek", data={"csrf_token": csrf(b, f"/kabinet/teleb/{rid}")})
+    # formada link sahəsi artıq yoxdur; köhnə (image_url-li) təklifin göstərilməsi yoxlanır
+    db.execute("UPDATE offers SET image_url = 'https://example.com/ev.jpg' WHERE request_id = ? AND agent_id != ?",
+               (rid, uid_b))
+    db.commit()
     r = app.test_client().get(f"/teleb/{token}")
     html = r.get_data(as_text=True)
     assert "Görünən təklif A" in html and "Geri çəkilən təklif B" not in html

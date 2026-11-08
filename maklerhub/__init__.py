@@ -109,6 +109,18 @@ def create_app(overrides=None):
                                text="Bu səhifə mövcud deyil və ya köçürülüb. Ev axtarırsınızsa, tələbinizi yazın — "
                                     "maklerlər sizə uyğun təklif göndərsin."), 404
 
+    @app.errorhandler(413)
+    def too_large(_e):
+        """Forma 26 MB-dan böyükdür. Gövdə oxunmadığı üçün dəyərləri qaytarmaq olmur — aydın mesaj."""
+        from flask import flash, redirect, request
+        msg = ("Şəkillər birlikdə çox böyükdür (forma 26 MB-dan çox). Daha az və ya kiçik şəkil seçib "
+               "yenidən göndərin — forma sahələrini yenidən doldurmaq lazım ola bilər.")
+        parts = request.path.strip("/").split("/")
+        if len(parts) == 4 and parts[:2] == ["kabinet", "teleb"] and parts[2].isdigit() and parts[3] == "teklif":
+            flash(msg, "err")
+            return redirect(f"/kabinet/teleb/{parts[2]}"), 303
+        return render_template("error.html", code=413, title="Fayl çox böyükdür", text=msg), 413
+
     @app.errorhandler(500)
     def server_error(_e):
         return render_template("error.html", code=500, title="Xəta baş verdi", teleb_link=True,

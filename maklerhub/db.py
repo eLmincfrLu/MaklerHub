@@ -86,7 +86,7 @@ def _row_factory(cursor):
 
 # id sütunu olan cədvəllər (INSERT-dən sonra cur.lastrowid üçün RETURNING id əlavə olunur)
 _ID_TABLES = {"users", "licenses", "devices", "sessions", "login_attempts", "logs", "agent_areas",
-              "customer_requests", "offers", "contacts", "notifications", "complaints"}
+              "customer_requests", "offers", "contacts", "notifications", "complaints", "offer_images"}
 _INSERT_RE = re.compile(r"^\s*INSERT\s+(OR\s+IGNORE\s+)?INTO\s+(\w+)", re.I)
 
 

@@ -2,6 +2,7 @@
 {% set page_css = 'admin-v2.css' %}
 {% block title %}Admin · Tələb #{{ x.r.id }}{% endblock %}
 {% block shell %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/offer-images.css') }}">
   <main>
     <a class="back" href="{{ url_for('admin.telebler') }}">← Tələblər</a>
     <div class="head reveal" style="animation-delay:.05s">
@@ -44,7 +45,7 @@
         <thead><tr><th>#</th><th>Təklif</th><th>Makler</th><th>Status</th><th>Kontakt</th><th>Vaxt</th></tr></thead>
         <tbody>
         {%- for o in offers %}
-          <tr><td>{{ o.id }}</td><td><div class="mname">{{ o.title }}</div><div class="msub">{{ '{:,}'.format(o.price) if o.price else '—' }} · {{ o.district or '—' }}{% if o.image_url %} · <a href="{{ o.image_url }}" target="_blank" rel="noopener noreferrer">şəkil</a>{% endif %}</div></td>
+          <tr><td>{{ o.id }}</td><td><div class="mname">{{ o.title }}</div><div class="msub">{{ '{:,}'.format(o.price) if o.price else '—' }} · {{ o.district or '—' }}{% if o.image_url %} · <a href="{{ o.image_url }}" target="_blank" rel="noopener noreferrer">şəkil</a>{% endif %}</div>{% if pics.get(o.id) %}<div class="oi-thumbs small">{% for im in pics[o.id] %}<a href="{{ im.full }}" target="_blank" rel="noopener noreferrer"><img src="{{ im.thumb }}" width="200" height="200" loading="lazy" referrerpolicy="no-referrer" alt=""></a>{% endfor %}</div>{% endif %}</td>
           <td><div class="mname">{{ full_name(o) }}</div><div class="msub">{{ o.email }} · {{ phone_display(o.agent_phone) }}</div></td>
           <td>{{ offer_status.get(o.status, o.status) }}</td><td>{{ 'açılıb' if o.has_contact else '—' }}</td><td>{{ rel(o.created_at) }}</td></tr>
         {%- else %}

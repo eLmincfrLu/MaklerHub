@@ -21,7 +21,7 @@
   <div class="list">
     {%- for it in items %}
     <a class="card ocard{% if it.o.status != 'sent' and it.o.status != 'accepted' %} mid{% endif %}" href="{{ url_for('makler.teleb_detal', rid=it.o.request_id) }}" style="animation-delay:{{ '%.2f'|format(0.14 + loop.index0 * 0.04) }}s">
-      {% if it.o.image_url %}<img class="othumb" src="{{ it.o.image_url }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.removeAttribute('src')">{% else %}<div class="othumb"></div>{% endif %}
+      {% if it.thumb %}<img class="othumb" src="{{ it.thumb }}" width="200" height="200" loading="lazy" referrerpolicy="no-referrer" alt="">{% elif it.o.image_url %}<img class="othumb" src="{{ it.o.image_url }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.removeAttribute('src')">{% else %}<div class="othumb"></div>{% endif %}
       <div class="info">
         <div class="top-row"><div class="title">{{ it.o.title }}</div></div>
         <div class="meta">{{ it.price }} · {{ it.o.district or '—' }} · {{ it.rooms }} otaq · {{ it.when }}</div>

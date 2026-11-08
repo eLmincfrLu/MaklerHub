@@ -3,6 +3,7 @@
 {% macro contact_box(c) %}<div class="contactbox"><b>Müştəri ilə əlaqə</b>{{ c.name }} · <a href="tel:{{ c.tel }}">{{ c.phone }}</a>{% if c.wa %} · <a href="{{ c.wa }}" target="_blank" rel="noopener noreferrer">WhatsApp</a>{% endif %}</div>{% endmacro %}
 {% block title %}Tələb #{{ req.id }}{% endblock %}
 {% block main %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/offer-images.css') }}">
   <a class="back" href="{{ url_for('makler.kabinet') }}">← Tələblər</a>
   <div class="head reveal" style="animation-delay:.05s">
     <h1>{{ req.deal }} · {{ req.rooms }} otaq</h1>
@@ -40,7 +41,9 @@
       {% if mine %}
       <h2>Sizin təklifiniz <span class="tag st-{{ mine.status }}">{{ my_label }}</span></h2>
       {% if contact %}{{ contact_box(contact) }}{% elif mine.status == 'accepted' %}<div class="closed">Müştəri təklifi qəbul edib, amma əlaqə məlumatı artıq mövcud deyil.</div>{% endif %}
-      {% if mine.image_url %}<img class="ofr-img" src="{{ mine.image_url }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.outerHTML='<div class=&quot;ofr-ph&quot;>Şəkil yüklənmədi</div>'">{% else %}<div class="ofr-ph">Şəkil yoxdur</div>{% endif %}
+      {% if my_images %}
+      <div class="oi-thumbs">{% for im in my_images %}<a href="{{ im.full }}" target="_blank" rel="noopener noreferrer"><img src="{{ im.thumb }}" width="200" height="200" loading="lazy" referrerpolicy="no-referrer" alt=""></a>{% endfor %}</div>
+      {% elif mine.image_url %}<img class="ofr-img" src="{{ mine.image_url }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.outerHTML='<div class=&quot;ofr-ph&quot;>Şəkil yüklənmədi</div>'">{% else %}<div class="ofr-ph">Şəkil yoxdur</div>{% endif %}
       <div class="rows">
         <div class="row"><span>Başlıq</span><span>{{ mine.title }}</span></div>
         <div class="row"><span>Qiymət</span><span>{{ '{:,}'.format(mine.price) if mine.price else '—' }} {{ 'AZN/ay' if req.deal_type == 'rent' else 'AZN' }}</span></div>
@@ -69,7 +72,7 @@
 
       {% else %}
       <h2>Təklif göndər</h2>
-      <form method="post" action="{{ url_for('makler.teklif_gonder', rid=req.id) }}" novalidate>
+      <form method="post" action="{{ url_for('makler.teklif_gonder', rid=req.id) }}" enctype="multipart/form-data" novalidate id="offerForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mh-field"><label for="title">Başlıq</label><input id="title" name="title" maxlength="{{ title_max }}" value="{{ form.title }}" placeholder="Məs.: Təmirli 2 otaqlı, metroya 5 dəq" required></div>
         <div class="mh-two">
@@ -80,11 +83,15 @@
           <div class="mh-field"><label for="district">Rayon</label><select id="district" name="district"><option value="">Seçin</option>{% for d in districts %}<option{% if form.district == d %} selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
           <div class="mh-field"><label for="rooms">Otaq sayı</label><select id="rooms" name="rooms"><option value="">Seçin</option>{% for n, l in rooms.items() %}<option value="{{ n }}"{% if form.rooms == n|string %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
         </div>
-        <div class="mh-field"><label for="image_url">Şəkil linki <span style="color:#B7AE93">(istəyə bağlı, yalnız https://)</span></label><input id="image_url" name="image_url" type="url" maxlength="{{ url_max }}" value="{{ form.image_url }}" placeholder="https://..." data-exts="{{ image_exts|join(',') }}">
-          <div class="mh-hint">Şəklin birbaşa linki (şəklin üstündə sağ klik → “Şəkil ünvanını kopyala”). Bəzi saytlar (məs. Tap.az) başqa saytda şəkil göstərməyə icazə vermir.</div>
-          <div class="imgwarn" id="imgWarn" hidden>Link .jpg, .jpeg, .png və ya .webp ilə bitmir — bu, şəklin özü olmaya bilər. Göndərmək olar, amma şəkil görünməyə bilər.</div></div>
+        <div class="mh-field"><label for="images">Şəkillər <span style="color:#B7AE93">(1–{{ max_images }}, JPEG/PNG/WEBP, hərəsi {{ max_mb }} MB-dək)</span></label>
+          {% if upload_ready %}
+          <input id="images" name="images" type="file" multiple accept="image/jpeg,image/png,image/webp" data-max="{{ max_images }}" data-max-mb="{{ max_mb }}">
+          <div class="mh-hint">Ən azı 1 şəkil tövsiyə olunur — şəkilli təkliflər daha çox qəbul olunur. Birinci şəkil əsas şəkildir.</div>
+          <div class="oi-preview" id="imgPreview" hidden></div>
+          {% else %}<div class="mh-hint">Şəkil yükləmə hazırda işləmir — təklifi şəkilsiz göndərə bilərsiniz.</div>{% endif %}
+        </div>
         <div class="mh-field"><label for="description">Təsvir <span style="color:#B7AE93">(max {{ desc_max }})</span></label><textarea id="description" name="description" maxlength="{{ desc_max }}" rows="4">{{ form.description }}</textarea></div>
-        <button class="mh-btn" type="submit">Təklifi göndər</button>
+        <button class="mh-btn" type="submit" id="offerSubmit">Təklifi göndər</button>
         <p class="muted">Bir tələbə yalnız bir dəfə təklif göndərmək olar. Müştəri qəbul edəndə nömrəsi sizə açılacaq.</p>
       </form>
       {% endif %}
@@ -105,4 +112,4 @@
     </div>
   </div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/pages/makler-teklif.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/offer-upload.js') }}"></script>{% endblock %}

@@ -48,6 +48,53 @@ def app():
         dbmod._pool = None
 
 
+class FakeCloud:
+    """Cloudinary əvəzi: şəbəkəyə getmir, yükləmə/silmə çağırışlarını yadda saxlayır."""
+
+    def __init__(self):
+        self.uploaded, self.deleted, self.listing = [], [], []
+        self.fail_on = None      # n-ci yükləmə xəta versin
+        self.on_upload = None    # yükləmə zamanı çağırılan funksiya (yarış vəziyyəti üçün)
+
+    def upload(self, data, folder, public_id):
+        from io import BytesIO
+        from PIL import Image
+        n = len(self.uploaded) + 1
+        if self.fail_on == n:
+            raise RuntimeError("cloud down")
+        if self.on_upload:
+            self.on_upload(n)
+        pid = f"{folder}/{public_id}"
+        self.uploaded.append((pid, data))
+        with Image.open(BytesIO(data)) as im:
+            w, h = im.size
+        return {"public_id": pid, "url": f"https://res.cloudinary.com/test/image/upload/v1/{pid}.jpg", "width": w,
+                "height": h, "bytes": len(data)}
+
+    def delete(self, ids):
+        self.deleted.extend(ids)
+
+    def list(self, prefix, cursor=None):
+        return [x for x in self.listing if x["public_id"].startswith(prefix)], None
+
+
+@pytest.fixture(autouse=True)
+def cloud(monkeypatch):
+    """BÜTÜN testlərdə Cloudinary mock olunur (heç bir test şəbəkəyə getmir)."""
+    from maklerhub import images
+    fake = FakeCloud()
+    for k in ("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"):
+        monkeypatch.setenv(k, "pytest-saxta")
+    monkeypatch.setattr(images, "_upload", fake.upload)
+    monkeypatch.setattr(images, "_delete", fake.delete)
+    monkeypatch.setattr(images, "_list", fake.list)
+
+    def no_network():
+        raise AssertionError("testdə real Cloudinary SDK çağırıldı")
+    monkeypatch.setattr(images, "_sdk", no_network)
+    return fake
+
+
 @pytest.fixture(autouse=True)
 def fresh_throttle(request):
     """Hər test lazy yeniləmələrin (dəqiqədə 1 dəfə) məhdudiyyətindən təmiz başlasın."""
