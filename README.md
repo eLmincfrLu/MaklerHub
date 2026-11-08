@@ -1,3 +1,5 @@
+<p align="center"><img src="maklerhub/static/img/logo-big.png" width="160" alt="MaklerHub"></p>
+
 # MaklerHub
 
 **Siz ev axtarmırsınız — maklerlər sizin üçün axtarır.**

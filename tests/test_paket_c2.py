@@ -102,7 +102,7 @@ def test_first_offer_sends_one_mail_without_personal_data(app, db, mail, make_ma
     for secret in ("Rəşad", "Məmmədov", "501234567", "705550099", "Aysel", "+994"):
         assert secret not in body, secret
     assert msg["headers"]["List-Unsubscribe"].endswith(f"/teleb/{token}/email-dayandir>")
-    assert "/static/img/logo.png" in msg["htmlContent"]
+    assert "/static/img/logo-big-192.png" in msg["htmlContent"]
 
 
 def test_second_offer_within_hour_waits_then_summary(app, db, mail, make_makler, make_request):
@@ -408,7 +408,7 @@ def test_mail_links_use_base_url_env(app, db, mail, monkeypatch, make_makler, ma
         links = links_in(msg)
         assert links and all(u.startswith(RENDER + "/") for u in links), links
         assert "localhost" not in msg["htmlContent"] + msg["textContent"]
-        assert f'src="{RENDER}/static/img/logo.png"' in msg["htmlContent"]
+        assert f'src="{RENDER}/static/img/logo-big-192.png"' in msg["htmlContent"]
     offer = msgs[0]
     assert f"{RENDER}/teleb/{token}" in offer["textContent"]
     assert offer["headers"]["List-Unsubscribe"] == f"<{RENDER}/teleb/{token}/email-dayandir>"
@@ -427,6 +427,6 @@ def test_mail_base_url_falls_back_to_request_host(app, db, mail, make_makler, ma
     send(m, rid)
     msg = mail.to("ehtiyat@gmail.com")[0]
     assert all(u.startswith("http://localhost/") for u in links_in(msg))
-    assert 'src="http://localhost/static/img/logo.png"' in msg["htmlContent"]
+    assert 'src="http://localhost/static/img/logo-big-192.png"' in msg["htmlContent"]
     with app.test_request_context("/", base_url="https://example.az"):
         assert mailer.base_url() == "https://example.az"

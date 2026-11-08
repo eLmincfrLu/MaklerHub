@@ -85,6 +85,20 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   api-key` açarları və BREVO_API_KEY dəyəri maskalanır. pytest: `tests/test_paket_c2.py`.
   DİQQƏT: lokal serveri test bazası ilə işə salanda `BREVO_API_KEY=""` ver — yoxsa hook pytest-in yaratdığı
   ünvanlara REAL məktub göndərə bilər (`load_dotenv` mövcud dəyişəni əvəz etmir).
+- Paket D1-2 (9 noyabr): `static/css/ui.css` — BÜTÜN base şablonlara (landing, auth/giris, auth/qeydiyyat,
+  teleb/_layout, makler/base, admin/base, error) `</head>`-dən əvvəl SONUNCU qoşulur, köhnə stilləri üstələyir.
+  Komponentlər: `.btn-primary` (qızılı), `.btn-secondary` (haşiyəli), `.btn-ghost:not(.btn)` (mətn link; landing-dəki
+  `.btn.btn-ghost` ayrıca qalır), ≥44px, radius 4px; köhnə qara düymələr (`.em-btn`, `.go`, `.lk-copy`, `.dlg-act .pri`)
+  primary-yə, aktiv `.fchip`/`.pager span.on`/`.tabs button.active` qızılı haşiyə + `#FBF4DE`. Input/select vahid
+  (açıq: krem fon; admin `.shell` içində tünd variant), select öz SVG oxu ilə, `.input-line` alt xətt → qutu.
+  `.note` (və `.privacy`, `.contactbox`) — krem + sol qızılı xətt (yaşıl yalnız kiçik uğur nişanlarında). Auth/tələb
+  sol paneli: `hero-login.jpg` / `.ph-register` → `hero-register.jpg`, tünd gradient, masaüstündə sticky + ortada
+  `logo-big-320.png` (`.showcase::before`); auth-bg.jpg artıq istifadə olunmur (silinməyib). Ana səhifə hero:
+  soldan sağa gradient, eyebrow `#F1E2B8` (kontrast ≥4.5). Admin ≤640px: nav üfüqi scroll + mask, cədvəllər
+  kart (`td[data-label]`, şablonlarda), `.ui-link` qızılı link. Loqo: başlıqlarda `logo-mark-96.png` (ölçü köhnə),
+  favicon `favicon.ico`/`favicon-32/48.png`, `apple-touch-icon` və `icon-192` logo-mark-dan, `icon-512` logo-big-dən,
+  maskable `icon-512-maskable.png` (80% zona); e-poçt başlığı `logo-big-192.png` (96px). Mənbə: `logo-mark.png`,
+  `logo-big.png` (1024px).
 - Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
 
 ## Qaydalar (pozma)
@@ -92,6 +106,8 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   (`static/css/pages/`, `static/js/pages/`), mövcud CSS-i `@import` edib dəyişənləri/sinifləri istifadə et.
   İSTİSNA (Gün 5, istifadəçinin icazəsi ilə): `static/js/app.js`-də yalnız bildiriş zənginin boş mətni dəyişdirilib
   ("Hələ bildiriş yoxdur. Yeni uyğun tələb gələndə burada görünəcək."); başqa heç nə.
+  İSTİSNA (Paket D, istifadəçinin icazəsi ilə): `img/apple-touch-icon.png`, `icon-192.png`, `icon-512.png` yeni
+  loqodan yenidən yaradılıb; base şablonlara favicon linkləri + `css/ui.css` əlavə olunub.
 - `templates/*/base.html`, `auth/_logo.html`, naviqasiya və ümumi layout saxlanılır (`makler/base.html`-ə yalnız
   `css/pages/makler-mobile.css` linki əlavə olunub — 375px-də ad ellipsis). Köhnə placeholder marşrut və şablonları
   (elanlar, axtarislar, musteriler, analitika, admin menbe, `_detail`, `_elan_cards`) Gün 5-də silindi; onların

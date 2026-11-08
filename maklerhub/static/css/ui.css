@@ -1,0 +1,274 @@
+/* MaklerHub — vahid UI komponentləri (Paket D1-2).
+   Bütün base şablonlara SONUNCU qoşulur və köhnə stilləri üstələyir. Köhnə CSS fayllarına toxunulmur.
+   Rənglər mövcud palitradandır: tünd göy #101820/#101A2B, qızılı #C9A227 / #8C733C, krem #F6F1E4 / #FFFDF8. */
+
+:root{
+  --ui-gold:#C9A227;
+  --ui-gold-dim:#8C733C;
+  --ui-gold-soft:#FBF4DE;
+  --ui-on-gold:#201803;
+  --ui-navy:#101A2B;
+  --ui-ink:#1B2430;
+  --ui-line:#E4DCC8;
+  --ui-cream:#F6F1E4;
+  --ui-panel:#FFFDF8;
+  --ui-muted:#6B6455;
+  --ui-r:4px;
+  --ui-h:44px;
+  --ui-focus:0 0 0 3px rgba(201,162,39,.28);
+  --ui-chevron:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238C733C' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --ui-chevron-dark:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23C9A227' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* =====================================================================
+   1. DÜYMƏLƏR — .btn-primary / .btn-secondary / .btn-ghost
+   Köhnə qara düymələr (.em-btn, .go, .lk-copy, .dlg-act .pri) primary-yə keçir.
+   ===================================================================== */
+.btn-primary,
+.em-btn, .go, .fbar .go, .lk-copy, .dlg-act .pri{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:var(--ui-h);padding:0 20px;border:1px solid var(--ui-gold);border-radius:var(--ui-r);
+  background:var(--ui-gold);color:var(--ui-on-gold);
+  font-family:var(--font-b,'IBM Plex Sans',Arial,sans-serif);font-size:.88rem;font-weight:600;line-height:1.2;
+  text-decoration:none;cursor:pointer;white-space:nowrap;
+  transition:background .2s ease,border-color .2s ease,box-shadow .2s ease,transform .2s ease;}
+.btn-primary:hover,
+.em-btn:hover, .go:hover, .fbar .go:hover, .lk-copy:hover, .dlg-act .pri:hover{
+  background:var(--ui-gold);border-color:var(--ui-gold);color:var(--ui-on-gold);filter:brightness(1.06);box-shadow:0 8px 20px rgba(201,162,39,.3);}
+.lk-copy.done{background:var(--ui-gold-soft);border-color:var(--ui-gold);}
+.lk-copy .lk-copy-ok{color:var(--ui-on-gold);}
+
+.btn-secondary,
+.em-ghost, .mh-btn.ghost, .abtn.ghost{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:var(--ui-h);padding:0 18px;border:1px solid var(--ui-gold-dim);border-radius:var(--ui-r);
+  background:transparent;color:var(--ui-navy);
+  font-family:var(--font-b,'IBM Plex Sans',Arial,sans-serif);font-size:.88rem;font-weight:600;line-height:1.2;
+  text-decoration:none;cursor:pointer;white-space:nowrap;transition:background .2s ease,border-color .2s ease,color .2s ease;}
+.btn-secondary:hover,
+.em-ghost:hover, .mh-btn.ghost:hover, .abtn.ghost:hover{background:var(--ui-gold-soft);border-color:var(--ui-gold);color:var(--ui-navy);box-shadow:none;}
+
+/* .btn-ghost — mətn link düyməsi. Ana səhifənin hero-dakı ".btn.btn-ghost" (ağ haşiyəli) ayrıca qalır. */
+.btn-ghost:not(.btn){
+  display:inline-flex;align-items:center;gap:6px;min-height:var(--ui-h);padding:0 6px;border:0;background:none;
+  color:var(--ui-gold-dim);font-family:var(--font-b,'IBM Plex Sans',Arial,sans-serif);font-size:.88rem;font-weight:600;
+  text-decoration:underline;text-decoration-color:rgba(140,115,60,.35);text-underline-offset:3px;cursor:pointer;}
+.btn-ghost:not(.btn):hover{color:var(--ui-navy);text-decoration-color:currentColor;}
+
+/* mövcud qızılı düymələr: eyni hündürlük və radius */
+.btn, .mh-btn, .abtn, .mhc-btn{min-height:var(--ui-h);border-radius:var(--ui-r);}
+.abtn{display:inline-flex;align-items:center;justify-content:center;}
+
+/* fokus / deaktiv — bütün düymələr */
+:is(.btn,.btn-primary,.btn-secondary,.btn-ghost,.mh-btn,.abtn,.em-btn,.em-ghost,.go,.lk-copy,.lk-b,.dlg-act a,.dlg-act button,.fchip,.sbtn,.mhc-btn):focus-visible{
+  outline:2px solid var(--ui-gold);outline-offset:2px;box-shadow:var(--ui-focus);}
+:is(.btn,.btn-primary,.btn-secondary,.btn-ghost,.mh-btn,.abtn,.em-btn,.em-ghost,.go,.lk-copy):disabled,
+:is(.btn-primary,.btn-secondary,.btn-ghost)[aria-disabled="true"]{
+  opacity:.55;cursor:not-allowed;transform:none!important;box-shadow:none!important;}
+
+/* aktiv filtr çipi (kabinet, Təkliflərim): qara → qızılı haşiyə + yüngül qızılı fon */
+body > main .fchip{min-height:36px;display:inline-flex;align-items:center;border-radius:20px;}
+body > main .fchip.active{background:var(--ui-gold-soft);border-color:var(--ui-gold);color:var(--ui-navy);font-weight:600;
+  box-shadow:inset 0 0 0 1px var(--ui-gold);}
+/* digər qara aktiv vəziyyətlər (makler tərəfi) */
+.pager span.on{background:var(--ui-gold-soft);border-color:var(--ui-gold);color:var(--ui-navy);font-weight:600;}
+.tabs button.active{background:var(--ui-gold-soft);color:var(--ui-navy);box-shadow:inset 3px 0 0 var(--ui-gold);}
+@media(max-width:800px){.tabs button.active{box-shadow:inset 0 -2px 0 var(--ui-gold);}}
+
+/* e-poçt bloku (/teleb/<token>): düymə input ilə eyni hündürlükdə */
+.em-row{align-items:stretch;}
+@media(max-width:560px){.em-btn{width:100%;}}
+
+/* =====================================================================
+   2-3. INPUT və SELECT — açıq tema (auth, /teleb, kabinet, ayarlar)
+   ===================================================================== */
+.fbar select, .fbar input,
+.mh-field input, .mh-field select, .mh-field textarea,
+.em-row input, .linkrow input,
+details select, details textarea,
+.ui-input,
+body > main input[type=text], body > main input[type=email], body > main input[type=tel],
+body > main input[type=password], body > main input[type=number], body > main input[type=search],
+body > main input[type=url], body > main select, body > main textarea{
+  min-height:var(--ui-h);padding:10px 14px;border:1px solid var(--ui-line);border-radius:var(--ui-r);
+  background-color:var(--ui-panel);color:var(--ui-ink);font-family:var(--font-b,'IBM Plex Sans',Arial,sans-serif);
+  font-size:.92rem;line-height:1.3;outline:none;transition:border-color .2s ease,box-shadow .2s ease;}
+body > main textarea, .mh-field textarea, details textarea{min-height:88px;}
+:is(.fbar select,.fbar input,.mh-field input,.mh-field select,.mh-field textarea,.em-row input,.linkrow input,
+    details select,details textarea,.ui-input,body > main input,body > main select,body > main textarea):focus{
+  outline:none;border-color:var(--ui-gold);box-shadow:var(--ui-focus);}
+:is(.fbar,.mh-field,.em-row,body > main) input::placeholder{color:#A79E83;}
+/* checkbox/radio/fayl və gizli sahələr toxunulmur */
+body > main input:is([type=checkbox],[type=radio],[type=file],[type=hidden]){min-height:0;padding:0;border:0;box-shadow:none;}
+
+/* select: öz ox ikonu */
+.fbar select, .mh-field select, details select, select.ui-input, body > main select{
+  -webkit-appearance:none;appearance:none;padding-right:38px;cursor:pointer;
+  background-image:var(--ui-chevron);background-repeat:no-repeat;background-position:right 14px center;background-size:12px 12px;}
+select::-ms-expand{display:none;}
+
+/* kabinet filtri: sahələr bərabər hündürlükdə */
+.fbar{gap:12px;align-items:flex-end;}
+.fbar label, .fbar .fl-dp{gap:6px;line-height:1.3;}
+body > main .head + .toolbar, body > main .mh-flash + .toolbar{margin-top:6px;}
+.fbar input{width:100px;}
+.fbar .fl-dp{flex:1 1 180px;min-width:0;}
+.fbar .reset{min-height:var(--ui-h);display:inline-flex;align-items:center;color:var(--ui-gold-dim);}
+@media(max-width:700px){.fbar input{width:100%;}.fbar .go{flex:1 1 100%;}}
+
+/* auth və /teleb: alt xəttli sahə → haşiyəli qutu */
+.input-line{min-height:var(--ui-h);padding:0 14px;border:1px solid var(--ui-line);border-radius:var(--ui-r);
+  background:var(--ui-panel);transition:border-color .2s ease,box-shadow .2s ease;}
+.input-line::after{display:none;}
+.input-line:focus-within{border-color:var(--ui-gold);box-shadow:var(--ui-focus);}
+.input-line input{min-height:calc(var(--ui-h) - 2px);padding:0;}
+.input-line:has(textarea){align-items:flex-start;padding:10px 14px;}
+.input-line:has(textarea) svg{margin-top:2px;}
+
+/* district picker sahəsi digər input-larla eyni */
+.dp-field{min-height:var(--ui-h);border-radius:var(--ui-r);}
+.dp-field:focus-within,.dp-field[aria-expanded="true"]{border-color:var(--ui-gold);box-shadow:var(--ui-focus);}
+
+/* =====================================================================
+   2-3. INPUT və SELECT — admin (tünd tema; eyni ölçü, radius, fokus)
+   ===================================================================== */
+.shell .mh-field input, .shell .mh-field select, .shell .mh-field textarea,
+.shell .search input, .shell .qform input, .shell select, .shell textarea,
+.shell input.days, .shell #q{
+  min-height:var(--ui-h);padding:10px 14px;border:1px solid rgba(255,255,255,.14);border-radius:var(--ui-r);
+  background-color:#101923;color:var(--txt,#EDE9DF);font-family:var(--font-b,'IBM Plex Sans',Arial,sans-serif);font-size:.88rem;
+  outline:none;transition:border-color .2s ease,box-shadow .2s ease;}
+.shell .search input{padding-left:34px;}
+.shell input.days{min-height:36px;width:70px;padding:6px 8px;}
+.shell :is(input,select,textarea):focus{outline:none;border-color:var(--ui-gold);box-shadow:var(--ui-focus);}
+.shell select{-webkit-appearance:none;appearance:none;padding-right:38px;cursor:pointer;
+  background-image:var(--ui-chevron-dark);background-repeat:no-repeat;background-position:right 14px center;background-size:12px 12px;}
+.shell select option{background:#101923;color:var(--txt,#EDE9DF);}
+.shell .qform button, .shell .search button{min-height:var(--ui-h);border-radius:var(--ui-r);}
+
+/* =====================================================================
+   4. MƏLUMAT QUTUSU — .note (krem fon + sol qızılı xətt)
+   Yaşıl "Nömrən gizli qalır" və "Müştəri ilə əlaqə" qutuları bununla əvəz olunur.
+   ===================================================================== */
+.note, .privacy, .contactbox{
+  background:var(--ui-panel);border:1px solid var(--ui-line);border-left:3px solid var(--ui-gold);border-radius:var(--ui-r);
+  color:var(--ui-ink);font-size:.86rem;line-height:1.6;padding:14px 16px;}
+.note b, .privacy b, .contactbox b{color:var(--ui-navy);font-weight:600;}
+.note svg, .privacy svg{stroke:var(--ui-gold-dim);}
+.note a, .contactbox a{color:var(--ui-gold-dim);font-weight:600;}
+.note a:hover, .contactbox a:hover{color:var(--ui-navy);}
+.contactrow .contactbox, .card .contactbox{background:var(--ui-cream);}
+
+/* =====================================================================
+   5. SEÇİM DÜYMƏLƏRİ (/teleb: Kirayə/Alış, otaq, "Nə vaxt"; rayon çipləri)
+   ===================================================================== */
+.role span{min-height:var(--ui-h);display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border:1px solid var(--ui-line);border-radius:var(--ui-r);background:var(--ui-panel);color:#5B5540;}
+.role span:hover{border-color:var(--ui-gold-dim);}
+.role input:checked + span, .role.active span{
+  border-color:var(--ui-gold);background:var(--ui-gold-soft);color:var(--ui-navy);font-weight:600;
+  box-shadow:inset 0 0 0 1px var(--ui-gold);}
+.role input:focus-visible + span{box-shadow:inset 0 0 0 1px var(--ui-gold),var(--ui-focus);}
+.chip span{min-height:38px;display:inline-flex;align-items:center;}
+.chip input:checked + span{border-color:var(--ui-gold);box-shadow:inset 0 0 0 1px var(--ui-gold);}
+
+/* =====================================================================
+   6-7. AUTH / TƏLƏB SƏHİFƏLƏRİNİN SOL PANELİ
+   auth-bg.jpg (914×430, içində loqo) əvəzinə Bakı/ev fonu + tünd gradient + kəskin loqo.
+   ===================================================================== */
+.showcase-photo{background-image:url(../img/hero-login.jpg);background-position:center;filter:brightness(.7) saturate(.85);}
+.showcase-photo.ph-register{background-image:url(../img/hero-register.jpg);}
+.showcase-scrim{background:linear-gradient(180deg,rgba(16,26,43,.62) 0%,rgba(16,26,43,.55) 35%,rgba(16,26,43,.78) 70%,rgba(16,26,43,.94) 100%);}
+
+@media (min-width:881px){
+  /* uzun forma səhifələrində panel ekranda qalır, fon uzanmır */
+  .showcase{position:sticky;top:0;height:100vh;height:100dvh;align-self:flex-start;}
+  .s-top{order:0;}
+  .s-body{order:2;}
+  .showcase::before{content:"";order:1;position:relative;z-index:3;align-self:center;flex-shrink:0;
+    width:150px;height:150px;margin:2vh 0;
+    background:url(../img/logo-big-320.png) center/contain no-repeat;
+    filter:drop-shadow(0 12px 28px rgba(0,0,0,.45));}
+}
+@media (min-width:881px) and (max-height:760px){
+  .showcase::before{width:110px;height:110px;}
+}
+@media (min-width:881px) and (max-height:620px){
+  .showcase::before{display:none;}
+}
+@media (max-width:880px){
+  /* mobil zolaq: loqosuz fon, yuxarıdan 55% → aşağı 85% tünd göy */
+  .showcase-photo{filter:brightness(.8) saturate(.85);background-position:center 40%;}
+  .showcase-scrim{background:linear-gradient(180deg,rgba(16,26,43,.55) 0%,rgba(16,26,43,.85) 100%);}
+  .s-body h1{text-shadow:0 1px 3px rgba(0,0,0,.45);}
+  .s-body .eyebrow{text-shadow:0 1px 2px rgba(0,0,0,.6);}
+}
+
+/* başlıq loqosu (logo-mark-96.png, ölçü köhnə kimi) */
+.brand img{object-fit:contain;}
+
+/* =====================================================================
+   8. ANA SƏHİFƏ HERO — soldan sağa tünd gradient + kiçik mətnlərə kölgə
+   ===================================================================== */
+.hero .scrim{background:
+  linear-gradient(90deg,rgba(8,14,20,.70) 0%,rgba(8,14,20,.62) 30%,rgba(8,14,20,.38) 55%,rgba(8,14,20,.10) 100%),
+  linear-gradient(180deg,rgba(8,14,20,.55) 0%,rgba(8,14,20,.15) 30%,rgba(8,14,20,.25) 60%,rgba(8,14,20,.75) 100%);}
+.hero .eyebrow, .hero .content p, .hero .hero-note, .hero .lost-link{text-shadow:0 1px 2px rgba(0,0,0,.6),0 0 14px rgba(0,0,0,.35);}
+.hero .content h1{text-shadow:0 2px 14px rgba(0,0,0,.35);}
+.hero .hero-note{color:rgba(255,255,255,.9);}
+/* qızılı #C9A227 kiçik mətndə fonun üstündə 4.5:1 vermir — eyebrow palitradakı açıq qızılıya (#F1E2B8, h1 italik rəngi) keçir */
+.hero .eyebrow{color:#F1E2B8;}
+.hero .content p{color:#E6EAED;}
+@media (max-width:760px){
+  /* mobildə mətn bütün eni tutur — gradient şaquli və güclü */
+  .hero .scrim{background:
+    linear-gradient(180deg,rgba(8,14,20,.55) 0%,rgba(8,14,20,.66) 22%,rgba(8,14,20,.72) 60%,rgba(8,14,20,.85) 100%);}
+}
+
+/* =====================================================================
+   9. ADMIN MOBİL (≤640px)
+   ===================================================================== */
+@media (max-width:640px){
+  /* üst naviqasiya: üfüqi scroll + sağda solğun kölgə ipucu */
+  .shell .side{position:relative;}
+  .shell .snav{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-right:28px;
+    -webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 36px),transparent 100%);
+            mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 36px),transparent 100%);}
+  .shell .snav::-webkit-scrollbar{display:none;}
+  .shell .snav a{flex-shrink:0;min-height:40px;}
+
+  /* cədvəllər → kartlar (hər sətir bir kart; sütun adı solda, dəyər sağda) */
+  .shell .tablewrap{overflow:visible;background:none;border:0;border-radius:0;}
+  .shell .tablewrap table{min-width:0;width:100%;}
+  .shell .tablewrap thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+  .shell .tablewrap table, .shell .tablewrap tbody, .shell .tablewrap tr, .shell .tablewrap td{display:block;width:100%;}
+  .shell .tablewrap tr{background:var(--navy2,#141F2B);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:6px;
+    margin:0 0 10px;padding:4px 14px;}
+  .shell .tablewrap tr:hover{background:var(--navy2,#141F2B);}
+  /* dəyər sağda adi axınla (bir neçə element bir yerdə qalır), sütun adı solda mütləq mövqedə */
+  .shell .tablewrap td{position:relative;padding:9px 0 9px 38%;min-height:36px;
+    border:0;border-bottom:1px solid rgba(255,255,255,.06);text-align:right;min-width:0;overflow-wrap:anywhere;}
+  .shell .tablewrap td:last-child{border-bottom:0;}
+  .shell .tablewrap td::before{content:attr(data-label);position:absolute;left:0;top:11px;width:36%;text-align:left;
+    font-size:.68rem;letter-spacing:.04em;text-transform:uppercase;color:var(--mut,#8A96A0);}
+  .shell .tablewrap td[data-label=""]::before{display:none;}
+  .shell .tablewrap td[data-label=""]{padding-left:0;}
+  .shell .tablewrap td .mname, .shell .tablewrap td .msub{text-align:right;}
+  .shell .tablewrap .acts{justify-content:flex-end;}
+  /* boş vəziyyət: tam mətn, mərkəzdə */
+  .shell .tablewrap td.mh-empty, .shell .tablewrap td[colspan]{display:block;text-align:center;white-space:normal;
+    padding:26px 8px;border:0;}
+  .shell .tablewrap td.mh-empty::before, .shell .tablewrap td[colspan]::before{display:none;}
+}
+
+/* =====================================================================
+   10. Qızılı link (admin "Demo: N tələb →" və s.)
+   ===================================================================== */
+.ui-link{color:var(--ui-gold);font-weight:600;text-decoration:none;border-bottom:1px solid rgba(201,162,39,.45);
+  transition:color .2s ease,border-color .2s ease;}
+.ui-link:hover{color:#F1E2B8;border-bottom-color:currentColor;}
+.ui-link:focus-visible{outline:2px solid var(--ui-gold);outline-offset:2px;border-radius:2px;}
+
+@media (prefers-reduced-motion:reduce){
+  .btn-primary,.btn-secondary,.em-btn,.go,.lk-copy,.input-line{transition:none;}
+}

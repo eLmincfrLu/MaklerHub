@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MaklerHub — {{ title }}</title>
-<link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.png') }}">
+<link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}">
+<link rel="icon" type="image/png" sizes="48x48" href="{{ url_for('static', filename='img/favicon-48.png') }}">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--navy:#101820;--gold:#C9A227;--gold-dim:#8C733C;--cream:#F6F1E4;--ink:#1B2430;--line:#E4DCC8;
@@ -25,10 +27,11 @@ p{color:#8A8372;font-size:.92rem;line-height:1.6;}
 .btn.ghost{background:transparent;color:var(--navy);border:1px solid var(--line);}
 .btn.ghost:hover{box-shadow:none;border-color:var(--gold-dim);}
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
 </head>
 <body>
 <div class="box">
-  <a class="brand" href="{{ url_for('public.landing') }}"><img src="{{ url_for('static', filename='img/logo.png') }}" alt="">MaklerHub</a>
+  <a class="brand" href="{{ url_for('public.landing') }}"><img src="{{ url_for('static', filename='img/logo-mark-96.png') }}" alt="">MaklerHub</a>
   <div class="code">{{ code }}</div>
   <h1>{{ title }}</h1>
   <p>{{ text }}</p>

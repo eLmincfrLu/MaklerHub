@@ -6,7 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MaklerHub — Ev axtarma, tələbini yaz</title>
 <meta name="description" content="Bakıda kirayə və ya alış üçün tələbini yaz — maklerlər sənə fərdi təklif göndərsin. Nömrən yalnız qəbul etdiyin təklifin maklerinə açılır.">
-<link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.png') }}">
+<link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}">
+<link rel="icon" type="image/png" sizes="48x48" href="{{ url_for('static', filename='img/favicon-48.png') }}">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing-extra.css') }}">
@@ -14,6 +16,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing-anim.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/mh-banner.css') }}">
 <script>document.documentElement.classList.add('js-anim');</script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
 </head>
 <body>
 <div id="heroView">
@@ -24,7 +27,7 @@
     <div class="spotlight" id="spotlight"></div>
     <div class="top">
       <div class="brand">
-        <img src="{{ url_for('static', filename='img/logo.png') }}" alt="MaklerHub" width="30" height="24" style="object-fit:contain;flex-shrink:0;">
+        <img src="{{ url_for('static', filename='img/logo-mark-96.png') }}" alt="MaklerHub" width="30" height="24" style="object-fit:contain;flex-shrink:0;">
         MaklerHub
       </div>
       <div class="navbtns">

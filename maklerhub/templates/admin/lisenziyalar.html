@@ -39,14 +39,14 @@
         <tbody>
           {%- for r in rows %}
           <tr>
-            <td><span class="lic-code">{{ r.l.code }}</span><div class="msub">yaradılıb {{ r.created }}</div></td>
-            <td><span class="pill {{ r.pill }}">{{ r.label }}</span></td>
-            <td>{% if r.owner %}<div class="mname">{{ r.owner }}</div><div class="msub">{{ r.l.email }}</div>{% else %}—{% endif %}</td>
-            <td>{{ r.activated }}</td>
-            <td>{{ r.expires }}</td>
-            <td>{{ r.l.days }} gün</td>
-            <td><div class="msub">{{ r.l.note or '—' }}</div></td>
-            <td>{% if r.l.status != 'revoked' %}<form method="post" action="{{ url_for('admin.lisenziya_legv', lid=r.l.id, status=status) }}" onsubmit="return confirm('{{ r.l.code }} ləğv edilsin?{% if r.owner %} Makler kabinetə girə bilməyəcək.{% endif %}')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="lic-revoke" type="submit">Ləğv et</button></form>{% endif %}</td>
+            <td data-label="Kod"><span class="lic-code">{{ r.l.code }}</span><div class="msub">yaradılıb {{ r.created }}</div></td>
+            <td data-label="Status"><span class="pill {{ r.pill }}">{{ r.label }}</span></td>
+            <td data-label="Kimə aid">{% if r.owner %}<div class="mname">{{ r.owner }}</div><div class="msub">{{ r.l.email }}</div>{% else %}—{% endif %}</td>
+            <td data-label="Aktivləşmə">{{ r.activated }}</td>
+            <td data-label="Bitmə tarixi">{{ r.expires }}</td>
+            <td data-label="Müddət">{{ r.l.days }} gün</td>
+            <td data-label="Qeyd"><div class="msub">{{ r.l.note or '—' }}</div></td>
+            <td data-label="">{% if r.l.status != 'revoked' %}<form method="post" action="{{ url_for('admin.lisenziya_legv', lid=r.l.id, status=status) }}" onsubmit="return confirm('{{ r.l.code }} ləğv edilsin?{% if r.owner %} Makler kabinetə girə bilməyəcək.{% endif %}')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="lic-revoke" type="submit">Ləğv et</button></form>{% endif %}</td>
           </tr>
           {%- else %}
           <tr><td colspan="8" class="mh-empty">Bu filtrdə kod yoxdur.</td></tr>

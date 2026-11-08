@@ -22,14 +22,14 @@
       <tbody>
       {%- for c in items %}
         <tr>
-          <td>{{ c.id }}</td>
-          <td>{{ 'Müştəri' if c.from_side == 'customer' else 'Makler' }}</td>
-          <td><span class="pill {{ 'trial' if c.status == 'new' else 'active' }}">{{ reasons.get(c.reason, c.reason) }}</span></td>
-          <td><div class="msub" style="max-width:260px">{{ c.text or '—' }}</div></td>
-          <td><a href="{{ url_for('admin.teleb', rid=c.request_id) }}">Tələb #{{ c.request_id }}</a>{% if c.offer_title %}<div class="msub">təklif: {{ c.offer_title }}</div>{% endif %}</td>
-          <td>{% if c.agent_id %}{{ full_name(c) }}<div class="msub">{{ 'dayandırılıb' if c.agent_status == 'suspended' else '' }}</div>{% else %}—{% endif %}</td>
-          <td>{{ rel(c.created_at) }}</td>
-          <td><div class="acts">
+          <td data-label="#">{{ c.id }}</td>
+          <td data-label="Kimdən">{{ 'Müştəri' if c.from_side == 'customer' else 'Makler' }}</td>
+          <td data-label="Səbəb"><span class="pill {{ 'trial' if c.status == 'new' else 'active' }}">{{ reasons.get(c.reason, c.reason) }}</span></td>
+          <td data-label="Mətn"><div class="msub" style="max-width:260px">{{ c.text or '—' }}</div></td>
+          <td data-label="Tələb / təklif"><a href="{{ url_for('admin.teleb', rid=c.request_id) }}">Tələb #{{ c.request_id }}</a>{% if c.offer_title %}<div class="msub">təklif: {{ c.offer_title }}</div>{% endif %}</td>
+          <td data-label="Makler">{% if c.agent_id %}{{ full_name(c) }}<div class="msub">{{ 'dayandırılıb' if c.agent_status == 'suspended' else '' }}</div>{% else %}—{% endif %}</td>
+          <td data-label="Vaxt">{{ rel(c.created_at) }}</td>
+          <td data-label=""><div class="acts">
             {% if c.status == 'new' %}
             <form method="post" action="{{ url_for('admin.sikayet_baxildi', cid=c.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('admin.sikayetler', status=status) }}"><button class="sbtn" type="submit">Baxıldı</button></form>
             {% endif %}

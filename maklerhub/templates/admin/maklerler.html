@@ -21,13 +21,13 @@
       <tbody>
       {%- for x in items %}
         <tr id="m-{{ x.u.id }}">
-          <td><div class="mname">{{ x.name }}</div><div class="msub">{{ x.u.email }}</div></td>
-          <td>{% if x.u.phone %}<a href="tel:{{ x.u.phone }}">{{ x.phone }}</a>{% else %}—{% endif %}</td>
-          <td><span class="pill {{ 'active' if x.u.status == 'active' else 'susp' }}">{{ 'Aktiv' if x.u.status == 'active' else 'Dayandırılıb' }}</span></td>
-          <td><span class="pill {{ 'active' if x.lic_ok else 'susp' }}">{{ x.lic_label }}</span><div class="msub">{{ x.expires }}{% if x.u.lic_code %} · <span class="lic-code">{{ x.u.lic_code }}</span>{% endif %}</div></td>
-          <td>{{ x.u.n_devices }}</td>
-          <td>{{ x.u.n_offers }}<div class="msub">qəbul: {{ x.u.n_accepted }}</div></td>
-          <td><div class="acts">
+          <td data-label="Makler"><div class="mname">{{ x.name }}</div><div class="msub">{{ x.u.email }}</div></td>
+          <td data-label="Telefon">{% if x.u.phone %}<a href="tel:{{ x.u.phone }}">{{ x.phone }}</a>{% else %}—{% endif %}</td>
+          <td data-label="Status"><span class="pill {{ 'active' if x.u.status == 'active' else 'susp' }}">{{ 'Aktiv' if x.u.status == 'active' else 'Dayandırılıb' }}</span></td>
+          <td data-label="Lisenziya"><span class="pill {{ 'active' if x.lic_ok else 'susp' }}">{{ x.lic_label }}</span><div class="msub">{{ x.expires }}{% if x.u.lic_code %} · <span class="lic-code">{{ x.u.lic_code }}</span>{% endif %}</div></td>
+          <td data-label="Cihaz">{{ x.u.n_devices }}</td>
+          <td data-label="Təklif">{{ x.u.n_offers }}<div class="msub">qəbul: {{ x.u.n_accepted }}</div></td>
+          <td data-label="Əməliyyatlar"><div class="acts">
             <form method="post" action="{{ url_for('admin.makler_status', uid=x.u.id) }}"{% if x.u.status == 'active' %} onsubmit="return confirm('{{ x.name }} dayandırılsın? Dərhal sistemdən çıxarılacaq.')"{% endif %}>
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('admin.maklerler') }}#m-{{ x.u.id }}">
               <input type="hidden" name="status" value="{{ 'suspended' if x.u.status == 'active' else 'active' }}">

@@ -416,7 +416,7 @@ def manifest(token):
             "description": "Bakıda ev tələbin və maklerlərin təklifləri",
             "icons": [{"src": icon("icon-192.png"), "sizes": "192x192", "type": "image/png", "purpose": "any"},
                       {"src": icon("icon-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "any"},
-                      {"src": icon("icon-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]}
+                      {"src": icon("icon-512-maskable.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]}
     return _private(make_response(json.dumps(data, ensure_ascii=False)), "application/manifest+json; charset=utf-8")
 
 
