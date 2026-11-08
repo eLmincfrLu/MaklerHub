@@ -1,0 +1,63 @@
+/* "Aktiv tələbin var" banneri (js/teleb-memory.js). İki fon: .mhb-slot (açıq, /teleb kartı) və
+   .mhb-slot.dark (ana səhifənin tünd hero-su). Rənglər qeydiyyat/landing palitrasındandır. */
+.mhb-slot{display:block;margin:0 0 20px;}
+.mhb-slot[hidden]{display:none;}
+.mhb{position:relative;border:1px solid #E6D7A8;background:#FBF4DE;color:#1B2430;border-radius:6px;
+  box-shadow:0 10px 26px rgba(16,24,32,.10);font-size:.86rem;line-height:1.4;
+  animation:mhbIn .55s cubic-bezier(.16,.84,.3,1) both;}
+.mhb.mhb-out{animation:mhbOut .25s ease forwards;}
+@keyframes mhbIn{from{opacity:0;transform:translateY(-10px) scale(.98);}to{opacity:1;transform:none;}}
+@keyframes mhbOut{to{opacity:0;transform:translateY(-8px);}}
+
+.mhb-main{display:flex;align-items:center;gap:10px;padding:12px 40px 12px 14px;color:inherit;text-decoration:none;
+  border-radius:6px;}
+.mhb-main:hover .mhb-go,.mhb-row:hover .mhb-go{transform:translateX(3px);}
+.mhb-main:focus-visible,.mhb-row:focus-visible,.mhb-x:focus-visible{outline:2px solid #C9A227;outline-offset:2px;}
+.mhb-txt{display:flex;flex-direction:column;min-width:0;flex:1 1 0;}
+.mhb-txt b{font-weight:600;}
+.mhb-sum{color:#6B6450;font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.mhb-new{background:#C9A227;color:#101820;font-weight:600;font-size:.76rem;padding:3px 9px;border-radius:999px;white-space:nowrap;
+  animation:mhbPulse 2.4s ease-in-out .6s 2;}
+.mhb-cnt{color:#8C733C;font-size:.76rem;white-space:nowrap;}
+.mhb-go{color:#8C733C;font-weight:600;white-space:nowrap;transition:transform .2s ease;}
+@keyframes mhbPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,162,39,.0);}50%{box-shadow:0 0 0 6px rgba(201,162,39,.22);}}
+.mhb-dot{width:8px;height:8px;border-radius:50%;background:#3E8E5A;flex-shrink:0;box-shadow:0 0 0 3px rgba(62,142,90,.18);}
+
+.mhb-head{display:flex;align-items:center;gap:10px;padding:12px 40px 6px 14px;}
+.mhb-head b{font-weight:600;}
+.mhb-list{display:flex;flex-direction:column;padding:0 8px 8px;}
+.mhb-row{display:flex;align-items:center;gap:10px;padding:9px 8px;color:inherit;text-decoration:none;border-radius:4px;
+  border-top:1px solid rgba(140,115,60,.18);}
+.mhb-row:first-child{border-top:0;}
+.mhb-row:hover{background:rgba(201,162,39,.10);}
+.mhb-row .mhb-sum{flex:1;font-size:.84rem;color:#1B2430;}
+
+.mhb-x{position:absolute;top:6px;right:6px;width:30px;height:30px;border:0;background:transparent;color:#8A8262;
+  font-size:1.25rem;line-height:1;cursor:pointer;border-radius:4px;}
+.mhb-x:hover{background:rgba(16,24,32,.06);color:#1B2430;}
+
+/* ana səhifə: tünd şüşə. Hero məzmununun ÜSTÜNDƏ mütləq mövqedə — məzmunu aşağı itələmir */
+.mhb-slot.dark{position:absolute;left:0;right:0;bottom:100%;margin:0 0 18px;max-width:520px;z-index:6;}
+.mhb-slot.dark .mhb-head{width:100%;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;
+  padding:12px 40px 12px 14px;border-radius:6px;}
+.mhb-slot.dark .mhb-head b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mhb-slot.dark .mhb-list{display:none;position:absolute;left:-1px;right:-1px;top:calc(100% + 6px);padding:6px 8px;
+  background:rgba(16,24,32,.94);border:1px solid rgba(241,226,184,.28);border-radius:6px;box-shadow:0 16px 36px rgba(0,0,0,.35);}
+.mhb-slot.dark .mhb.open .mhb-list{display:flex;animation:mhbIn .3s ease both;}
+.mhb-slot.dark .mhb{background:rgba(16,24,32,.55);border-color:rgba(241,226,184,.28);color:#fff;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(0,0,0,.28);}
+.mhb-slot.dark .mhb-sum{color:#C9D1D8;}
+.mhb-slot.dark .mhb-row .mhb-sum{color:#fff;}
+.mhb-slot.dark .mhb-cnt,.mhb-slot.dark .mhb-go{color:#F1E2B8;}
+.mhb-slot.dark .mhb-row{border-top-color:rgba(241,226,184,.16);}
+.mhb-slot.dark .mhb-row:hover{background:rgba(241,226,184,.08);}
+.mhb-slot.dark .mhb-x{color:#C9D1D8;}
+.mhb-slot.dark .mhb-x:hover{background:rgba(255,255,255,.08);color:#fff;}
+
+@media(max-width:420px){
+  .mhb-main{gap:8px;padding-right:36px;}
+  .mhb-row{gap:8px;}
+  .mhb-new,.mhb-cnt{font-size:.72rem;}
+  .mhb-new{padding:3px 7px;}
+}
+@media (prefers-reduced-motion:reduce){.mhb,.mhb.mhb-out,.mhb-new{animation:none;}.mhb-go{transition:none;}}

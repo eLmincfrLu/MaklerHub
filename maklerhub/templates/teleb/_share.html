@@ -1,0 +1,54 @@
+{#- /teleb/<token>: "Linki saxla" bloku və pəncərələr (Paket C1). İstifadə:
+    {% from 'teleb/_share.html' import share_box, share_dialogs with context %}
+    Kontekst: link (tam URL), token. JS: static/js/teleb-share.js, CSS: static/css/pages/teleb-share.css.
+    Xarici linklər (wa.me, t.me) səhifənin no-referrer siyasəti ilə açılır — token Referer-ə düşmür. -#}
+{% set share_subject = 'MaklerHub — tələbimin linki' %}
+{% set share_text = 'MaklerHub — tələbimin linki (təkliflər burada görünür): ' ~ link %}
+
+{% macro share_box(big=False) -%}
+<section class="lk{% if big %} lk-big{% endif %}" data-share data-link="{{ link }}" aria-labelledby="lkTitle">
+  {% if big %}<span class="lk-badge">Vacib</span>{% endif %}
+  <h2 class="lk-t" id="lkTitle">{{ 'Linki saxla' if big else 'Tələbinin linki' }}</h2>
+  <p class="lk-p">Bu link sənin tələbinin açarıdır. Təkliflər burada görünəcək. Linki itirməmək üçün özünə göndər.</p>
+  <div class="lk-row">
+    <input class="lk-in" type="text" value="{{ link }}" readonly aria-label="Tələbin linki" data-share-input>
+    <button class="lk-copy" type="button" data-share-copy><span class="lk-copy-t">Kopyala</span><span class="lk-copy-ok" aria-hidden="true">Kopyalandı ✓</span></button>
+  </div>
+  <div class="lk-btns">
+    <button class="lk-b" type="button" data-share-native hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>Paylaş</button>
+    <a class="lk-b wa" href="https://wa.me/?text={{ share_text|urlencode }}" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3Z"/></svg>WhatsApp</a>
+    <a class="lk-b tg" href="https://t.me/share/url?url={{ link|urlencode }}&amp;text={{ share_subject|urlencode }}" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.4 3.6 2.9 10.8c-1.3.5-1.2 1.2-.2 1.5l4.7 1.5 1.8 5.6c.2.6.4.8.8.8.4 0 .6-.2.9-.4l2.3-2.2 4.7 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.3-.5-1.9-1.3-1.6ZM9.6 14.1l-.4 4-1.6-5 9.8-6.2-7.8 7.2Z"/></svg>Telegram</a>
+    <a class="lk-b" href="mailto:?subject={{ share_subject|urlencode }}&amp;body={{ share_text|urlencode }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>E-poçt</a>
+    <button class="lk-b" type="button" data-share-qr><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>QR kod</button>
+    <button class="lk-b home" type="button" data-a2hs hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 8v6M9 11h6"/></svg>Ana ekrana əlavə et</button>
+  </div>
+  <p class="lk-note"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span>Linki yalnız özünə göndər — linkə sahib olan hər kəs təkliflərini görə bilər.</span></p>
+</section>
+{%- endmacro %}
+
+{% macro share_dialogs() -%}
+<dialog class="mh-dlg" id="qrDlg" aria-labelledby="qrTitle">
+  <div class="dlg-in">
+    <h3 id="qrTitle">QR kod</h3>
+    <p>Başqa telefonla skan et — tələbinin səhifəsi orada açılacaq.</p>
+    <img class="dlg-qr" data-src="{{ url_for('teleb.qr', token=token) }}" alt="Tələbin linkinin QR kodu" width="240" height="240">
+    <div class="dlg-act">
+      <a href="{{ url_for('teleb.qr', token=token) }}" download="maklerhub-telebim-qr.svg">Yüklə</a>
+      <button class="pri" type="button" data-close>Bağla</button>
+    </div>
+  </div>
+</dialog>
+<dialog class="mh-dlg" id="iosDlg" aria-labelledby="iosTitle">
+  <div class="dlg-in">
+    <h3 id="iosTitle">Ana ekrana əlavə et</h3>
+    <p>Tələbin telefonunda tətbiq kimi açılsın — link itməsin.</p>
+    <ol class="ios-steps">
+      <li><span class="n">1</span><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></span><span>Aşağıda (iPad-də yuxarıda) <b>Paylaş ⬆</b> düyməsinə bas</span></li>
+      <li><span class="n">2</span><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span><span>Siyahıda <b>“Ana ekrana əlavə et”</b> seç</span></li>
+      <li><span class="n">3</span><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></span><span>Yuxarıda <b>“Əlavə et”</b> bas</span></li>
+    </ol>
+    <svg class="ios-arrow" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v15M6 13l6 6 6-6"/></svg>
+    <div class="dlg-act"><button class="pri" type="button" data-close>Aydındır</button></div>
+  </div>
+</dialog>
+{%- endmacro %}

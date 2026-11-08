@@ -52,6 +52,20 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
 - Bütün Bakı (8 noyabr): `/teleb`-də rayon limiti götürüldü; bütün `BAKU_DISTRICTS` seçilmiş tələb hər yerdə
   "Bütün Bakı" kimi göstərilir (`helpers.districts_text` filtri / `is_all_baku`; ayrıca sütun YOX). Uyğunluq dəyişmir.
   `static/js/pages/teleb.js`-ə toxunulmayıb: forma `data-max` = rayonların sayı.
+- Paket C1 (8 noyabr): müştəri linki itməsin, xarici servis YOX.
+  `js/teleb-memory.js`: /teleb/<token> (`[data-mh-save]`, yalnız aktiv tələb) tokeni localStorage `mh_requests`-ə yazır
+  ({token, saved_at}, ≤5, ən yenisi əvvəldə; bağlanmış/bitmiş → silinir). Ana səhifə və /teleb-də `[data-mh-banner]`:
+  yaddaşda token VARSA `POST /api/teleb/status` (yoxdursa sorğu yoxdur — baza oyanmır); "×" sessionStorage
+  `mh_banner_hidden`. Ana səhifədə banner `.content`-in üstündə absolute (məzmunu itələmir), çoxlu tələb yığılır.
+  `teleb.status_api`: CSRF YOX (`auth.CSRF_EXEMPT_ENDPOINTS`), Origin/Referer host yoxlanır (403), IP başına dəqiqədə
+  20 (proses yaddaşı `_status_hits`, `ip_limit_applies` ilə), ≤5 token (çox → 400), tapılmayan → yalnız
+  `{found:false}`, həmişə 2 SQL (ayar + bir toplu sorğu). Telefon/ad/token cavabda YOX.
+  "Linki saxla" (`templates/teleb/_share.html`, `js/teleb-share.js`, `css/pages/teleb-share.css`): yenicə yaradılan
+  tələbdə böyük blok yuxarıda (session `teleb_new` = request id, token cookie-yə yazılmır), sonra kiçik — təkliflərdən
+  sonra. QR: `/teleb/<token>/qr.svg` (segno, serverdə). PWA: `/teleb/<token>/manifest.webmanifest` (start_url/scope =
+  tələb səhifəsi), ikonlar `static/img/icon-192.png`, `icon-512.png`, `apple-touch-icon.png` (logo.png-dən, bir dəfəlik).
+  Service worker YOXDUR. QR/manifest: `private, no-store`, noindex, səhv token 404. Sentry: `token/tokens/mh_requests`
+  açarları maskalanır. pytest: `tests/test_paket_c1.py`.
 - Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
 
 ## Qaydalar (pozma)

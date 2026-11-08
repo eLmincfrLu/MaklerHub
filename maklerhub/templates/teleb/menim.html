@@ -1,7 +1,18 @@
 {% extends 'teleb/_layout.html' %}
+{% from 'teleb/_share.html' import share_box, share_dialogs with context %}
 {% block title %}Mənim tələbim{% endblock %}
 {% block meta %}<meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
+<link rel="manifest" href="{{ url_for('teleb.manifest', token=token) }}">
+<meta name="theme-color" content="{{ theme_color }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tələbim">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/teleb-share.css') }}">
+<script defer src="{{ url_for('static', filename='js/teleb-share.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/teleb-memory.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/offer-images.css') }}">
 <script defer src="{{ url_for('static', filename='js/pages/offer-gallery.js') }}"></script>{% endblock %}
 {% block showcase %}
@@ -73,20 +84,14 @@
       <div class="underline"></div>
 
       {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="alert {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+      <span data-mh-save="{{ token }}" data-mh-alive="{{ 1 if alive else 0 }}" hidden></span>
+      {% if fresh %}{{ share_box(True) }}{% endif %}
 
       {% if r.status == 'expired' %}
       <div class="expired"><b>Tələbin müddəti bitib</b>Tələb 30 gün aktiv qalır. Hələ də axtarırsansa, <a href="{{ url_for('teleb.forma') }}">yeni tələb yaz</a>.</div>
       {% elif r.status == 'closed' %}
       <div class="expired"><b>Tələb bağlanıb</b>{% if close_reason %}Səbəb: {{ close_reason }}. {% endif %}Yeni təkliflər qəbul olunmur.</div>
       {% endif %}
-      <div class="savebox">
-        <b>Bu linki saxla, təkliflər burada görünəcək</b>
-        <p>Link yalnız səndədir — qeydiyyat olmadığı üçün tələbinə ancaq bu linklə qayıda bilərsən. Başqası ilə paylaşma.</p>
-        <div class="linkrow">
-          <input id="myLink" type="text" value="{{ link }}" readonly aria-label="Tələbin linki" onfocus="this.select()">
-          <button class="btn" type="button" id="copyLink">Linki kopyala</button>
-        </div>
-      </div>
 
       <div class="sum">
         <div class="sum-row"><span>Status</span><span><span class="st {{ r.status }}">{{ r.status_label }}</span></span></div>
@@ -116,6 +121,8 @@
       </details>
       {% endif %}
 
+      {% if not fresh %}{{ share_box(False) }}{% endif %}
+
       {% if r.status == 'active' %}
       <details class="closebox">
         <summary>Tələbi bağla</summary>
@@ -127,4 +134,5 @@
         </form>
       </details>
       {% endif %}
+      {{ share_dialogs() }}
 {% endblock %}

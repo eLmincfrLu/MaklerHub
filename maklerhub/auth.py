@@ -58,6 +58,8 @@ def password_problem(pw):
 # CSRF uğursuz olanda yönləndirilməyən, g.csrf_failed ilə özü idarə edən görünüşlər (forma dəyərləri itməsin)
 CSRF_SOFT_ENDPOINTS = {"teleb.forma", "auth.giris", "auth.qeydiyyat"}
 CSRF_RETRY = "Səhifə yeniləndi, zəhmət olmasa yenidən göndərin."
+# CSRF tokeni yoxlanmayan POST-lar: özləri Origin/Referer yoxlayır (teleb.status_api — yalnız oxu)
+CSRF_EXEMPT_ENDPOINTS = {"teleb.status_api"}
 
 
 def csrf_token():
@@ -316,7 +318,7 @@ def init_app(app):
                     if licenses.license_problem(db, user):
                         return license_page()
 
-        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.endpoint not in CSRF_EXEMPT_ENDPOINTS:
             sent = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
             if not sent or sent != session.get("_csrf"):
                 if request.endpoint in CSRF_SOFT_ENDPOINTS:

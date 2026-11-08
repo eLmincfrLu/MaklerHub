@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 PHONE_RE = re.compile(r"(?:\+?994|\b0)[\s\-()]*\d{2}[\s\-()]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}\b|\b\d{9}\b")
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 TOKEN_RE = re.compile(r"(/teleb/)[A-Za-z0-9_\-]{16,}")
+TOKEN_KEYS = {"token", "tokens", "mh_requests"}
 SAFE_HEADERS = {"user-agent", "accept", "accept-language", "content-type", "content-length", "host", "referer"}
 
 _enabled = False
@@ -46,7 +47,9 @@ def _scrub(obj, depth=0):
     if isinstance(obj, str):
         return scrub_text(obj)
     if isinstance(obj, dict):
-        return {k: _scrub(v, depth + 1) for k, v in obj.items()}
+        # /api/teleb/status body-si və s.: token açarları tam maskalanır (URL-dəki /teleb/<token> TOKEN_RE ilə)
+        return {k: "[token]" if isinstance(k, str) and k.lower() in TOKEN_KEYS else _scrub(v, depth + 1)
+                for k, v in obj.items()}
     if isinstance(obj, list):
         return [_scrub(v, depth + 1) for v in obj]
     if isinstance(obj, tuple):

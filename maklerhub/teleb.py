@@ -1,14 +1,21 @@
 """Müştəri tələbi (qeydiyyatsız): /teleb forması və /teleb/<token> "Mənim tələbim" səhifəsi."""
+import io
 import json
+import re
 import secrets
+import threading
+import time
+from collections import deque
 from datetime import timedelta
+from urllib.parse import urlsplit
 
-from flask import Blueprint, abort, flash, g, make_response, redirect, render_template, request, url_for
+from flask import (Blueprint, abort, flash, g, jsonify, make_response, redirect, render_template, request, session,
+                   url_for)
 
 from .auth import client_ip, ip_limit_applies
 from .db import add_log, get_db, get_setting
-from .helpers import (BAKU_DISTRICTS, DISTRICTS_AZ, date_short, districts_text, money, normalize_phone, now,
-                      phone_display, phone_masked, rel, ts)
+from .helpers import (ALL_BAKU, BAKU_DISTRICTS, DISTRICTS_AZ, date_short, districts_text, is_all_baku, money,
+                      normalize_phone, now, phone_display, phone_masked, rel, ts)
 from .maintenance import lazy_expire
 
 bp = Blueprint("teleb", __name__)
@@ -27,6 +34,11 @@ CONSENT_TEXT = ("Nömrəm yalnız qəbul etdiyim təklifin maklerinə göstəril
 HONEYPOT = "website"
 ANON_DAYS = 90           # bağlanan/bitən tələbin şəxsi məlumatları bu qədər gündən sonra silinir
 OFFER_LIMIT = 5          # bir tələbə aktiv (geri çəkilməmiş) təklif limiti
+TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{16,64}")
+STATUS_MAX_TOKENS = 5    # /api/teleb/status: bir sorğuda ən çox (brauzer yaddaşı da 5 saxlayır)
+STATUS_RATE = 20         # /api/teleb/status: IP başına dəqiqədə
+THEME_COLOR = "#101820"  # PWA: qeydiyyat/tələb səhifələrinin --navy rəngi
+ICON_BG = "#141F35"      # ikonların fonu (loqonun öz tünd-göy fonu)
 
 
 def expire_requests(db):
@@ -165,6 +177,7 @@ def forma():
                 add_log(db, "info", "Müştəri", f"Yeni tələb: {DEALS[clean['deal']]}, {districts_text(clean['districts'])}",
                         f"otaq={ROOMS[clean['rooms']]} büdcə≤{clean['budget_max']}")
                 db.commit()
+                session["teleb_new"] = rid  # "Linki saxla" bloku bir dəfə böyük göstərilsin (token cookie-yə yazılmır)
                 return redirect(url_for("teleb.menim", token=token))
     return render_template("teleb/forma.html", form=form, errors=errors, districts=BAKU_DISTRICTS, deals=DEALS,
                            urgency=URGENCY, rooms=ROOMS, note_max=NOTE_MAX,
@@ -263,8 +276,12 @@ def menim(token):
     n_accepted = sum(1 for o in offers if o["status"] == "accepted")
     view = request_view(r)
     view["phone"] = phone_masked(r["phone"])
+    fresh = session.get("teleb_new") == r["id"]
+    if fresh:
+        session.pop("teleb_new", None)
     return _page_response(render_template(
         "teleb/menim.html", r=view, token=token, alive=alive, link=url_for("teleb.menim", token=token, _external=True),
+        fresh=fresh, theme_color=THEME_COLOR,
         offers=[o for o in offers if o["status"] != "rejected"], rejected=[o for o in offers if o["status"] == "rejected"],
         confirm_id=confirm_id, can_accept=alive and n_accepted < ACCEPT_LIMIT, accept_limit=ACCEPT_LIMIT,
         n_accepted=n_accepted, close_reasons=CLOSE_REASONS, close_reason=CLOSE_REASONS.get(r["close_reason"]),
@@ -335,3 +352,141 @@ def sikayet(token, oid):
         db.commit()
         flash("Şikayətiniz qəbul edildi. Administrator baxacaq.", "ok")
     return _back(token, f"#o-{oid}")
+
+
+# ---------------------------------------------------------------- link yaddaşı, QR, ana ekran (Paket C1)
+def short_districts(districts):
+    """Banner üçün qısa: "Bütün Bakı" | "Yasamal" | "Yasamal, Nəsimi" | "Yasamal, Nəsimi +2"."""
+    if is_all_baku(districts):
+        return ALL_BAKU
+    if len(districts) > 2:
+        return f"{districts[0]}, {districts[1]} +{len(districts) - 2}"
+    return ", ".join(districts)
+
+
+def _token_or_404(token):
+    """Format səhvdirsə və ya tələb yoxdursa 404."""
+    if not TOKEN_RE.fullmatch(token or ""):
+        abort(404)
+    row = get_db().execute("SELECT id FROM customer_requests WHERE token = ?", (token,)).fetchone()
+    if row is None:
+        abort(404)
+    return row["id"]
+
+
+def _private(resp, content_type):
+    resp.headers["Content-Type"] = content_type
+    resp.headers["Cache-Control"] = "private, no-store"
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    return resp
+
+
+@bp.route("/teleb/<token>/qr.svg")
+def qr(token):
+    """Tələb linkinin QR kodu (serverdə, segno ilə SVG). Keşlənmir, indekslənmir."""
+    import segno
+    _token_or_404(token)
+    buf = io.BytesIO()
+    segno.make(url_for("teleb.menim", token=token, _external=True), error="m").save(
+        buf, kind="svg", scale=8, border=2, dark=THEME_COLOR, light="#ffffff", xmldecl=False)
+    resp = _private(make_response(buf.getvalue()), "image/svg+xml")
+    resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
+    return resp
+
+
+@bp.route("/teleb/<token>/manifest.webmanifest")
+def manifest(token):
+    """"Ana ekrana əlavə et" üçün dinamik manifest: start_url/scope = həmin tələbin səhifəsi."""
+    _token_or_404(token)
+    start = url_for("teleb.menim", token=token)
+
+    def icon(name):
+        return url_for("static", filename=f"img/{name}")
+
+    data = {"name": "MaklerHub — Tələbim", "short_name": "Tələbim", "id": start, "start_url": start, "scope": start,
+            "display": "standalone", "orientation": "portrait", "lang": "az", "dir": "ltr",
+            "theme_color": THEME_COLOR, "background_color": ICON_BG,
+            "description": "Bakıda ev tələbin və maklerlərin təklifləri",
+            "icons": [{"src": icon("icon-192.png"), "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                      {"src": icon("icon-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                      {"src": icon("icon-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]}
+    return _private(make_response(json.dumps(data, ensure_ascii=False)), "application/manifest+json; charset=utf-8")
+
+
+_status_hits = {}
+_status_lock = threading.Lock()
+
+
+def _status_rate_ok(ip):
+    """IP başına dəqiqədə STATUS_RATE sorğu (proses yaddaşında — limit yoxlaması bazanı oyatmır)."""
+    stamp = time.monotonic()
+    with _status_lock:
+        if len(_status_hits) > 10_000:  # köhnə IP-ləri at
+            for key in [k for k, q in _status_hits.items() if not q or stamp - q[-1] > 60]:
+                del _status_hits[key]
+        q = _status_hits.setdefault(ip, deque())
+        while q and stamp - q[0] > 60:
+            q.popleft()
+        if len(q) >= STATUS_RATE:
+            return False
+        q.append(stamp)
+        return True
+
+
+def _same_origin():
+    """CSRF tokeni yoxdur (səhifə sessiyasız ola bilər) — əvəzində Origin, o yoxdursa Referer host-u bizimki olmalıdır."""
+    src = request.headers.get("Origin") or request.headers.get("Referer") or ""
+    if not src or src == "null":
+        return False
+    try:
+        return urlsplit(src).netloc.lower() == request.host.lower()
+    except ValueError:
+        return False
+
+
+@bp.route("/api/teleb/status", methods=["POST"])
+def status_api():
+    """Brauzer yaddaşındakı (localStorage) tələblərin vəziyyəti — ana səhifə və /teleb banneri üçün.
+    Body: {"tokens": [...]} (≤5, URL-də yox). Cavab: {"ok": true, "results": [...]} eyni sıra ilə; tapılmayan →
+    yalnız {"found": false}. Telefon/ad heç vaxt qaytarılmır. Tapılan/tapılmayan üçün iş yolu eynidir: həmişə eyni
+    sayda sorğu (ayar + bir toplu sorğu), token sayından və mövcudluğundan asılı olmayaraq."""
+    if not _same_origin():
+        return jsonify(ok=False, error="Etibarsız mənbə."), 403
+    ip = client_ip()
+    if ip_limit_applies(ip) and not _status_rate_ok(ip):
+        return jsonify(ok=False, error="Çox sorğu. Bir dəqiqədən sonra yenidən cəhd edin."), 429
+    body = request.get_json(silent=True)
+    tokens = body.get("tokens") if isinstance(body, dict) else None
+    if (not isinstance(tokens, list) or not tokens or len(tokens) > STATUS_MAX_TOKENS
+            or not all(isinstance(t, str) for t in tokens)):
+        return jsonify(ok=False, error=f"1–{STATUS_MAX_TOKENS} token göndərin."), 400
+    valid = [t for t in dict.fromkeys(tokens) if TOKEN_RE.fullmatch(t)]
+    db = get_db()
+    ttl = int(get_setting(db, "request_ttl_days") or 30)
+    cutoff = ts(now() - timedelta(days=ttl))
+    rows = db.execute(
+        "SELECT r.token, r.deal_type, r.districts, r.rooms, r.status, r.is_demo, r.created_at, "
+        "COUNT(o.id) FILTER (WHERE o.status != 'withdrawn') AS total, "
+        "COUNT(o.id) FILTER (WHERE o.status = 'sent' AND (r.customer_seen_at IS NULL "
+        "OR o.created_at > r.customer_seen_at)) AS fresh "
+        "FROM customer_requests r LEFT JOIN offers o ON o.request_id = r.id "
+        "WHERE r.token = ANY(?) GROUP BY r.id", (valid,)).fetchall()
+    found = {r["token"]: r for r in rows}
+    results = []
+    for t in tokens:
+        r = found.get(t)
+        if r is None:
+            results.append({"found": False})
+            continue
+        status = r["status"]
+        if status == "active" and not r["is_demo"] and r["created_at"] < cutoff:
+            status = "expired"  # lazy yeniləmə hələ işləməyib
+        districts = json.loads(r["districts"] or "[]")
+        summary = " · ".join([DEALS.get(r["deal_type"], r["deal_type"]),
+                              f"{ROOMS.get(r['rooms'], '—')} otaq", short_districts(districts)])
+        results.append({"found": True, "status": status, "new_offers": int(r["fresh"] or 0),
+                        "total_offers": int(r["total"] or 0), "summary": summary})
+    resp = jsonify(ok=True, results=results)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp

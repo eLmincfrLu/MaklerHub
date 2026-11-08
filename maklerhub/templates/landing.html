@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing-extra.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing-user.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing-anim.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/mh-banner.css') }}">
 <script>document.documentElement.classList.add('js-anim');</script>
 </head>
 <body>
@@ -52,6 +53,7 @@
       </div>
     </div>
     <div class="content">
+      <div class="mhb-slot dark" data-mh-banner data-api="{{ url_for('teleb.status_api') }}" data-base="/teleb/" hidden></div>
       <div class="eyebrow reveal" style="animation-delay:.25s">BAKI · KİRAYƏ VƏ ALIŞ</div>
       <h1><span class="line"><span style="animation-delay:.4s">Ev axtarma, tələbini yaz.</span></span><span class="line line2"><span style="animation-delay:.56s">Maklerlər səni özləri tapsın.</span></span></h1>
       <p class="reveal" style="animation-delay:.85s">Nə axtardığını bir dəqiqədə yaz — maklerlər sənə <em>fərdi təkliflər</em> göndərsin. Nömrən yalnız qəbul etdiyin təklifin maklerinə açılır.</p>
@@ -161,6 +163,7 @@ window.MH_IMG={front:"{{ url_for('static', filename='img/hero-front.jpg') }}",le
 <script src="{{ url_for('static', filename='js/pages/landing.js') }}"></script>
 <script src="{{ url_for('static', filename='js/contact-reveal.js') }}"></script>
 <script src="{{ url_for('static', filename='js/landing-anim.js') }}"></script>
+<script src="{{ url_for('static', filename='js/teleb-memory.js') }}"></script>
 {% if current_user %}<script src="{{ url_for('static', filename='js/user-menu.js') }}"></script>{% endif %}
 </body>
 </html>
