@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
 <script defer src="{{ url_for('static', filename='js/mobile.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
 </head>
 <body>
 <div class="wrap">
@@ -25,6 +26,11 @@
     <div class="aurora"></div>
     <div class="s-top">
 {% include 'auth/_logo.html' %}
+    </div>
+    <div class="s-mark" aria-hidden="true">
+      <img src="{{ url_for('static', filename='img/logo-mark-240.png') }}" width="120" height="120" alt="">
+      <span class="s-mark-name">MaklerHub</span>
+      <span class="s-mark-sub">Azərbaycanın daşınmaz əmlak portalı</span>
     </div>
     <div class="s-body">
       {% block showcase %}{% endblock %}

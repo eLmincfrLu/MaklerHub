@@ -1,4 +1,5 @@
 {% extends 'makler/base.html' %}
+{% from '_empty.html' import empty_state %}
 {% set page_css = 'teleblist2.css' %}
 {% block title %}Təkliflərim{% endblock %}
 {% block main %}
@@ -7,7 +8,7 @@
     <p>Göndərdiyiniz bütün təkliflər və onların vəziyyəti</p>
   </div>
 
-  {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="mh-flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="mh-flash {{ cat }}" data-flash="{{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
 
   <div class="toolbar reveal" style="animation-delay:.1s">
     <div class="filters">
@@ -34,7 +35,7 @@
     <div class="contactrow"><div class="contactbox"><b>Müştəri ilə əlaqə</b>{{ it.contact.name }} · <a href="tel:{{ it.contact.tel }}">{{ it.contact.phone }}</a>{% if it.contact.wa %} · <a href="{{ it.contact.wa }}" target="_blank" rel="noopener noreferrer">WhatsApp</a>{% endif %}</div></div>
     {%- endif %}
     {%- else %}
-    <div class="mh-empty">{% if status %}Bu statusda təklif yoxdur.{% else %}Hələ təklif göndərməmisiniz. <a href="{{ url_for('makler.kabinet') }}" style="color:var(--gold-dim);font-weight:600">Tələblərə baxın</a>.{% endif %}</div>
+    {% if status %}{{ empty_state('send', 'Bu statusda təklif yoxdur', 'Başqa statusa baxın və ya bütün təklifləri göstərin.', url_for('makler.teklifler'), 'Hamısını göstər') }}{% else %}{{ empty_state('send', 'Hələ təklif göndərməmisiniz', 'Uyğun tələbi seçin və müştəriyə ilk təklifinizi göndərin.', url_for('makler.kabinet'), 'Tələblərə baxın') }}{% endif %}
     {%- endfor %}
   </div>
 {% endblock %}

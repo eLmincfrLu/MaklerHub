@@ -1,5 +1,6 @@
 {% extends 'teleb/_layout.html' %}
 {% from 'teleb/_share.html' import share_box, share_dialogs with context %}
+{% from '_empty.html' import empty_state %}
 {% block title %}Mənim tələbim{% endblock %}
 {% block meta %}<meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
@@ -32,7 +33,7 @@
             {% if o.images|length > 1 %}<span class="gal-n">1 / {{ o.images|length }}</span>
             <div class="gal-dots">{% for im in o.images %}<button type="button" aria-label="Şəkil {{ loop.index }}"></button>{% endfor %}</div>{% endif %}
           </div>
-          {% elif o.image %}<img src="{{ o.image }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.outerHTML='<div class=&quot;ph&quot;>Şəkil yüklənmədi</div>'">{% else %}<div class="ph">Şəkil yoxdur</div>{% endif %}
+          {% elif o.image %}<img src="{{ o.image }}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.outerHTML='<div class=&quot;ph&quot;>Şəkil yüklənmədi</div>'">{% else %}<div class="ph ph-mark" role="img" aria-label="Şəkil yoxdur"></div>{% endif %}
           <div class="ob">
             <div class="ot">{{ o.title }}{% if o.new %} <span class="newtag">Yeni</span>{% endif %}</div>
             <div class="op">{{ o.price }}</div>
@@ -84,7 +85,7 @@
       <h1>{{ r.deal }} · <i>{{ r.districts|districts_text }}</i></h1>
       <div class="underline"></div>
 
-      {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="alert {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+      {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="alert {{ cat }}" data-flash="{{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
       <span data-mh-save="{{ token }}" data-mh-alive="{{ 1 if alive else 0 }}" hidden></span>
       {% if fresh %}{{ share_box(True) }}{% endif %}
 
@@ -92,6 +93,34 @@
       <div class="expired"><b>Tələbin müddəti bitib</b>Tələb 30 gün aktiv qalır. Hələ də axtarırsansa, <a href="{{ url_for('teleb.forma') }}">yeni tələb yaz</a>.</div>
       {% elif r.status == 'closed' %}
       <div class="expired"><b>Tələb bağlanıb</b>{% if close_reason %}Səbəb: {{ close_reason }}. {% endif %}Yeni təkliflər qəbul olunmur.</div>
+      {% endif %}
+
+      <div class="sum">
+        <div class="sum-row"><span>Status</span><span><span class="st {{ r.status }}">{{ r.status_label }}</span></span></div>
+        <div class="sum-row"><span>Əməliyyat</span><span>{{ r.deal }}</span></div>
+        <div class="sum-row"><span>Rayon</span><span>{{ r.districts|districts_text }}</span></div>
+        <div class="sum-row"><span>Otaq sayı</span><span>{{ r.rooms }}</span></div>
+        <div class="sum-row"><span>Büdcə</span><span>{{ r.budget }}</span></div>
+        <div class="sum-row"><span>Nə vaxt</span><span>{{ r.urgency }}</span></div>
+        {% if r.note %}<div class="sum-row"><span>Qeyd</span><span>{{ r.note }}</span></div>{% endif %}
+        <div class="sum-row"><span>Ad, telefon</span><span>{{ r.name }}, {{ r.phone }}</span></div>
+        <div class="sum-row"><span>Yaradılıb</span><span>{{ r.created }}, {{ r.created_time }}</span></div>
+      </div>
+
+      <div class="offers-h">Təkliflər{% if offers %} ({{ offers|length }}){% endif %}{% if n_accepted %} <small>· qəbul: {{ n_accepted }}/{{ accept_limit }}</small>{% endif %}</div>
+      <div class="offers">
+      {%- for o in offers %}
+        {{ offer_card(o, True) }}
+      {%- else %}
+        {% if r.status == 'active' %}{{ empty_state('wait', 'Hələ təklif yoxdur', 'Maklerlər tələbini görür. Təkliflər gələndə bu səhifədə görünəcək' ~ (' və e-poçtuna xəbər gələcək.' if email_masked and email_notify else '.'), None, None) }}{% else %}{{ empty_state('wait', 'Aktiv təklif yoxdur', 'Bu tələbə yeni təklif gəlmir.', url_for('teleb.forma'), 'Yeni tələb yaz') }}{% endif %}
+      {%- endfor %}
+      </div>
+
+      {% if rejected %}
+      <details class="rejected">
+        <summary>Maraqlı olmayanlar ({{ rejected|length }})</summary>
+        <div class="offers">{% for o in rejected %}{{ offer_card(o, False) }}{% endfor %}</div>
+      </details>
       {% endif %}
 
       {% if email_masked %}
@@ -116,34 +145,6 @@
           <button class="em-btn" type="submit">Bildiriş al</button>
         </div>
       </form>
-      {% endif %}
-
-      <div class="sum">
-        <div class="sum-row"><span>Status</span><span><span class="st {{ r.status }}">{{ r.status_label }}</span></span></div>
-        <div class="sum-row"><span>Əməliyyat</span><span>{{ r.deal }}</span></div>
-        <div class="sum-row"><span>Rayon</span><span>{{ r.districts|districts_text }}</span></div>
-        <div class="sum-row"><span>Otaq sayı</span><span>{{ r.rooms }}</span></div>
-        <div class="sum-row"><span>Büdcə</span><span>{{ r.budget }}</span></div>
-        <div class="sum-row"><span>Nə vaxt</span><span>{{ r.urgency }}</span></div>
-        {% if r.note %}<div class="sum-row"><span>Qeyd</span><span>{{ r.note }}</span></div>{% endif %}
-        <div class="sum-row"><span>Ad, telefon</span><span>{{ r.name }}, {{ r.phone }}</span></div>
-        <div class="sum-row"><span>Yaradılıb</span><span>{{ r.created }}, {{ r.created_time }}</span></div>
-      </div>
-
-      <div class="offers-h">Təkliflər{% if offers %} ({{ offers|length }}){% endif %}{% if n_accepted %} <small>· qəbul: {{ n_accepted }}/{{ accept_limit }}</small>{% endif %}</div>
-      <div class="offers">
-      {%- for o in offers %}
-        {{ offer_card(o, True) }}
-      {%- else %}
-        <div class="empty">{% if r.status == 'active' %}Hələ təklif yoxdur. Maklerlər tələbini görür.<br>Təkliflər gələndə bu səhifədə görünəcək.{% else %}Aktiv təklif yoxdur.{% endif %}</div>
-      {%- endfor %}
-      </div>
-
-      {% if rejected %}
-      <details class="rejected">
-        <summary>Maraqlı olmayanlar ({{ rejected|length }})</summary>
-        <div class="offers">{% for o in rejected %}{{ offer_card(o, False) }}{% endfor %}</div>
-      </details>
       {% endif %}
 
       {% if not fresh %}{{ share_box(False) }}{% endif %}

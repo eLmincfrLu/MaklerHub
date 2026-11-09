@@ -7,3 +7,7 @@ instance/*
 numuneler/
 scraper/logs/
 scraper/state/
+
+# yerli fayllar (Paket D3)
+maklerhub/static/img/*-src.jpg*
+pytest_son.txt

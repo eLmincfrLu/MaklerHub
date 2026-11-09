@@ -1,0 +1,16 @@
+{#- Boş vəziyyət (Paket D3): kiçik inline SVG ikon (qızılı xətt) + başlıq + bir cümlə + istəyə bağlı düymə.
+    İstifadə: {% from '_empty.html' import empty_state %}{{ empty_state('bell', 'Başlıq', 'Mətn.', url, 'Düymə') }}
+    ikonlar: wait | search | bell | send. Stil: css/ui.css (.ui-empty). -#}
+{% macro empty_state(icon, title, text, href=None, label=None) -%}
+<div class="ui-empty" role="status">
+  <svg class="ui-empty-ic" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    {%- if icon == 'bell' %}<path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 2h-15L6 16.5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>
+    {%- elif icon == 'search' %}<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/><path d="M8.5 11h5"/>
+    {%- elif icon == 'send' %}<path d="M21 3 10 14"/><path d="M21 3 14.5 21l-4.5-7-7-4.5L21 3z"/>
+    {%- else %}<path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5.5h13L21 13v6H3v-6l2.5-7.5z"/>{% endif %}
+  </svg>
+  <b class="ui-empty-t">{{ title }}</b>
+  <p class="ui-empty-p">{{ text }}</p>
+  {%- if href %}<a class="btn-secondary ui-empty-btn" href="{{ href }}">{{ label }}</a>{% endif %}
+</div>
+{%- endmacro %}

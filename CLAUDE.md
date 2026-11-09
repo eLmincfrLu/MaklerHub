@@ -115,6 +115,15 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   (Shubham Singla, Unsplash — README "Şəkil krediti"); `!important` inline hero-front-u əvəz edir, landing.html-də
   `MH_IMG` mobildə hero-mobile-a yönəlir (masaüstü şəkilləri mobildə yüklənmir, hero-mobile masaüstündə yüklənmir).
   Mobil scrim yuxarıda yüngül (qüllələr), 19%-dən tünd (kontrast ≥6.3). Mənbə `hero-mobile-src.jpg.jpg` commit olunmur.
+- Paket D3 (9 noyabr): status nişanları vahid pill (`.tag.st-*`; kabinetdə `tag mine st-<status>`), sol panelin
+  ortasında `.s-mark` (logo-mark-240.png + HTML "MaklerHub" + qızılı alt yazı; ≤880px gizli), "← Ana səhifə" solda,
+  şəkilsiz təklif `.ph.ph-mark` (120px, solğun nişan), /teleb/<token> sırası: məlumat → təkliflər → e-poçt → kiçik
+  "Linki saxla" (yeni tələbdə böyük blok yuxarıda qalır). Boş vəziyyətlər `templates/_empty.html` (`empty_state`).
+  Flash → toast: flash div-lərində `data-flash="{{ cat }}"`, `static/js/ui.js` köçürür (err özü bağlanmır, ok 5 san);
+  JS-siz səhifədə qalır. Form xətaları (`error`) inline qalır. Kontrast: footer #6B6455, admin `.pill.active`
+  #86BF9B, `.pill.susp` #E79A86. `.gitignore`: `static/img/*-src.jpg*`, `pytest_son.txt`.
+  DİQQƏT: test_flow kabinet id-lərini 1-ci səhifədən oxuyur — faylları qeyri-standart sırada işlədəndə (çox tələb
+  yaranıb) yıxıla bilər; ayrıca işlədəndə keçir.
 - Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
 
 ## Qaydalar (pozma)

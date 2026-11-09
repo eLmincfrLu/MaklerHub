@@ -1,4 +1,5 @@
 {% extends 'makler/base.html' %}
+{% from '_empty.html' import empty_state %}
 {% set page_css = 'teleblist2.css' %}
 {% block title %}Bildirişlər{% endblock %}
 {% block main %}
@@ -20,7 +21,7 @@
       <span class="ntext">{{ n.text }}</span><span class="nwhen">{{ n.when }}</span>
     </a>
     {%- else %}
-    <div class="mh-empty">Hələ bildiriş yoxdur. Xidmət sahənizə uyğun yeni tələb gələndə və ya müştəri təklifinizə cavab verəndə burada görünəcək.</div>
+    {{ empty_state('bell', 'Hələ bildiriş yoxdur', 'Xidmət sahənizə uyğun yeni tələb gələndə və ya müştəri təklifinizə cavab verəndə burada görünəcək.', url_for('makler.ayarlar') ~ '#saha', 'Xidmət sahəsini yoxla') }}
     {%- endfor %}
   </div>
 {% endblock %}

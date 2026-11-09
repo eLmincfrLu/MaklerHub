@@ -10,7 +10,7 @@
     <p>{{ req.districts|districts_text }} · {{ req.ago }}</p>
   </div>
 
-  {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="mh-flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="mh-flash {{ cat }}" data-flash="{{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
   {% if errors %}<div class="mh-flash err">{% for e in errors %}{{ e }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>{% endif %}
 
   <div class="dgrid">
