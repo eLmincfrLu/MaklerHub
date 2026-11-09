@@ -76,8 +76,10 @@ sequenceDiagram
   IP üzrə məhdudlaşdırılır.
 - **Yarış vəziyyətləri** — təklif limiti, qəbul limiti (bir tələbdə 3) və bağlama tələb sətri kilidlənərək
   (`SELECT ... FOR UPDATE`) yoxlanır; `UNIQUE(request_id, agent_id)` bir maklerə bir təklif verir.
-- **Admin panel** — göstəricilər, tələblər (telefon yalnız admin üçün), maklerlər (dayandır, cihazları sıfırla,
-  lisenziyanı uzat), lisenziya kodları, şikayətlər, sistem loqları, avtomatik təmizlik.
+- **Admin panel** — göstəricilər, tələblər (müştərinin adı, telefonu və e-poçtu YALNIZ admin üçün; axtarış ad,
+  e-poçt, rayon, `#id` və istənilən formatda telefonla: `+994 50 …`, `050 …`, `50 …`), maklerlər (dayandır, cihazları
+  sıfırla, lisenziyanı uzat), lisenziya kodları, şikayətlər, sistem loqları, avtomatik təmizlik. Cədvəllər 1024px-dən
+  geniş ekranda sürüşmədən sığır, mobildə kart görünüşünə keçir.
 - **Məxfilik** — bağlanan/bitən tələbin adı, nömrəsi, qeydi və IP-si 90 gün sonra silinir; köhnə bildiriş, loq,
   giriş cəhdi və sessiyalar saatda bir dəfə avtomatik təmizlənir (pulsuz Neon yaddaşı üçün də).
 - **Şəkil yükləmə** — makler təklifə 1–5 şəkil yükləyir (telefonun kamerası/qalereyası işləyir). Brauzer
@@ -85,6 +87,20 @@ sequenceDiagram
   JPEG/PNG/WEBP, 200–10000 px, decompression bomb qoruması), EXIF/GPS-i silir, 1600px-ə kiçildib Cloudinary-ə
   imzalı yükləyir. Hamısı yüklənməsə heç biri qalmır; tələb/demo silinəndə şəkillər Cloudinary-dən də silinir,
   həftədə bir "yetim" şəkillər təmizlənir. Müştəri səhifəsində sürüşdürülən qalereya və tam ekran baxış.
+- **E-poçt bildirişləri** — müştəri istəsə e-poçtunu yazır: yeni təklif gələndə xəbər gedir (Brevo HTTP API; saatda
+  ən çox 1, gündə 3 məktub, arada gələnlər xülasə ilə), məktubda tək kliklə dayandırma linki var. Maklerlər
+  müştərinin e-poçtunu görmür; platforma üzrə gündəlik limit (250) dolanda admin paneldə xəbərdarlıq çıxır.
+- **Link bərpası** — müştəri gizli linkini itirsə `/teleb/berpa`-da e-poçtunu yazır və aktiv tələblərinin linkləri
+  ona göndərilir (cavab həmişə eyni — kimin qeydiyyatda olduğu bilinmir; IP və e-poçt üzrə limit). Brauzer son
+  tələbləri yadda saxlayır: ana səhifədə "Aktiv tələbin var" banneri çıxır.
+- **QR və Ana ekrana əlavə** — "Mənim tələbim" səhifəsində linki kopyalamaq, WhatsApp/Telegram/e-poçtla paylaşmaq,
+  QR kod (serverdə SVG) və telefonun ana ekranına əlavə etmək (hər tələb üçün ayrıca PWA manifest).
+- **Mobil dizayn** — bütün səhifələr 360–412px telefonlarda üfüqi sürüşməsiz işləyir: ☰ menyu, toxunma hədəfləri
+  ≥44px, 16px sahələr (iPhone zoom etmir), sticky "Göndər" düyməsi, kart görünüşlü admin cədvəlləri, mobil üçün ayrıca
+  şaquli hero şəkli (masaüstündə yüklənmir). `tests/test_mobile.py` iPhone 13 emulyasiyası ilə yoxlayır (Playwright).
+- **Animasiyalar** — başlıqların sətir-sətir qalxması, bölmələrin scroll ilə görünməsi, düymə və kart hover effektləri;
+  yalnız `transform`/`opacity` (layout sıçraması yoxdur), `prefers-reduced-motion` olanda sönür, JS-siz məzmun görünür.
+  Flash mesajları toast kimi çıxır.
 - **Demo rejimi** — `is_demo` bayrağı ilə tam izolyasiya; `flask --app run seed-demo` bir əmrlə hazırlayır.
 
 ## Ekran görüntüləri
@@ -93,15 +109,15 @@ sequenceDiagram
 |---|---|
 | ![Ana səhifə](docs/screenshots/01-ana-sehife.png) | ![Makler kabineti](docs/screenshots/04-makler-kabinet.png) |
 
-| Tələb forması (mobil) | Müştərinin təklifləri (mobil) |
-|---|---|
-| <img src="docs/screenshots/02-teleb-mobil.png" width="300" alt="Tələb forması"> | <img src="docs/screenshots/03-musteri-teklifler-mobil.png" width="300" alt="Təkliflər"> |
+| Ana səhifə (mobil) | Tələb forması, rayon seçici (mobil) | Müştərinin təklifləri (mobil) |
+|---|---|---|
+| <img src="docs/screenshots/07-ana-sehife-mobil.png" width="260" alt="Ana səhifə mobil"> | <img src="docs/screenshots/02-teleb-mobil.png" width="260" alt="Tələb forması"> | <img src="docs/screenshots/03-musteri-teklifler-mobil.png" width="260" alt="Təkliflər"> |
 
 | Tələb detalı və təklif forması | Admin panel |
 |---|---|
 | ![Tələb detalı](docs/screenshots/05-teleb-detal.png) | ![Admin panel](docs/screenshots/06-admin-panel.png) |
 
-Bütün şəkillər demo məlumatla çəkilib (adlar uydurmadır, telefonlar `+994 50 000 00 0X`).
+Bütün şəkillər demo məlumatla çəkilib (adlar uydurmadır, telefonlar `+994 50 000 00 0X`); mobil görüntülər iPhone 13 ölçüsündədir.
 
 ## Texnologiyalar və arxitektura
 
@@ -209,7 +225,7 @@ Python 3.11+ və PostgreSQL bazası lazımdır (ən asanı — Neon-da pulsuz ik
 git clone <repo> && cd MaklerHub
 python -m venv .venv
 # Windows: .venv\Scripts\activate      macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt   # Playwright ixtiyaridir (mobil testlər, sistemdəki Chrome)
 # .env faylı yaradın (aşağıdakı cədvəl)
 python run.py                      # http://127.0.0.1:5000  (--debug, --port N)
 flask --app run seed-demo          # demo maklerlər, tələblər, təkliflər (təkrar işlətmək olar)
@@ -236,6 +252,9 @@ Windows-da konsol üçün `PYTHONIOENCODING=utf-8` tövsiyə olunur.
 | `BREVO_API_KEY` | e-poçt üçün | Brevo HTTP API açarı (SMTP YOX — Render pulsuz planı SMTP portlarını bloklayır). Yoxdursa məktublar göndərilmir, məzmun server loquna yazılır |
 | `MAKLERHUB_MAIL_FROM` | tövsiyə | Göndərən ünvan (Brevo-da təsdiqlənmiş olmalıdır). Yoxdursa admin əlaqə e-poçtu |
 | `MAKLERHUB_BASE_URL` | tövsiyə | Məktublardakı linklər və loqo üçün saytın ünvanı, məs. `https://maklerhub.onrender.com` (sondakı `/` atılır). Yoxdursa sorğunun host ünvanı |
+| `MAKLERHUB_TZ` | yox | Saat qurşağı (defolt `Asia/Baku`) |
+| `MAKLERHUB_POOL_MAX` | yox | Baza bağlantı hovuzunun maksimum ölçüsü (defolt `8`) |
+| `MAKLERHUB_ENV` | yox | Sentry-də mühit adı (defolt `production`) |
 
 ### Testlər
 
@@ -246,7 +265,7 @@ PYTHONIOENCODING=utf-8 python -m pytest tests -q -p no:cacheprovider
 Testlər YALNIZ `TEST_DATABASE_URL` bazasında işləyir və hər sessiyanın əvvəlində onu sıfırlayır;
 `TEST_DATABASE_URL` yoxdursa və ya real baza ilə eyni host-dadırsa pytest dərhal dayanır.
 Əhatə: uyğunluq balı, tələb forması və limitlər, təklif/qəbul axını və nömrənin açılması, yarış vəziyyətləri,
-admin panel, IP həlli, təmizlik, demo izolyasiyası, təhlükəsizlik başlıqları (~100 test, ~15 dəqiqə — uzaq baza; Cloudinary testlərdə mock olunur, şəbəkəyə getmir).
+admin panel, IP həlli, təmizlik, demo izolyasiyası, təhlükəsizlik başlıqları, e-poçt bildirişləri və link bərpası, şəkil yükləmə, mobil görünüş (~180 test, ~20 dəqiqə — uzaq baza; Cloudinary və Brevo testlərdə mock olunur, şəbəkəyə getmir; Playwright yoxdursa mobil testlər skip olur).
 
 ## Monitorinq
 
