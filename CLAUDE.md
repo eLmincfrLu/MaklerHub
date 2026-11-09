@@ -129,6 +129,12 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   `.ui-rv` → `.ui-in` yalnız ilk ekrandan KƏNARDAKI bloklara (offer, sum, em, lk, details, ui-empty), 60ms stagger
   (maks. 6), bitəndə siniflər silinir. Düymə hover qalxma + shine, :active scale(.98), kart hover (hover:hover).
   Admin (`.shell`): yalnız fade. reduced-motion → hamısı sönür (CSS + JS). Gizlətmə yalnız JS sinifləri ilə.
+- Admin tələb siyahıları (9 noyabr): "Son 10 tələb" və "Tələblər" ümumi makro `admin/_req_table.html`
+  (`req_table`): #, Tələb (rayon/büdcə 2-ci sətir), Müştəri (ad + tel: + mailto:, anonim → "— (anonimləşdirilib)"),
+  Təkliflər (geri çəkilməmiş/OFFER_LIMIT), Status, Yaradılıb (tarix + rel). `_req_row`: anon/phone/email/created/
+  n_offers — YALNIZ admin. Axtarış `_phone_digits` (+994/994/0 prefiksi atılır) + ad/rayon/e-poçt ILIKE + #id (≤9
+  rəqəm). Cədvəllər ≥641px-də min-width-siz (`ui.css`), tələb cədvəli `table-layout:fixed` + `.ell`; 641–1180px-də xana
+  boşluğu 10px. 1024/1280/1440 + iPhone-da admin cədvəllərində daşma yoxdur. Testlər `test_admin.py` (sonda 4 test).
 - Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
 
 ## Qaydalar (pozma)

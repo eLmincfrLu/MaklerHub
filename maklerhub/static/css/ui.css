@@ -400,3 +400,28 @@ body > main a.card{transition:background .25s ease,transform .25s var(--ui-ease)
   .btn-primary::after,.em-btn::after,.go::after,.abtn.yes::after,.mhc-btn.gold::after{display:none;}
   :is(.btn,.btn-primary,.em-btn,.go,.lk-copy,.abtn,.mh-btn,.mhc-btn,.btn-secondary,.em-ghost,.lx-btn):active{transform:none;}
 }
+
+/* =====================================================================
+   Admin cədvəlləri: 1000–1440px-də də üfüqi sürüşmə yoxdur (köhnə min-width 640–760px ləğv)
+   ===================================================================== */
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+@media (min-width:641px){
+  .shell .tablewrap table{min-width:0;}
+  .shell .tablewrap td{overflow-wrap:anywhere;vertical-align:top;}
+  .shell .tablewrap th{white-space:nowrap;}
+  /* tələb cədvəli: sabit sütunlar, ikinci dərəcəli məlumat ikinci sətirdə */
+  .adm-reqs table{table-layout:fixed;width:100%;}
+  .adm-reqs col.c-id{width:86px;}
+  .adm-reqs col.c-off{width:92px;}
+  .adm-reqs col.c-st{width:124px;}
+  .adm-reqs col.c-when{width:128px;}
+  .adm-reqs td{padding:12px 14px;}
+  .adm-reqs td .msub a{color:inherit;}
+  .adm-reqs td .msub a:hover{color:var(--ui-gold);}
+}
+@media (min-width:641px) and (max-width:1180px){
+  /* 1024px: 8 sütunlu Lisenziyalar və Maklerlər sığsın — xana boşluqları kiçik, başlıqlar sətirdən keçə bilər */
+  .shell .tablewrap td, .shell .tablewrap th{padding-left:10px;padding-right:10px;}
+  .shell .tablewrap th{white-space:normal;}
+  .shell .lic-code{white-space:normal;word-break:break-all;}
+}

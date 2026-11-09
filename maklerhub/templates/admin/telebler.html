@@ -1,4 +1,5 @@
 {% extends 'admin/base.html' %}
+{% from 'admin/_req_table.html' import req_table %}
 {% set page_css = 'admin-v2.css' %}
 {% block title %}Admin · Tələblər{% endblock %}
 {% block shell %}
@@ -17,29 +18,12 @@
       </div>
       <form class="qform" method="get" action="{{ url_for('admin.telebler') }}">
         {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
-        <input type="search" name="q" value="{{ q }}" placeholder="#id, ad, telefon, rayon" aria-label="Axtar">
+        <input type="search" name="q" value="{{ q }}" placeholder="#id, ad, telefon, e-poçt, rayon" aria-label="Axtar">
         <button class="sbtn" type="submit">Axtar</button>
       </form>
     </div>
 
-    <div class="tablewrap reveal" style="animation-delay:.16s"><table>
-      <thead><tr><th>#</th><th>Tələb</th><th>Müştəri</th><th>Büdcə</th><th>Təklif</th><th>Status</th><th>Vaxt</th></tr></thead>
-      <tbody>
-      {%- for x in items %}
-        <tr>
-          <td data-label="#"><a href="{{ url_for('admin.teleb', rid=x.r.id) }}">#{{ x.r.id }}</a>{% if x.demo %} <span class="pill trial">demo</span>{% endif %}</td>
-          <td data-label="Tələb"><div class="mname"><a href="{{ url_for('admin.teleb', rid=x.r.id) }}">{{ x.deal }} · {{ x.rooms }} otaq</a></div><div class="msub">{{ x.districts }}</div></td>
-          <td data-label="Müştəri">{{ x.r.name or '—' }}</td>
-          <td data-label="Büdcə">{{ x.budget }}</td>
-          <td data-label="Təklif">{{ x.r.n_offers }}</td>
-          <td data-label="Status"><span class="pill {{ x.pill }}">{{ x.status }}</span></td>
-          <td data-label="Vaxt">{{ x.when }}</td>
-        </tr>
-      {%- else %}
-        <tr><td colspan="7" class="mh-empty">Tələb tapılmadı.</td></tr>
-      {%- endfor %}
-      </tbody>
-    </table></div>
+    {{ req_table(items, 'Tələb tapılmadı.') }}
 
     {% if pages > 1 %}
     <div class="pager">{% for p in range(1, pages + 1) %}{% if p == page %}<span class="on">{{ p }}</span>{% else %}<a href="{{ url_for('admin.telebler', page=p, status=status or None, q=q or None) }}">{{ p }}</a>{% endif %}{% endfor %}</div>

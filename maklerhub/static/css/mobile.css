@@ -225,3 +225,8 @@ html.mh-lock, html.mh-lock body{overflow:hidden;}
   .hero #registerBtn{padding:0 12px;font-size:.8rem;}
   .hero .stat-chip .lbl{font-size:.62rem;}
 }
+
+/* admin tələb kartı: uzun e-poçt/telefon linkləri ellipsis ilə (inline-flex ellipsis vermir), toxunma hündürlüyü 44px */
+@media (max-width:640px){
+  .adm-reqs td .ell > a{display:block;min-height:0;line-height:44px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+}

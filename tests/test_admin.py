@@ -140,3 +140,52 @@ def test_mobile_new_pages(app, make_makler, make_request, db):
     c = app.test_client()
     for url in (f"/teleb/{token}", f"/teleb/{token}?tesdiq={oid}", "/sertler", "/mexfilik"):
         assert c.get(url, headers=MOBILE).status_code == 200, url
+
+
+# ---------------------------------------------------------------- admin tələb siyahısında müştəri məlumatı
+def _with_email(db, rid, email):
+    db.execute("UPDATE customer_requests SET email = ? WHERE id = ?", (email, rid))
+    db.commit()
+
+
+def test_admin_request_lists_show_customer_contact(admin_client, db, make_request):
+    rid, _ = make_request(phone="+994502223311", name="Samirə Əliyeva")
+    _with_email(db, rid, "samire.test@example.az")
+    for url in ("/admin/", "/admin/telebler"):
+        html = admin_client.get(url).get_data(as_text=True)
+        assert "Samirə Əliyeva" in html
+        assert 'href="tel:+994502223311"' in html and "+994 50 222 33 11" in html
+        assert 'href="mailto:samire.test@example.az"' in html
+        assert "0/5</td>" in html  # təkliflər: aktiv/limit
+
+
+def test_admin_list_marks_anonymized_request(admin_client, db, make_request):
+    rid, _ = make_request(status="closed", name="Silinəcək Ad")
+    db.execute("UPDATE customer_requests SET name = '', phone = '', email = '' WHERE id = ?", (rid,))
+    db.commit()
+    html = admin_client.get(f"/admin/telebler?q=%23{rid}").get_data(as_text=True)
+    assert "— (anonimləşdirilib)" in html
+
+
+def test_customer_contact_never_in_makler_pages_or_api(admin_client, db, make_makler, make_request):
+    rid, _ = make_request(phone="+994502223322", name="Gizli Müştəri Soyadı", districts=("Yasamal",))
+    _with_email(db, rid, "gizli.musteri@example.az")
+    client, _ = make_makler(RENT_AREA)
+    pages = [client.get(u).get_data(as_text=True) for u in
+             ("/kabinet", "/kabinet?view=all", f"/kabinet/teleb/{rid}", "/kabinet/bildirisler", "/kabinet/teklifler")]
+    pages.append(client.get("/api/notifications").get_data(as_text=True))
+    for html in pages:
+        assert "2223322" not in html and "222 33 22" not in html
+        assert "gizli.musteri@example.az" not in html
+        assert "Soyadı" not in html  # maklerə yalnız ilk ad
+
+
+def test_admin_search_by_phone_formats_email_and_name(admin_client, db, make_request):
+    rid, _ = make_request(phone="+994515557788", name="Axtarış Testov")
+    _with_email(db, rid, "axtaris.testov@example.az")
+    for q in ("+994 51 555 77 88", "994515557788", "051 555 77 88", "0515557788", "51 555 77 88", "515557788",
+              "555 77 88", "axtaris.testov", "Axtarış Testov", f"#{rid}"):
+        html = admin_client.get("/admin/telebler", query_string={"q": q}).get_data(as_text=True)
+        assert f'href="/admin/teleb/{rid}"' in html, q
+    html = admin_client.get("/admin/telebler", query_string={"q": "0519990000"}).get_data(as_text=True)
+    assert f'href="/admin/teleb/{rid}"' not in html

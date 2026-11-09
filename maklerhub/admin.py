@@ -10,7 +10,7 @@ from .auth import admin_required
 from .db import add_log, get_db, get_settings, set_setting
 from .helpers import date_short, districts_text, full_name, log_time, normalize_phone, now, parse, phone_display, rel, ts
 from .offers import AGENT_COMPLAINTS, CLOSE_REASONS, CUSTOMER_COMPLAINTS, OFFER_STATUS
-from .teleb import DEALS, ROOMS, STATUS as REQ_STATUS, URGENCY, budget_str
+from .teleb import DEALS, OFFER_LIMIT, ROOMS, STATUS as REQ_STATUS, URGENCY, budget_str
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -49,7 +49,21 @@ def _req_row(r):
             "budget": budget_str(r["deal_type"], r["budget_min"], r["budget_max"]),
             "status": REQ_STATUS.get(r["status"], r["status"]), "when": rel(r["created_at"]),
             "pill": "active" if r["status"] == "active" else "susp" if r["status"] == "closed" else "trial",
-            "demo": bool(r.get("is_demo"))}
+            "demo": bool(r.get("is_demo")),
+            # müştəri məlumatı — YALNIZ admin səhifələri (makler/kabinet/API-də yoxdur)
+            "anon": not r["phone"], "phone": phone_display(r["phone"]) if r["phone"] else "",
+            "email": (r.get("email") or "").strip(), "created": date_short(r["created_at"]),
+            "n_offers": r.get("n_offers"), "offer_limit": OFFER_LIMIT}
+
+
+def _phone_digits(q):
+    """Axtarış üçün telefon rəqəmləri: +994 50 ..., 994..., 050 ..., 50 ... → operator kodundan başlayan hissə."""
+    d = "".join(ch for ch in q if ch.isdigit())
+    if d.startswith("994"):
+        d = d[3:]
+    elif d.startswith("0"):
+        d = d[1:]
+    return d
 
 
 # ---------------------------------------------------------------- ümumi baxış
@@ -78,7 +92,8 @@ def panel():
     # qəbul faizi: cavab verilmiş (qəbul + rədd) təkliflər arasında qəbul olunanlar
     kpi["accept_rate"] = round(100 * k["accepted"] / k["decided"]) if k["decided"] else None
     reqs = [_req_row(r) for r in db.execute(
-        "SELECT * FROM customer_requests WHERE is_demo = ? ORDER BY id DESC LIMIT 10", (demo,))]
+        "SELECT r.*, (SELECT COUNT(*) FROM offers o WHERE o.request_id = r.id AND o.status != 'withdrawn') AS n_offers "
+        "FROM customer_requests r WHERE r.is_demo = ? ORDER BY r.id DESC LIMIT 10", (demo,))]
     offers = db.execute(
         "SELECT o.id, o.title, o.status, o.created_at, o.request_id, u.first_name, u.last_name FROM offers o "
         "JOIN users u ON u.id = o.agent_id JOIN customer_requests r ON r.id = o.request_id WHERE r.is_demo = ? "
@@ -104,15 +119,15 @@ def telebler():
         where.append("status = ?")
         params.append(status)
     if q:
-        digits = "".join(ch for ch in q if ch.isdigit())
-        cond = ["name ILIKE ?", "districts ILIKE ?"]
-        params += [f"%{q}%", f"%{q}%"]
-        if digits:
+        digits = _phone_digits(q)
+        cond = ["name ILIKE ?", "districts ILIKE ?", "email ILIKE ?"]
+        params += [f"%{q}%", f"%{q}%", f"%{q}%"]
+        if len(digits) >= 2:
             cond.append("phone LIKE ?")
             params.append(f"%{digits[-9:]}%")
-            if q.isdigit():
-                cond.append("id = ?")
-                params.append(int(q))
+        if q.lstrip("#").isdigit() and len(q.lstrip("#")) <= 9:  # #id (integer həddini aşmasın)
+            cond.append("id = ?")
+            params.append(int(q.lstrip("#")))
         where.append("(" + " OR ".join(cond) + ")")
     sql_where = (" WHERE " + " AND ".join(where)) if where else ""
     total = db.execute("SELECT COUNT(*) FROM customer_requests" + sql_where, params).fetchone()[0]
