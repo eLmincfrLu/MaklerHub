@@ -111,10 +111,11 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   aktiv sahə `scrollIntoView`. Kabinetdə district-picker.css body-də yüklənir — selektorlar `.dp .dp-*`.
   `tests/test_mobile.py` — Playwright (Chrome mühərriki, iPhone 13 profili), yoxdursa skip; Playwright `requirements-dev`.
   Playwright WebKit bu Windows-da işə düşmür — iPhone Chrome mühərriki ilə emulyasiya olunur.
-  Mobil hero fonu (≤640px): `img/hero-mobile.webp` (+ `.jpg` fallback, `image-set`), 1080×1920, Bakı gecə mənzərəsi
-  (Shubham Singla, Unsplash — README "Şəkil krediti"); `!important` inline hero-front-u əvəz edir, landing.html-də
-  `MH_IMG` mobildə hero-mobile-a yönəlir (masaüstü şəkilləri mobildə yüklənmir, hero-mobile masaüstündə yüklənmir).
-  Mobil scrim yuxarıda yüngül (qüllələr), 19%-dən tünd (kontrast ≥6.3). Mənbə `hero-mobile-src.jpg.jpg` commit olunmur.
+  Mobil hero fonu (≤640px): `img/hero-mobile.webp` (+ `.jpg` fallback, `image-set`), 1080×1920, müasir ev
+  (Unsplash, Unsplash License — README "Şəkil krediti"); köhnə Bakı gecə versiyası `hero-mobile-baku.*` (istifadə
+  olunmur). `!important` inline hero-front-u əvəz edir, landing.html-də `MH_IMG` mobildə hero-mobile-a yönəlir
+  (masaüstü şəkilləri mobildə, hero-mobile masaüstündə yüklənmir). Mobildə Ken Burns zoom sönür (inset 0).
+  Scrim .42→.86 (kontrast ≥4.8). Mənbələr `*-src.jpg*` .gitignore-dadır.
 - Paket D3 (9 noyabr): status nişanları vahid pill (`.tag.st-*`; kabinetdə `tag mine st-<status>`), sol panelin
   ortasında `.s-mark` (logo-mark-240.png + HTML "MaklerHub" + qızılı alt yazı; ≤880px gizli), "← Ana səhifə" solda,
   şəkilsiz təklif `.ph.ph-mark` (120px, solğun nişan), /teleb/<token> sırası: məlumat → təkliflər → e-poçt → kiçik
@@ -122,8 +123,7 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   Flash → toast: flash div-lərində `data-flash="{{ cat }}"`, `static/js/ui.js` köçürür (err özü bağlanmır, ok 5 san);
   JS-siz səhifədə qalır. Form xətaları (`error`) inline qalır. Kontrast: footer #6B6455, admin `.pill.active`
   #86BF9B, `.pill.susp` #E79A86. `.gitignore`: `static/img/*-src.jpg*`, `pytest_son.txt`.
-  DİQQƏT: test_flow kabinet id-lərini 1-ci səhifədən oxuyur — faylları qeyri-standart sırada işlədəndə (çox tələb
-  yaranıb) yıxıla bilər; ayrıca işlədəndə keçir.
+  test_flow.py izolyasiyası: autouse `only_own_requests` hər testdən əvvəl başqa aktiv tələbləri bağlayır.
 - Paket D4 (9 noyabr): animasiyalar `ui.css` (sonda) + `ui.js` (ikinci IIFE). Səhifə fade-in body-də CSS-only
   (.22s, mobil .16s). Kart başlıqları `.stage .card > h1` JS ilə `.ui-seg` hissələrinə bölünür (100ms). Scroll-reveal
   `.ui-rv` → `.ui-in` yalnız ilk ekrandan KƏNARDAKI bloklara (offer, sum, em, lk, details, ui-empty), 60ms stagger

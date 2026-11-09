@@ -267,4 +267,4 @@ admin panel, IP həlli, təmizlik, demo izolyasiyası, təhlükəsizlik başlıq
 
 ## Şəkil krediti
 
-- Ana səhifənin mobil fonu (Bakı, Alov qüllələri — `maklerhub/static/img/hero-mobile.webp` / `.jpg`): [Shubham Singla](https://unsplash.com/@shubhamsingla365), Unsplash.
+- Ana səhifənin mobil hero fonu (müasir ev — `maklerhub/static/img/hero-mobile.webp` / `.jpg`): Unsplash ([Unsplash License](https://unsplash.com/license)).

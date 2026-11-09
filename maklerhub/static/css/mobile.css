@@ -32,13 +32,15 @@ html.mh-lock, html.mh-lock body{overflow:hidden;}
 
   /* ===== ANA SƏHİFƏ ===== */
   .hero{height:auto;min-height:100vh;min-height:100dvh;perspective:none;display:flex;flex-direction:column;}
-  /* mobil fon: şaquli Bakı mənzərəsi (Alov qüllələri). Yalnız bu media query-də — masaüstündə yüklənmir.
+  /* mobil fon: şaquli müasir ev şəkli (hero-mobile; köhnə Bakı versiyası hero-mobile-baku). Yalnız bu media query-də — masaüstündə yüklənmir.
      !important şablondakı inline hero-front.jpg-ni əvəz edir (o da mobildə yüklənmir). */
   .hero .bg{background-image:url(../img/hero-mobile.jpg)!important;
     background-image:image-set(url(../img/hero-mobile.webp) type("image/webp"),url(../img/hero-mobile.jpg) type("image/jpeg"))!important;
-    background-position:center 22%!important;}
-  /* gecə şəkli onsuz da tünddür: yuxarıda yüngül (qüllələr görünsün), mətnin arxasında tünd */
-  .hero .scrim{background:linear-gradient(180deg,rgba(8,14,20,.25) 0%,rgba(8,14,20,.38) 10%,rgba(8,14,20,.74) 19%,rgba(8,14,20,.80) 45%,rgba(8,14,20,.86) 100%);}
+    background-position:center 40%!important;}
+  /* masaüstünün Ken Burns zoom-u (inset -9%, scale 1.24) mobildə kəsimi əlavə böyüdüb evi tanınmaz edirdi */
+  .hero .bg, .hero.intro .bg{inset:0;animation:none;transform:none;}
+  /* müasir ev (açıq fasad, səma): başlıq zonası da tünd, mətnin arxasında daha tünd — bütün hero mətnləri ≥4.5:1 */
+  .hero .scrim{background:linear-gradient(180deg,rgba(8,14,20,.42) 0%,rgba(8,14,20,.62) 11%,rgba(8,14,20,.74) 22%,rgba(8,14,20,.80) 45%,rgba(8,14,20,.86) 100%);}
 
   /* 1. başlıq: solda loqo, sağda kompakt "Tələbini yaz" + ☰ */
   .hero .top{position:fixed;top:0;left:0;right:0;z-index:40;padding:calc(8px + env(safe-area-inset-top,0px)) 16px 8px;

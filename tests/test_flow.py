@@ -1,7 +1,17 @@
 """Axın testləri (H2-H8): kabinet, telefon gizliliyi, təkliflər, müddət, müştəri səhifəsi, şərtlər, IP, mobil."""
 import re
 
+import pytest
+
 from conftest import csrf
+
+
+@pytest.fixture(autouse=True)
+def only_own_requests(db):
+    """İzolyasiya: əvvəlki testlərin (başqa faylların) aktiv tələbləri bağlanır ki, bu fayldakı testlər öz tələblərini
+    kabinetin 1-ci səhifəsində tapsın (20-lik səhifələmə) — nəticə test sırasından asılı olmasın."""
+    db.execute("UPDATE customer_requests SET status = 'closed' WHERE status = 'active'")
+    db.commit()
 
 RENT_AREA = [("rent", ["Yasamal", "Nəsimi"], 400, 1000)]
 
