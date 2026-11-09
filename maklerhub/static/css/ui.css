@@ -344,3 +344,59 @@ body > main .head + .toolbar, body > main .mh-flash + .toolbar{margin-top:6px;}
 .shell .note, .shell .privacy, .shell .contactbox{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);
   border-left-color:var(--ui-gold);color:var(--txt,#EDE9DF);}
 .shell .note b, .shell .contactbox b{color:#fff;}
+
+/* =====================================================================
+   PAKET D4 — animasiyalar. Yalnız transform/opacity; layout sıçraması yoxdur.
+   Gizlətmə yalnız JS-in qoyduğu siniflərlə (.ui-seg, .ui-rv) — JS işləməsə məzmun görünür.
+   prefers-reduced-motion: reduce → hamısı sönür (aşağıda). Mobildə müddətlər qısadır.
+   ===================================================================== */
+:root{--ui-ease:cubic-bezier(.2,.7,.2,1);--ui-d-page:.22s;--ui-d-seg:.6s;--ui-d-rv:.55s;--ui-stagger:60ms;}
+@media (max-width:640px){:root{--ui-d-page:.16s;--ui-d-seg:.45s;--ui-d-rv:.4s;--ui-stagger:45ms;}}
+
+/* səhifə yüklənəndə məzmunun yumşaq görünməsi (≤250ms, CSS-only — JS lazım deyil) */
+@keyframes uiPage{from{opacity:0;}to{opacity:1;}}
+body{animation:uiPage var(--ui-d-page) ease-out both;}
+
+/* hero başlıqları: sətirlər arası 80–120ms (mövcud .line animasiyaları üzərində) */
+.s-body h1 .line2 span{animation-delay:.1s;}
+.hero .content h1 .line2 span{animation-delay:.5s!important;}
+/* kart başlıqları (/teleb, /teleb/<token>, auth): js/ui.js hissələrə bölür */
+.ui-seg{display:inline-block;opacity:0;transform:translateY(.45em);
+  animation:uiSeg var(--ui-d-seg) var(--ui-ease) forwards;animation-delay:calc(var(--i,0) * 100ms + 60ms);}
+@keyframes uiSeg{to{opacity:1;transform:none;}}
+
+/* scroll ilə bir dəfə görünmə (IntersectionObserver; siyahılarda 60ms stagger, maks. 6) */
+.ui-rv{opacity:0;transform:translateY(14px);transition:opacity var(--ui-d-rv) var(--ui-ease),transform var(--ui-d-rv) var(--ui-ease);
+  transition-delay:calc(var(--i,0) * var(--ui-stagger));}
+.ui-rv.ui-in{opacity:1;transform:none;}
+.offer.ui-rv{transition:opacity var(--ui-d-rv) var(--ui-ease),transform var(--ui-d-rv) var(--ui-ease);
+  transition-delay:calc(var(--i,0) * var(--ui-stagger));}
+
+/* düymələr: hover-da yüngül qalxma + qızılı parıltı, basanda sıxılma (admin xaric) */
+:where(body:not(:has(.shell))) :is(.btn-primary,.em-btn,.go,.lk-copy,.abtn.yes,.mhc-btn.gold,.btn-secondary,.em-ghost,.abtn.ghost){
+  position:relative;overflow:hidden;transition:transform .2s var(--ui-ease),box-shadow .2s ease,background .2s ease,border-color .2s ease;}
+:where(body:not(:has(.shell))) :is(.btn-primary,.em-btn,.go,.abtn.yes,.mhc-btn.gold)::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;
+  background:linear-gradient(115deg,transparent,rgba(255,255,255,.5),transparent);transform:skewX(-20deg);transition:left .55s ease;pointer-events:none;}
+@media (hover:hover) and (pointer:fine){
+  :where(body:not(:has(.shell))) :is(.btn-primary,.em-btn,.go,.lk-copy,.abtn.yes,.mhc-btn.gold,.btn-secondary,.em-ghost,.abtn.ghost):hover{transform:translateY(-2px);}
+  :where(body:not(:has(.shell))) :is(.btn-primary,.em-btn,.go,.abtn.yes,.mhc-btn.gold):hover::after{left:130%;}
+}
+:where(body:not(:has(.shell))) :is(.btn,.btn-primary,.em-btn,.go,.lk-copy,.abtn,.mh-btn,.mhc-btn,.btn-secondary,.em-ghost,.lx-btn):active{transform:scale(.98);}
+
+/* təklif kartları və kabinet tələb kartları: hover-da qalxma + kölgə (yalnız hover dəstəkləyən cihazlarda) */
+.offer{transition:transform .25s var(--ui-ease),box-shadow .25s ease;}
+@media (hover:hover) and (pointer:fine){
+  .offer:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(16,24,32,.12);}
+  body > main a.card:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(16,24,32,.10);}
+}
+body > main a.card{transition:background .25s ease,transform .25s var(--ui-ease),box-shadow .25s ease,border-left-width .25s ease;}
+
+@media (prefers-reduced-motion:reduce){
+  body{animation:none;}
+  .ui-seg{animation:none;opacity:1;transform:none;}
+  .ui-rv{opacity:1;transform:none;transition:none;}
+  .offer, body > main a.card, .btn-primary,.em-btn,.go,.lk-copy,.abtn,.mhc-btn,.btn-secondary,.em-ghost{transition:none;}
+  .offer:hover, body > main a.card:hover{transform:none;}
+  .btn-primary::after,.em-btn::after,.go::after,.abtn.yes::after,.mhc-btn.gold::after{display:none;}
+  :is(.btn,.btn-primary,.em-btn,.go,.lk-copy,.abtn,.mh-btn,.mhc-btn,.btn-secondary,.em-ghost,.lx-btn):active{transform:none;}
+}

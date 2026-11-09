@@ -124,6 +124,11 @@ yaz. VS Code + Git Bash, Windows. İstifadəçi addım-addım izah istəyir ("m�
   #86BF9B, `.pill.susp` #E79A86. `.gitignore`: `static/img/*-src.jpg*`, `pytest_son.txt`.
   DİQQƏT: test_flow kabinet id-lərini 1-ci səhifədən oxuyur — faylları qeyri-standart sırada işlədəndə (çox tələb
   yaranıb) yıxıla bilər; ayrıca işlədəndə keçir.
+- Paket D4 (9 noyabr): animasiyalar `ui.css` (sonda) + `ui.js` (ikinci IIFE). Səhifə fade-in body-də CSS-only
+  (.22s, mobil .16s). Kart başlıqları `.stage .card > h1` JS ilə `.ui-seg` hissələrinə bölünür (100ms). Scroll-reveal
+  `.ui-rv` → `.ui-in` yalnız ilk ekrandan KƏNARDAKI bloklara (offer, sum, em, lk, details, ui-empty), 60ms stagger
+  (maks. 6), bitəndə siniflər silinir. Düymə hover qalxma + shine, :active scale(.98), kart hover (hover:hover).
+  Admin (`.shell`): yalnız fade. reduced-motion → hamısı sönür (CSS + JS). Gizlətmə yalnız JS sinifləri ilə.
 - Açıq: dizayn istəkləri siyahısı (istifadəçi sonra bir dəfəyə göndərəcək).
 
 ## Qaydalar (pozma)

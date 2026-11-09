@@ -40,3 +40,68 @@
     });
   }
 })();
+
+/* ---------- Paket D4: animasiyalar ----------
+   Yalnız JS-in qoyduğu siniflər məzmunu gizlədir (.ui-seg, .ui-rv); JS işləməsə hər şey görünür.
+   prefers-reduced-motion: reduce olanda heç nə edilmir. Admin (.shell) — yalnız səhifə fade-in-i (CSS). */
+(function () {
+  'use strict';
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || document.querySelector('.shell')) return;
+
+  /* kart başlıqları: hər hissə (mətn və <i>) aşağıdan qalxır, 100ms aralıqla */
+  Array.prototype.forEach.call(document.querySelectorAll('.stage .card > h1'), function (h) {
+    if (h.querySelector('.ui-seg')) return;
+    var i = 0;
+    Array.prototype.slice.call(h.childNodes).forEach(function (n) {
+      var text = n.nodeType === 3 ? n.textContent : null;
+      if (text !== null && !text.trim()) return;
+      var seg = document.createElement('span');
+      seg.className = 'ui-seg';
+      seg.style.setProperty('--i', i++);
+      if (text !== null) {
+        // kənar boşluqlar span-dan kənarda qalsın (inline-block onları yeyir)
+        var lead = text.match(/^\s*/)[0], trail = text.match(/\s*$/)[0];
+        seg.textContent = text.trim();
+        if (lead) h.insertBefore(document.createTextNode(lead), n);
+        h.insertBefore(seg, n);
+        if (trail) h.insertBefore(document.createTextNode(trail), n);
+        h.removeChild(n);
+      } else {
+        h.insertBefore(seg, n); seg.appendChild(n);
+      }
+    });
+  });
+
+  /* scroll ilə bir dəfə görünmə: yalnız ekrandan KƏNARDA olan bloklar gizlədilir (yuxarıdakılar sıçramasın) */
+  if (!('IntersectionObserver' in window)) return;
+  var targets = document.querySelectorAll('.offers > .offer, .stage .sum, .stage .em, .stage .lk, .stage details.rejected, ' +
+    '.stage details.closebox, .ui-empty');
+  var vh = window.innerHeight || 800;
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      var el = e.target;
+      el.classList.add('ui-in');
+      io.unobserve(el);
+      // görünmə bitəndən sonra köməkçi siniflər silinir — hover keçidləri gecikmədən işləsin
+      var done = function (ev) {
+        if (ev && ev.target !== el) return;
+        el.removeEventListener('transitionend', done);
+        el.classList.remove('ui-rv', 'ui-in'); el.style.removeProperty('--i');
+      };
+      el.addEventListener('transitionend', done);
+      setTimeout(done, 1500);
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
+  var perParent = [];
+  Array.prototype.forEach.call(targets, function (el) {
+    if (el.getBoundingClientRect().top < vh) return; // ilk ekrandadır — dərhal görünür
+    var p = el.parentNode, k = perParent.indexOf(p);
+    if (k < 0) { perParent.push(p); perParent.push(0); k = perParent.length - 2; }
+    var idx = perParent[k + 1]++;
+    el.style.setProperty('--i', Math.min(idx, 5)); // 60ms stagger, maks. 6 element
+    el.classList.add('ui-rv');
+    io.observe(el);
+  });
+})();
